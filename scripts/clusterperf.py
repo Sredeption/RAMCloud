@@ -381,6 +381,10 @@ def run_test(
         client_args['--fullSamples'] = ''
     if options.seconds:
         client_args['--seconds'] = options.seconds
+    if options.numWarehouses != None:
+        client_args['--numWarehouses'] = options.numWarehouses
+    if options.num_servers != None:
+        client_args['--numServers'] = options.num_servers
     test.function(test.name, options, cluster_args, client_args)
 
 #-------------------------------------------------------------------
@@ -737,6 +741,39 @@ def txCollision(name, options, cluster_args, client_args):
         cluster_args['num_clients'] = 5
     default(name, options, cluster_args, client_args)
 
+def txTPCC(name, options, cluster_args, client_args):
+    if 'master_args' not in cluster_args:
+        cluster_args['master_args'] = ' -t 10000 -d '
+    if 'backup_args' not in cluster_args:
+#        cluster_args['backup_args'] = ' --segmentFrames 10000 --maxNonVolatileBuffers 8'
+        cluster_args['backup_args'] = ' --segmentFrames 10000 '
+    if cluster_args['timeout'] < 150:
+        cluster_args['timeout'] = 150
+    #cluster_args['disjunct'] = True
+    if options.num_servers == None:
+        cluster_args['num_servers'] = 4
+    if 'num_clients' not in cluster_args:
+        cluster_args['num_clients'] = cluster_args['num_servers'] * 2 + 1;
+    cluster.run(client='%s/ClusterPerf %s %s' %
+            (obj_path, flatten_args(client_args), name), **cluster_args)
+    print(get_client_log(), end='')
+
+def txTpccLatency(name, options, cluster_args, client_args):
+    if 'master_args' not in cluster_args:
+        cluster_args['master_args'] = ' -t 10000 '
+    if 'backup_args' not in cluster_args:
+        cluster_args['backup_args'] = ' --segmentFrames 10000 --maxNonVolatileBuffers 8'
+    if cluster_args['timeout'] < 150:
+        cluster_args['timeout'] = 150
+    #cluster_args['disjunct'] = True
+    if options.num_servers == None:
+        cluster_args['num_servers'] = 4
+    if 'num_clients' not in cluster_args:
+        cluster_args['num_clients'] = 1;
+    cluster.run(client='%s/ClusterPerf %s %s' %
+            (obj_path, flatten_args(client_args), name), **cluster_args)
+    print(get_client_log(), end='')
+
 def writeDist(name, options, cluster_args, client_args):
     if cluster_args['timeout'] < 40:
         cluster_args['timeout'] = 40
@@ -887,6 +924,8 @@ simple_tests = [
     Test("netBandwidth", netBandwidth),
     Test("readAllToAll", readAllToAll),
     Test("readNotFound", default),
+    Test("linearizableRpc", basic),
+    Test("tcpTest", basic)
 ]
 
 graph_tests = [
@@ -903,6 +942,8 @@ graph_tests = [
     Test("multiRead_oneObjectPerMaster", multiOp),
     Test("multiReadThroughput", readThroughput),
     Test("multiWrite_oneMaster", multiOp),
+    Test("tpcc", txTPCC),
+    Test("tpccLatency", txTpccLatency),
     Test("readDist", readDist),
     Test("readDistRandom", readDistRandom),
     Test("readDistWorkload", workloadDist),
@@ -1058,6 +1099,8 @@ if __name__ == '__main__':
                  'timestamps along with their durations.')
     parser.add_option('--superuser', action='store_true', default=False,
             help='Start the cluster and clients as superuser')
+    parser.add_option('--numWarehouses', type=int,
+            help='Number of warehouses used during TPC-C benchmark.')
     (options, args) = parser.parse_args()
 
     if options.parse:
