@@ -223,9 +223,16 @@ class InfUdDriver : public Driver {
     /// Physical port on the HCA used by this transport.
     int ibPhysicalPort;
 
+    /// link layer protocol
+    int linkLayer;
+
     /// Identifies our HCA uniquely among all those in the Infiband
     /// network; roughly equivalent to a host address.
     int lid;
+
+    /// global id is available if link layer protocol is Ethernet
+    int gidIndex;          // global id index, normally 0
+    ibv_gid gid;               // global id
 
     /// Unique identifier for qp, among all queue pairs allocated by
     /// this machine.

@@ -345,7 +345,13 @@ class InfRcTransport : public Transport {
     ibv_cq*      clientRxCq;        // completion queue for client wait
     ibv_cq*      commonTxCq;        // common completion queue for all transmits
     int          ibPhysicalPort;    // physical port number on the HCA
+    int          linkLayer;         // link layer protocol
     int          lid;               // local id for this HCA and physical port
+
+    /// global id is available if link layer protocol is Ethernet
+    int          gidIndex;          // global id index, normally 0
+    ibv_gid      gid;               // global id
+
     int          serverSetupSocket; // UDP socket for incoming setup requests;
                                     // -1 means we're not a server
     int          clientSetupSocket; // UDP socket for outgoing setup requests

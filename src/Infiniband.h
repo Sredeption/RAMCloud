@@ -44,14 +44,21 @@ class Infiniband {
     // back and forth.
     class QueuePairTuple {
       public:
-        QueuePairTuple() : qpn(0), psn(0), lid(0), nonce(0)
+        QueuePairTuple() : qpn(0), psn(0), lid(0), nonce(0), gid()
         {
-            static_assert(sizeof(QueuePairTuple) == 68,
+            static_assert(sizeof(QueuePairTuple) == 68 + sizeof(ibv_gid),
                               "QueuePairTuple has unexpected size");
         }
         QueuePairTuple(uint16_t lid, uint32_t qpn, uint32_t psn,
                        uint64_t nonce, const char* peerName = "?unknown?")
-            : qpn(qpn), psn(psn), lid(lid), nonce(nonce)
+            : qpn(qpn), psn(psn), lid(lid), nonce(nonce), gid()
+        {
+            snprintf(this->peerName, sizeof(this->peerName), "%s",
+                peerName);
+        }
+        QueuePairTuple(uint16_t lid, uint32_t qpn, uint32_t psn,
+                       uint64_t nonce, ibv_gid &gid, const char* peerName = "?unknown?")
+            : qpn(qpn), psn(psn), lid(lid), nonce(nonce), gid(gid)
         {
             snprintf(this->peerName, sizeof(this->peerName), "%s",
                 peerName);
@@ -60,6 +67,7 @@ class Infiniband {
         uint32_t    getQpn() const      { return qpn; }
         uint32_t    getPsn() const      { return psn; }
         uint64_t    getNonce() const    { return nonce; }
+        ibv_gid     getGid() const      { return gid; }
         const char* getPeerName() const { return peerName; }
 
       private:
@@ -68,6 +76,7 @@ class Infiniband {
         uint16_t lid;            // infiniband address: "local id"
         uint64_t nonce;          // random nonce used to confirm replies are
                                  // for received requests
+        ibv_gid  gid;            // global ID for RoCE
         char peerName[50];       // Optional name for the sender (intended for
                                  // use in error messages); null-terminated.
     } __attribute__((packed));
@@ -175,6 +184,8 @@ class Infiniband {
         QueuePair(Infiniband& infiniband,
                   ibv_qp_type type,
                   int ibPhysicalPort,
+                  int linkLayer,
+                  int gidIndex,
                   ibv_srq *srq,
                   ibv_cq *txcq,
                   ibv_cq *rxcq,
@@ -184,8 +195,8 @@ class Infiniband {
         // exists solely as superclass constructor for MockQueuePair derivative
         explicit QueuePair(Infiniband& infiniband)
             : infiniband(infiniband), type(0), ctxt(NULL), ibPhysicalPort(-1),
-            pd(NULL), srq(NULL), qp(NULL), txcq(NULL), rxcq(NULL),
-            initialPsn(-1), handshakeSin(), peerLid(0) {}
+            linkLayer(-1), gidIndex(-1), pd(NULL), srq(NULL), qp(NULL), txcq(NULL),
+            rxcq(NULL), initialPsn(-1), handshakeSin(), peerLid(0), peerGid() {}
         ~QueuePair();
         uint32_t    getInitialPsn() const;
         uint32_t    getLocalQpNumber() const;
@@ -204,6 +215,8 @@ class Infiniband {
         int          type;           // QP type (IBV_QPT_RC, etc.)
         ibv_context* ctxt;           // device context of the HCA to use
         int          ibPhysicalPort; // physical port number of the HCA
+        int          linkLayer;      // link layer protocol of the HCA
+        int          gidIndex;       // global ID index
         ibv_pd*      pd;             // protection domain
         ibv_srq*     srq;            // shared receive queue
         ibv_qp*      qp;             // infiniband verbs QP handle
@@ -213,6 +226,7 @@ class Infiniband {
         sockaddr_in  handshakeSin;   // UDP address of the remote end used to
                                      // handshake when using RC queue pairs.
         uint16_t     peerLid;        // Lid of the other party.
+        ibv_gid      peerGid;        // Gid of the other party
         char         peerName[50];   // Optional name for the sender
                                      // (intended for use in error messages);
                                      // null-terminated.
@@ -446,6 +460,8 @@ class Infiniband {
     QueuePair*
     createQueuePair(ibv_qp_type type,
                     int ibPhysicalPort,
+                    int linkLayer,
+                    int gidIndex,
                     ibv_srq *srq,
                     ibv_cq *txcq,
                     ibv_cq *rxcq,
@@ -455,6 +471,12 @@ class Infiniband {
 
     int
     getLid(int port);
+
+    void
+    getGid(int port, int gidIndex, ibv_gid *gid);
+
+    int
+    getLinkLayer(int port);
 
     BufferDescriptor*
     tryReceive(QueuePair* qp, Tub<Address>* sourceAddress = NULL);

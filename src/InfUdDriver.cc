@@ -75,7 +75,10 @@ InfUdDriver::InfUdDriver(Context* context, const ServiceLocator *sl,
     , txcq(0)
     , qp()
     , ibPhysicalPort(ethernet ? 2 : 1)
+    , linkLayer(-1)
     , lid(0)
+    , gidIndex(-1)
+    , gid()
     , qpn(0)
     , localMac()
     , locatorString("infud:")
@@ -158,10 +161,17 @@ InfUdDriver::InfUdDriver(Context* context, const ServiceLocator *sl,
         throw DriverException(HERE, errno);
     }
 
+    linkLayer = infiniband->getLinkLayer(ibPhysicalPort);
+
+    if (linkLayer == IBV_LINK_LAYER_ETHERNET) {
+        gidIndex = 0;
+        infiniband->getGid(ibPhysicalPort, gidIndex, &gid);
+    }
+
     qp = infiniband->createQueuePair(localMac ? IBV_QPT_RAW_ETH
                                               : IBV_QPT_UD,
-                                     ibPhysicalPort, NULL,
-                                     txcq, rxcq, MAX_TX_QUEUE_DEPTH,
+                                     ibPhysicalPort, linkLayer, gidIndex,
+                                     NULL, txcq, rxcq, MAX_TX_QUEUE_DEPTH,
                                      MAX_RX_QUEUE_DEPTH,
                                      QKEY);
 
