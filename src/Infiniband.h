@@ -469,6 +469,8 @@ class Infiniband {
                     uint32_t maxRecvWr,
                     uint32_t QKey = 0);
 
+    int getUpPort();
+
     int
     getLid(int port);
 

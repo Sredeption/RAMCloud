@@ -116,6 +116,23 @@ Infiniband::wcStatusToString(int status)
     return lookup[status];
 }
 
+int Infiniband::getUpPort() {
+    ibv_port_attr ipa;
+    for (int port = 1; port <= 2; port++) {
+        int ret = ibv_query_port(device.ctxt, downCast<uint8_t>(port), &ipa);
+        if (ret) {
+            RAMCLOUD_LOG(ERROR, "ibv_query_port failed on port %u\n", port);
+            throw TransportException(HERE, ret);
+        }
+        if (ipa.state != IBV_PORT_DOWN)
+            return port;
+    }
+
+    RAMCLOUD_LOG(ERROR, "couldn't find up port\n");
+    throw TransportException(HERE, -1);
+}
+
+
 /**
  * Obtain the infiniband "local ID" of the device corresponding to
  * the provided context and port number.
@@ -517,7 +534,7 @@ Infiniband::pollCompletionQueue(ibv_cq *cq, int numEntries, ibv_wc *retWcArray)
  *
  * Somewhat confusingly, each communicating end has a QueuePair, which are
  * bound (one might say "paired", but that's even more confusing). This
- * object is somewhat analogous to a TCB in TCP. 
+ * object is somewhat analogous to a TCB in TCP.
  *
  * After this method completes, the QueuePair will be in the INIT state.
  * A later call to #plumb() will transition it into the RTS state for
@@ -554,7 +571,7 @@ Infiniband::pollCompletionQueue(ibv_cq *cq, int numEntries, ibv_wc *retWcArray)
  *      Maximum number of outstanding receive work requests allowed on
  *      this QueuePair.
  * \param QKey
- *      UD Queue Pairs only. The QKey for this pair. 
+ *      UD Queue Pairs only. The QKey for this pair.
  */
 Infiniband::QueuePair::QueuePair(Infiniband& infiniband, ibv_qp_type type,
     int ibPhysicalPort, int linkLayer, int gidIndex, ibv_srq *srq, ibv_cq *txcq, ibv_cq *rxcq,
@@ -737,6 +754,7 @@ Infiniband::QueuePair::plumb(QueuePairTuple *qpt)
         throw TransportException(HERE, r);
     }
     peerLid = qpt->getLid();
+    peerGid = qpt->getGid();
 
     // the queue pair should be ready to use once the client has finished
     // setting up their end.

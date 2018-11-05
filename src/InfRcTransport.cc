@@ -213,6 +213,8 @@ InfRcTransport::InfRcTransport(Context* context, const ServiceLocator *sl,
     }
 
     infiniband = realInfiniband.construct(ibDeviceName);
+    ibPhysicalPort = infiniband->getUpPort();
+    LOG(NOTICE, "Port %d is up", ibPhysicalPort);
 
     // Step 1:
     //  Set up the udp sockets we use for out-of-band infiniband handshaking.
@@ -304,6 +306,7 @@ InfRcTransport::InfRcTransport(Context* context, const ServiceLocator *sl,
     if (linkLayer == IBV_LINK_LAYER_ETHERNET) {
         gidIndex = 0;
         infiniband->getGid(ibPhysicalPort, gidIndex, &gid);
+        LOG(NOTICE, "Local Infiniband gid is %016lx:%016lx", gid.global.subnet_prefix, gid.global.interface_id);
     }
 
     // create two shared receive queues. all client queue pairs use one and all
