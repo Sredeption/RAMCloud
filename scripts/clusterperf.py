@@ -986,7 +986,7 @@ if __name__ == '__main__':
                  'each master')
     parser.add_option('--dpdkPort', type=int, dest='dpdk_port',
             help='Ethernet port that the DPDK driver should use')
-    parser.add_option('-T', '--transport', default='basic+infud',
+    parser.add_option('-T', '--transport', default='infrc',
             help='Transport to use for communication with servers')
     parser.add_option('-v', '--verbose', action='store_true', default=False,
             help='Print progress messages')

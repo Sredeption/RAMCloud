@@ -196,6 +196,12 @@ class LockTable {
      */
     Log& log;
 
+    Atomic<uint64_t> lockNum;
+
+    Atomic<uint64_t> currentLockNum;
+
+    Atomic<uint64_t> newLockNum;
+
     bool keysMatch(Key& key, Entry lockObjectRef);
 
     DISALLOW_COPY_AND_ASSIGN(LockTable);

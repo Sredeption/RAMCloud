@@ -37,6 +37,9 @@ LockTable::LockTable(uint64_t numEntries, Log& log)
                     numEntries / (ENTRIES_PER_CACHE_LINE - 1)) - 1)
     , buckets()
     , log(log)
+    , lockNum()
+    , currentLockNum()
+    , newLockNum()
 {
     void *buf  = Memory::xmemalign(
             HERE,
@@ -153,6 +156,7 @@ LockTable::releaseLock(Key& key, Log::Reference lockObjectRef)
         for (; entryIndex < ENTRIES_PER_CACHE_LINE; entryIndex++) {
             if (cacheLine->entries[entryIndex] == lockObjectRef.toInteger()) {
                 cacheLine->entries[entryIndex] = 0;
+                currentLockNum--;
                 return true;
             }
         }
@@ -234,6 +238,14 @@ LockTable::tryAcquireLock(Key& key, Log::Reference lockObjectRef)
 
     // Assign lock
     *entryPtr = lockObjectRef.toInteger();
+
+    lockNum++;
+    currentLockNum++;
+    uint64_t  ln= lockNum.load();
+    if (ln % 10000==0){
+        RAMCLOUD_LOG(NOTICE,"Lock num:%lu, current lock num:%lu", ln, currentLockNum.load());
+    }
+
     return true;
 }
 
