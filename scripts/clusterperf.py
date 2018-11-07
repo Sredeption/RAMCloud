@@ -754,9 +754,7 @@ def txTPCC(name, options, cluster_args, client_args):
         cluster_args['num_servers'] = 4
     if 'num_clients' not in cluster_args:
         cluster_args['num_clients'] = cluster_args['num_servers'] * 2 + 1;
-    cluster.run(client='%s/ClusterPerf %s %s' %
-            (obj_path, flatten_args(client_args), name), **cluster_args)
-    print(get_client_log(), end='')
+    default(name, options, cluster_args, client_args)
 
 def txTpccLatency(name, options, cluster_args, client_args):
     if 'master_args' not in cluster_args:

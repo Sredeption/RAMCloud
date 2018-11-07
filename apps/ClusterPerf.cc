@@ -5450,124 +5450,6 @@ doWorkload(OpType type)
     sendCommand(NULL, "done", 1, numClients-1);
 }
 
-// This benchmark measures test consistency guarantee of transaction
-// by several clients trasfer balances among many objects.
-void
-transaction_collision()
-{
-    int numMasters = 5;
-    const int numObjs = 20, keyLength = 4;
-    char keys[numObjs][keyLength];
-    int objsPerMaster = numObjs;
-
-    for (int i = 0; i < numObjs; i++) {
-        snprintf(keys[i], keyLength, "%3d", i);
-    }
-
-    if (clientIndex > 0) {
-        // Slaves execute the following code, which moves balances
-        // around objects.
-        while (true) {
-            char command[20];
-            getCommand(command, sizeof(command));
-            if (strcmp(command, "run") == 0) {
-                setSlaveState("running");
-
-                RAMCLOUD_LOG(NOTICE, "Strating shuffling test.");
-                doShuffleValues(20, 15, numMasters, objsPerMaster);
-                //setSlaveState("idle");
-                setSlaveState("done");
-                return;
-            }  else {
-                RAMCLOUD_LOG(ERROR, "unknown command %s", command);
-                return;
-            }
-        }
-    }
-
-    // The master executes the following code, which starts up zero or more
-    // slaves to generate load, then times the performance of reading.
-
-    std::vector<uint64_t> tableIds(numMasters);
-    createTables(tableIds, 0, "0", 1);
-
-    int startingValue = 100;
-    for (int tableNum = 0; tableNum < numMasters; tableNum++) {
-        for (int i = 0; i < objsPerMaster; i++) {
-            cluster->write(tableIds.at(tableNum), keys[i], keyLength,
-                           &startingValue, sizeof32(startingValue));
-        }
-    }
-    printf("# RAMCloud transaction collision stress test\n");
-    printf("#----------------------------------------------------------\n");
-    printf("# Balances after all transactions\n");
-
-    sendCommand("run", NULL, 1, numClients-1);
-
-    for (int i = 1; i < numClients; i++) {
-        waitSlave(i, "done", 60);
-        RAMCLOUD_LOG(NOTICE, "slave %d is done.", i);
-    }
-
-    RAMCLOUD_LOG(NOTICE, "All slaves are done.");
-    int sum = 0;
-    for (int tableNum = 0; tableNum < numMasters; tableNum++) {
-        int localSum = 0;
-        printf("master %d | ", tableNum);
-        for (int i = 0; i < objsPerMaster; i++) {
-            Buffer value;
-            cluster->read(tableIds.at(tableNum), keys[i],
-                          keyLength, &value);
-            printf("%3d ", *(value.getStart<int>()));
-            sum += *(value.getStart<int>());
-            localSum += *(value.getStart<int>());
-        }
-        printf(" | row sum: %d\n", localSum);
-    }
-
-    printf("#------------------------------------------------------------\n");
-    printf("# Total sum: %d\n", sum);
-
-    printf("# clientID | # of commits | # of aborts | avg. serverSpan | "
-           "avg. objs | Avg. Latency (us) |\n");
-    printf("#------------------------------------------------------------\n");
-    for (int i = 1; i < numClients; ++i) {
-        char abortCountKey[30], commitCountKey[30], latencyKey[30],
-             serverSpanKey[30], objsSelectedKey[30];
-        snprintf(abortCountKey, sizeof(abortCountKey), "abortCount %3d", i);
-        Buffer value;
-        cluster->read(dataTable, abortCountKey, (uint16_t)strlen(abortCountKey),
-                      &value);
-        int aborts = *(value.getStart<int>());
-        value.reset();
-        snprintf(commitCountKey, sizeof(commitCountKey), "commitCount %3d", i);
-        cluster->read(dataTable, commitCountKey,
-                      (uint16_t)strlen(commitCountKey), &value);
-        int commits = *(value.getStart<int>());
-        snprintf(latencyKey, sizeof(latencyKey), "latency %3d", i);
-        value.reset();
-        cluster->read(dataTable, latencyKey,
-                      (uint16_t)strlen(latencyKey), &value);
-        double latency = *(value.getStart<double>());
-        value.reset();
-        snprintf(serverSpanKey, sizeof(serverSpanKey), "serverSpan %3d", i);
-        cluster->read(dataTable, serverSpanKey,
-                      (uint16_t)strlen(serverSpanKey), &value);
-        int totalServerSpan = *(value.getStart<int>());
-        value.reset();
-        snprintf(objsSelectedKey, sizeof(objsSelectedKey),
-                 "objsSelected %3d", i);
-        cluster->read(dataTable, objsSelectedKey,
-                      (uint16_t)strlen(objsSelectedKey), &value);
-        int totalObjsSelected = *(value.getStart<int>());
-        printf(" %9d | %12d | %11d | %15.2f | %9.2f | %6.1fus\n",
-               i, commits, aborts,
-               static_cast<double>(totalServerSpan) / (commits + aborts),
-               static_cast<double>(totalObjsSelected) / (commits + aborts),
-               latency);
-    }
-}
-
 vector<double> tpccAllLatency;
 
 TPCC::TpccStat
@@ -5592,22 +5474,22 @@ tpcc_oneClient(double runSeconds, TPCC::Driver* driver, bool latencyTest = false
         int txType;
         try {
             if (randNum < 43) {
-                latency = driver->txPayment(W_ID, &outcome);
                 txType = 0;
+                latency = driver->txPayment(W_ID, &outcome);
             } else if (randNum < 47) {
-                latency = driver->txOrderStatus(W_ID, &outcome);
                 txType = 1;
+                latency = driver->txOrderStatus(W_ID, &outcome);
             } else if (randNum < 51) {
+                txType = 2;
                 for (uint32_t D_ID = 1; D_ID <= 10; D_ID++) {
                     latency += driver->txDelivery(W_ID, D_ID, &outcome);
                 }
-                txType = 2;
             } else if (randNum < 55) {
-                latency = driver->txStockLevel(W_ID, 1U /*fixed D_ID*/, &outcome);
                 txType = 3;
+                latency = driver->txStockLevel(W_ID, 1U /*fixed D_ID*/, &outcome);
             } else {
-                latency = driver->txNewOrder(W_ID, &outcome);
                 txType = 4;
+                latency = driver->txNewOrder(W_ID, &outcome);
             }
             if (outcome) {
                 stat.cumulativeLatency[txType] += latency;
@@ -5615,8 +5497,8 @@ tpcc_oneClient(double runSeconds, TPCC::Driver* driver, bool latencyTest = false
             } else {
                 stat.txAbortCount[txType]++;
             }
-        } catch (Exception e) {
-            RAMCLOUD_LOG(ERROR, "exception thrown TX job. randNum=%d", randNum);
+        } catch (std::exception e) {
+            RAMCLOUD_LOG(NOTICE, "exception thrown TX job, type=%d.", txType);
         }
 
         if (latencyTest) {
@@ -5638,11 +5520,10 @@ void tcpTest() {
     cluster->write(dataTable, "a", 1, &dummy, sizeof(dummy));
     Tub<ReadRpc> ops[30];
     Buffer bufs[30];
-    cluster->clientContext->timeTrace->record("Beginning of Experiment ==== ");
+    printf("Beginning of Experiment ==== ");
     for (int i = 0; i < 30; ++i) {
         ops[i].construct(cluster, dataTable, "a", (uint16_t)1, &bufs[i]);
         //ops[i].construct(cluster, tableIds[i], "a", (uint16_t)1, &bufs[i]);
-        cluster->clientContext->timeTrace->record("dispatched a readRpc.");
     }
     LOG(NOTICE, "Beginning of Wait ==== ");
     for (int i = 0; i < 30; ++i) {
@@ -5722,7 +5603,7 @@ void printPerfStats(PerfStats& startStats, PerfStats& finishStats) {
             startStats.logSyncCycles) / elapsedCycles;
 
     printf("   %8.2f   %8.3f %8.3f %8.1f  %8.1f  %8.3f "
-            "%8.2f  %8.2f  %8.2f  %8.2f  %8.2f  %8.2f  %3ld  %8.2f  %8.2f  %8.2f\n",
+            "%8.2f  %8.2f  %8.2f  %8.2f  %8.2f  %8.2f  %3lf  %8.2f  %8.2f  %8.2f\n",
             readRate/1e03, utilization, cleanerUtilization,
             compactorFreePct, cleanerFreePct, dispatchUtilization,
             netOutRate/1e06, netInRate/1e06,
@@ -5966,6 +5847,124 @@ tpccLatency()
             printf("                              ");
         }
         printPerfStats(startStats[i], finishStats[i]);
+    }
+}
+
+// This benchmark measures test consistency guarantee of transaction
+// by several clients trasfer balances among many objects.
+void
+transaction_collision()
+{
+    int numMasters = 5;
+    const int numObjs = 20, keyLength = 4;
+    char keys[numObjs][keyLength];
+    int objsPerMaster = numObjs;
+
+    for (int i = 0; i < numObjs; i++) {
+        snprintf(keys[i], keyLength, "%3d", i);
+    }
+
+    if (clientIndex > 0) {
+        // Slaves execute the following code, which moves balances
+        // around objects.
+        while (true) {
+            char command[20];
+            getCommand(command, sizeof(command));
+            if (strcmp(command, "run") == 0) {
+                setSlaveState("running");
+
+                RAMCLOUD_LOG(NOTICE, "Strating shuffling test.");
+                doShuffleValues(20, 15, numMasters, objsPerMaster);
+                //setSlaveState("idle");
+                setSlaveState("done");
+                return;
+            }  else {
+                RAMCLOUD_LOG(ERROR, "unknown command %s", command);
+                return;
+            }
+        }
+    }
+
+    // The master executes the following code, which starts up zero or more
+    // slaves to generate load, then times the performance of reading.
+
+    std::vector<uint64_t> tableIds(numMasters);
+    createTables(tableIds, 0, "0", 1);
+
+    int startingValue = 100;
+    for (int tableNum = 0; tableNum < numMasters; tableNum++) {
+        for (int i = 0; i < objsPerMaster; i++) {
+            cluster->write(tableIds.at(tableNum), keys[i], keyLength,
+                           &startingValue, sizeof32(startingValue));
+        }
+    }
+    printf("# RAMCloud transaction collision stress test\n");
+    printf("#----------------------------------------------------------\n");
+    printf("# Balances after all transactions\n");
+
+    sendCommand("run", NULL, 1, numClients-1);
+
+    for (int i = 1; i < numClients; i++) {
+        waitSlave(i, "done", 60);
+        RAMCLOUD_LOG(NOTICE, "slave %d is done.", i);
+    }
+
+    RAMCLOUD_LOG(NOTICE, "All slaves are done.");
+    int sum = 0;
+    for (int tableNum = 0; tableNum < numMasters; tableNum++) {
+        int localSum = 0;
+        printf("master %d | ", tableNum);
+        for (int i = 0; i < objsPerMaster; i++) {
+            Buffer value;
+            cluster->read(tableIds.at(tableNum), keys[i],
+                          keyLength, &value);
+            printf("%3d ", *(value.getStart<int>()));
+            sum += *(value.getStart<int>());
+            localSum += *(value.getStart<int>());
+        }
+        printf(" | row sum: %d\n", localSum);
+    }
+
+    printf("#------------------------------------------------------------\n");
+    printf("# Total sum: %d\n", sum);
+
+    printf("# clientID | # of commits | # of aborts | avg. serverSpan | "
+           "avg. objs | Avg. Latency (us) |\n");
+    printf("#------------------------------------------------------------\n");
+    for (int i = 1; i < numClients; ++i) {
+        char abortCountKey[30], commitCountKey[30], latencyKey[30],
+                serverSpanKey[30], objsSelectedKey[30];
+        snprintf(abortCountKey, sizeof(abortCountKey), "abortCount %3d", i);
+        Buffer value;
+        cluster->read(dataTable, abortCountKey, (uint16_t)strlen(abortCountKey),
+                      &value);
+        int aborts = *(value.getStart<int>());
+        value.reset();
+        snprintf(commitCountKey, sizeof(commitCountKey), "commitCount %3d", i);
+        cluster->read(dataTable, commitCountKey,
+                      (uint16_t)strlen(commitCountKey), &value);
+        int commits = *(value.getStart<int>());
+        snprintf(latencyKey, sizeof(latencyKey), "latency %3d", i);
+        value.reset();
+        cluster->read(dataTable, latencyKey,
+                      (uint16_t)strlen(latencyKey), &value);
+        double latency = *(value.getStart<double>());
+        value.reset();
+        snprintf(serverSpanKey, sizeof(serverSpanKey), "serverSpan %3d", i);
+        cluster->read(dataTable, serverSpanKey,
+                      (uint16_t)strlen(serverSpanKey), &value);
+        int totalServerSpan = *(value.getStart<int>());
+        value.reset();
+        snprintf(objsSelectedKey, sizeof(objsSelectedKey),
+                 "objsSelected %3d", i);
+        cluster->read(dataTable, objsSelectedKey,
+                      (uint16_t)strlen(objsSelectedKey), &value);
+        int totalObjsSelected = *(value.getStart<int>());
+        printf(" %9d | %12d | %11d | %15.2f | %9.2f | %6.1fus\n",
+               i, commits, aborts,
+               static_cast<double>(totalServerSpan) / (commits + aborts),
+               static_cast<double>(totalObjsSelected) / (commits + aborts),
+               latency);
     }
 }
 
