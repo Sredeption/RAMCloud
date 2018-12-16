@@ -25,11 +25,11 @@
 namespace RAMCloud {
 
 void
-MigrationSegmentBuilder::build(const void *buffer, uint32_t length,
-                               const SegmentCertificate &certificate,
-                               int numPartitions,
-                               const ProtoBuf::MigrationPartition &partitions,
-                               Segment *recoverySegments)
+MigrationSegmentBuilder::build(
+    const void *buffer, uint32_t length,
+    const SegmentCertificate &certificate,
+    Segment *migrationSegment, uint64_t migrationTableId,
+    uint64_t firstKeyHash, uint64_t lastKeyHash)
 {
     SegmentIterator it(buffer, length, certificate);
     it.checkMetadataIntegrity();
@@ -68,14 +68,12 @@ MigrationSegmentBuilder::build(const void *buffer, uint32_t length,
             // Copy SAFEVERSION to all the partitions for safeVersion recovery
             // on all recovery masters
             LogPosition position(header->segmentId, it.getOffset());
-            for (int i = 0; i < numPartitions; i++) {
-                if (!recoverySegments[i].append(type, entryBuffer)) {
-                        LOG(WARNING, "Failure appending to a recovery segment "
-                                     "for a replica of <%s,%lu>",
-                            ServerId(header->logId).toString().c_str(),
-                            header->segmentId);
-                    throw SegmentRecoveryFailedException(HERE);
-                }
+            if (!migrationSegment->append(type, entryBuffer)) {
+                    LOG(WARNING, "Failure appending to a recovery segment "
+                                 "for a replica of <%s,%lu>",
+                        ServerId(header->logId).toString().c_str(),
+                        header->segmentId);
+                throw SegmentRecoveryFailedException(HERE);
             }
             continue;
         }
@@ -86,14 +84,11 @@ MigrationSegmentBuilder::build(const void *buffer, uint32_t length,
             for (uint32_t i = 0; i < plist.getParticipantCount(); ++i) {
                 tableId = plist.participants[i].tableId;
                 keyHash = plist.participants[i].keyHash;
-                const auto *partition =
-                    whichPartition(tableId, keyHash, partitions);
-                if (partition) {
-                    uint64_t partitionId = partition->user_data();
+                if (tableId == migrationTableId && firstKeyHash <= keyHash &&
+                    keyHash <= lastKeyHash) {
 
                     LogPosition position(header->segmentId, it.getOffset());
-                    if (!recoverySegments[partitionId].append(type,
-                                                              entryBuffer)) {
+                    if (!migrationSegment->append(type, entryBuffer)) {
                             LOG(WARNING,
                                 "Failure appending to a recovery segment "
                                 "for a replica of <%s,%lu>",
@@ -138,27 +133,20 @@ MigrationSegmentBuilder::build(const void *buffer, uint32_t length,
                 LOG(WARNING, "Unknown LogEntry (id=%u)", type);
             throw SegmentRecoveryFailedException(HERE);
         }
-
-        const auto *partition = whichPartition(tableId, keyHash, partitions);
-        if (!partition) {
-            // This log record doesn't belong to any of the current
-            // partitions. This can happen when it takes several passes
-            // to complete a recovery: each pass will recover only a subset
-            // of the data.
-            TEST_LOG("Couldn't place object");
-            continue;
-        }
-        uint64_t partitionId = partition->user_data();
-
-        LogPosition position(header->segmentId, it.getOffset());
-        if (!isEntryAlive(position, partition)) {
-                LOG(NOTICE, "Skipping object with <tableId, keyHash> of "
-                            "<%lu,%lu> because it appears to have existed prior "
-                            "to this tablet's creation.", tableId, keyHash);
+        if (!(tableId == migrationTableId && firstKeyHash <= keyHash &&
+              keyHash <= lastKeyHash)) {
             continue;
         }
 
-        if (!recoverySegments[partitionId].append(type, entryBuffer)) {
+//        LogPosition position(header->segmentId, it.getOffset());
+//        if (!isEntryAlive(position, partition)) {
+//                LOG(NOTICE, "Skipping object with <tableId, keyHash> of "
+//                            "<%lu,%lu> because it appears to have existed prior "
+//                            "to this tablet's creation.", tableId, keyHash);
+//            continue;
+//        }
+
+        if (!migrationSegment->append(type, entryBuffer)) {
                 LOG(WARNING, "Failure appending to a recovery segment "
                              "for a replica of <%s,%lu>",
                     ServerId(header->logId).toString().c_str(),
@@ -215,19 +203,4 @@ bool MigrationSegmentBuilder::isEntryAlive(
     return position >= minimum;
 }
 
-const ProtoBuf::Tablets::Tablet *
-MigrationSegmentBuilder::whichPartition(uint64_t tableId,
-                                        KeyHash keyHash,
-                                        const ProtoBuf::MigrationPartition &partitions)
-{
-    for (int i = 0; i < partitions.tablet_size(); i++) {
-        const ProtoBuf::Tablets::Tablet &tablet(partitions.tablet(i));
-        if (tablet.table_id() == tableId &&
-            (tablet.start_key_hash() <= keyHash &&
-             tablet.end_key_hash() >= keyHash)) {
-            return &tablet;
-        }
-    }
-    return NULL;
-}
 }

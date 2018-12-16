@@ -4888,26 +4888,29 @@ TEST_F(MasterMigrationTest, recover)
                             {WireFormat::BACKUP_SERVICE,
                              WireFormat::ADMIN_SERVICE},
                             100, ServerStatus::UP});
-    ServerId serverId(99, 0);
-    ReplicaManager mgr(&context2, &serverId, 1, false, false);
-    MasterServiceTest::writeRecoverableSegment(&context, mgr, serverId, 99, 87);
-    MasterServiceTest::writeRecoverableSegment(&context, mgr, serverId, 99, 88);
+    ServerId sourceId(99, 0);
+    ServerId targetId(100, 0);
+    uint64_t tableId = 123;
+    uint64_t firstKeyHash = 0;
+    uint64_t lastKeyHash = 1000;
+    ReplicaManager mgr(&context2, &sourceId, 1, false, false);
+    MasterServiceTest::writeRecoverableSegment(&context, mgr, sourceId, 99, 87);
+    MasterServiceTest::writeRecoverableSegment(&context, mgr, sourceId, 99, 88);
 
     // Now run recovery, as if the fake server failed.
-    ProtoBuf::RecoveryPartition recoveryPartition;
-    createRecoveryPartition(recoveryPartition);
+    ProtoBuf::MigrationPartition recoveryPartition;
     {
-        BackupClient::startReadingData(&context, backup1Id, 456lu,
-                                       ServerId(99));
-        BackupClient::StartPartitioningReplicas(&context, backup1Id, 456lu,
-                                                ServerId(99),
+        BackupClient::migrationStartReading(&context, backup1Id, 456lu,
+                                       sourceId, targetId, tableId, firstKeyHash, lastKeyHash);
+        BackupClient::migrationStartPartitioning(&context, backup1Id, 456lu,
+                                                sourceId,
                                                 &recoveryPartition);
     }
     {
-        BackupClient::startReadingData(&context, backup2Id, 456lu,
-                                       ServerId(99));
-        BackupClient::StartPartitioningReplicas(&context, backup2Id, 456lu,
-                                                ServerId(99),
+        BackupClient::migrationStartReading(&context, backup2Id, 456lu,
+                                       sourceId, targetId, tableId, firstKeyHash, lastKeyHash);
+        BackupClient::migrationStartPartitioning(&context, backup2Id, 456lu,
+                                                sourceId,
                                                 &recoveryPartition);
     }
 

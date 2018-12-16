@@ -9,7 +9,6 @@ namespace RAMCloud {
 
 struct BackupMasterMigrationTest : public ::testing::Test {
     TaskQueue taskQueue;
-    ProtoBuf::MigrationPartition partitions;
     uint32_t segmentSize;
     uint32_t readSpeed;
     uint32_t maxReplicasInMemory;
@@ -18,12 +17,17 @@ struct BackupMasterMigrationTest : public ::testing::Test {
     Buffer source;
     ServerId sourceServerId;
     ServerId targetServerId;
+    uint64_t tableId;
+    uint64_t firstKeyHash;
+    uint64_t lastKeyHash;
+
     Tub<BackupMasterMigration> migration;
 
     BackupMasterMigrationTest()
-        : taskQueue(), partitions(), segmentSize(1024), readSpeed(100),
+        : taskQueue(), segmentSize(1024), readSpeed(100),
           maxReplicasInMemory(4), storage(segmentSize, 6, 0), frames(),
-          source(), sourceServerId(99, 0), targetServerId(100, 0), migration()
+          source(), sourceServerId(99, 0), targetServerId(100, 0),
+          tableId(1), firstKeyHash(0lu), lastKeyHash(~0lu), migration()
     {
         Logger::get().setLogLevels(RAMCloud::SILENT_LOG_LEVEL);
         ProtoBuf::Tablets tablets;
@@ -33,11 +37,8 @@ struct BackupMasterMigrationTest : public ::testing::Test {
             (2, 0lu, ~0lu, TabletsBuilder::NORMAL, 0lu)  // partition 0
             (3, 0lu, ~0lu, TabletsBuilder::NORMAL, 0lu); // partition 0
         source.appendExternal("test", 5);
-        for (int i = 0; i < tablets.tablet_size(); i++) {
-            ProtoBuf::Tablets::Tablet &tablet(*partitions.add_tablet());
-            tablet = tablets.tablet(i);
-        }
         migration.construct(taskQueue, 456lu, sourceServerId, targetServerId,
+                            tableId, firstKeyHash, lastKeyHash,
                             segmentSize, readSpeed, maxReplicasInMemory);
     }
 
@@ -67,7 +68,7 @@ struct BackupMasterMigrationTest : public ::testing::Test {
 
         // Enqueue the primary replicas
         migration->start(frames, NULL, NULL);
-        migration->setPartitionsAndSchedule(partitions);
+        migration->setPartitionsAndSchedule();
 
         BackupMasterMigration::CyclicReplicaBuffer *replicaBuffer =
             &migration->replicaBuffer;
@@ -134,7 +135,7 @@ TEST_F(BackupMasterMigrationTest, start)
     Buffer buffer;
     auto response = buffer.emplaceAppend<BackupMasterMigration::StartResponse>();
     migration->start(frames, &buffer, response);
-    migration->setPartitionsAndSchedule(partitions);
+    migration->setPartitionsAndSchedule();
 
     ASSERT_EQ(5u, response->replicaCount);
     EXPECT_EQ(2u, response->primaryReplicaCount);
@@ -217,66 +218,6 @@ TEST_F(BackupMasterMigrationTest, start)
                                         - 11));
 }
 
-TEST_F(BackupMasterMigrationTest, setPartitionsAndSchedule)
-{
-    migration.construct(taskQueue, 456lu, sourceServerId, targetServerId,
-                        segmentSize, readSpeed, maxReplicasInMemory);
-
-    TestLog::Enable _;
-    migration->startCompleted = true;
-    migration->testingSkipBuild = true;
-
-    migration->setPartitionsAndSchedule(partitions);
-    EXPECT_EQ("setPartitionsAndSchedule: Recovery 456 building 2 recovery "
-              "segments for each replica for crashed master 99.0 and filtering "
-              "them according to the following partitions:\n"
-              "tablet {\n"
-              "  table_id: 1\n"
-              "  start_key_hash: 0\n"
-              "  end_key_hash: 10\n"
-              "  state: NORMAL\n"
-              "  server_id: 0\n"
-              "  user_data: 0\n"
-              "  ctime_log_head_id: 0\n"
-              "  ctime_log_head_offset: 0\n"
-              "}\n"
-              "tablet {\n"
-              "  table_id: 1\n"
-              "  start_key_hash: 11\n"
-              "  end_key_hash: 18446744073709551615\n"
-              "  state: NORMAL\n"
-              "  server_id: 0\n"
-              "  user_data: 1\n"
-              "  ctime_log_head_id: 0\n"
-              "  ctime_log_head_offset: 0\n"
-              "}\n"
-              "tablet {\n"
-              "  table_id: 2\n"
-              "  start_key_hash: 0\n"
-              "  end_key_hash: 18446744073709551615\n"
-              "  state: NORMAL\n"
-              "  server_id: 0\n"
-              "  user_data: 0\n"
-              "  ctime_log_head_id: 0\n"
-              "  ctime_log_head_offset: 0\n"
-              "}\n"
-              "tablet {\n"
-              "  table_id: 3\n"
-              "  start_key_hash: 0\n"
-              "  end_key_hash: 18446744073709551615\n"
-              "  state: NORMAL\n  server_id: 0\n"
-              "  user_data: 0\n  ctime_log_head_id: 0\n"
-              "  ctime_log_head_offset: 0\n"
-              "}\n"
-              " | "
-              "setPartitionsAndSchedule: Kicked off building recovery segments | "
-              "schedule: scheduled",
-              TestLog::get());
-
-    EXPECT_EQ(2, migration->numPartitions);
-    EXPECT_TRUE(migration->isScheduled());
-}
-
 TEST_F(BackupMasterMigrationTest, getRecoverySegment)
 {
     mockMetadata(88); // secondary
@@ -284,7 +225,7 @@ TEST_F(BackupMasterMigrationTest, getRecoverySegment)
     migration->testingExtractDigest = &mockExtractDigest;
     migration->testingSkipBuild = true;
     migration->start(frames, NULL, NULL);
-    migration->setPartitionsAndSchedule(partitions);
+    migration->setPartitionsAndSchedule();
 
     EXPECT_THROW(migration->getRecoverySegment(456, 89, 0, NULL, NULL),
                  RetryException);
@@ -298,7 +239,7 @@ TEST_F(BackupMasterMigrationTest, getRecoverySegment)
     taskQueue.performTask();
     Buffer buffer;
     buffer.appendExternal("important", 10);
-    ASSERT_TRUE(migration->replicas[1].recoverySegments[0].append(
+    ASSERT_TRUE(migration->replicas[1].migrationSegment->append(
         LOG_ENTRY_TYPE_OBJ, buffer));
     buffer.reset();
     SegmentCertificate certificate;
@@ -314,7 +255,7 @@ TEST_F(BackupMasterMigrationTest, getRecoverySegment_exceptionDuringBuild)
 {
     mockMetadata(89, true, true);
     migration->start(frames, NULL, NULL);
-    migration->setPartitionsAndSchedule(partitions);
+    migration->setPartitionsAndSchedule();
     taskQueue.performTask();
     EXPECT_THROW(migration->getRecoverySegment(456, 89, 0, NULL, NULL),
                  SegmentRecoveryFailedException);
@@ -326,7 +267,7 @@ TEST_F(BackupMasterMigrationTest, getRecoverySegment_badArgs)
     migration->testingExtractDigest = &mockExtractDigest;
     migration->testingSkipBuild = true;
     migration->start(frames, NULL, NULL);
-    migration->setPartitionsAndSchedule(partitions);
+    migration->setPartitionsAndSchedule();
     taskQueue.performTask();
     EXPECT_THROW(migration->getRecoverySegment(455, 88, 0, NULL, NULL),
                  BackupBadSegmentIdException);
@@ -339,10 +280,12 @@ TEST_F(BackupMasterMigrationTest, getRecoverySegment_badArgs)
 
 TEST_F(BackupMasterMigrationTest, free)
 {
-    std::unique_ptr<BackupMasterMigration> migration(
+    std::unique_ptr<BackupMasterMigration>
+        migration(
         new BackupMasterMigration(taskQueue, 456lu, sourceServerId,
-                                  targetServerId,
-                                  segmentSize, readSpeed, maxReplicasInMemory));
+                                  targetServerId, tableId, firstKeyHash,
+                                  lastKeyHash, segmentSize, readSpeed,
+                                  maxReplicasInMemory));
     TestLog::Enable _;
     migration->free();
     taskQueue.performTask();
@@ -362,7 +305,7 @@ TEST_F(BackupMasterMigrationTest, performTask)
     mockMetadata(89, true, false);
     migration->testingSkipBuild = true;
     migration->start(frames, NULL, NULL);
-    migration->setPartitionsAndSchedule(partitions);
+    migration->setPartitionsAndSchedule();
     TestLog::Enable _;
     taskQueue.performTask();
     EXPECT_EQ(
@@ -384,7 +327,7 @@ TEST_F(BackupMasterMigrationTest, CyclicReplicaBuffer_enqueue)
     mockMetadata(89, true, true);
     migration->testingSkipBuild = true;
     migration->start(frames, NULL, NULL);
-    migration->setPartitionsAndSchedule(partitions);
+    migration->setPartitionsAndSchedule();
     ASSERT_EQ(replicaBuffer->normalPriorityQueuedReplicas.size(), 2u);
     ASSERT_EQ(replicaBuffer->highPriorityQueuedReplicas.size(), 0u);
     ASSERT_EQ(replicaBuffer->inMemoryReplicas.size(), 0u);
@@ -460,8 +403,7 @@ TEST_F(BackupMasterMigrationTest, CyclicReplicaBuffer_bufferNext_priorities)
     ASSERT_EQ(replicaBuffer->highPriorityQueuedReplicas.size(), 0u);
     ASSERT_EQ(replicaBuffer->normalPriorityQueuedReplicas.size(), 1u);
 
-    BackupMasterMigration::Replica *firstReplica =
-        replicaBuffer->inMemoryReplicas[0];
+    BackupMasterMigration::Replica *firstReplica;
 
     // Normal priority replicas are buffered when there are no high priority
     // replicas
@@ -494,7 +436,7 @@ TEST_F(BackupMasterMigrationTest, CyclicReplicaBuffer_buildNext)
     EXPECT_EQ("buildNext: <99.0,88> recovery segments took 0 ms "
               "to construct, notifying other threads", TestLog::get());
     EXPECT_FALSE(migration->replicas.at(0).recoveryException);
-    EXPECT_TRUE(migration->replicas.at(0).recoverySegments);
+    EXPECT_TRUE(migration->replicas.at(0).migrationSegment);
     EXPECT_TRUE(migration->replicas.at(0).built);
     TestLog::reset();
 }
@@ -503,7 +445,7 @@ TEST_F(BackupMasterMigrationTest, buildRecoverySegments_buildThrows)
 {
     mockMetadata(88, true, true);
     migration->start(frames, NULL, NULL);
-    migration->setPartitionsAndSchedule(partitions);
+    migration->setPartitionsAndSchedule();
     migration->replicaBuffer.bufferNext();
 
     TestLog::Enable _(buildNextFilter);
@@ -513,7 +455,7 @@ TEST_F(BackupMasterMigrationTest, buildRecoverySegments_buildThrows)
                                        "<99.0,88>: RAMCloud::SegmentIteratorException: cannot iterate: "
                                        "corrupt segment, thrown "));
     EXPECT_TRUE(migration->replicas.at(0).recoveryException);
-    EXPECT_FALSE(migration->replicas.at(0).recoverySegments);
+    EXPECT_FALSE(migration->replicas.at(0).migrationSegment);
     EXPECT_TRUE(migration->replicas.at(0).built);
 }
 

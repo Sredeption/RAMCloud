@@ -9,15 +9,17 @@ SpinLock BackupMasterMigration::deletionMutex
 
 RAMCloud::BackupMasterMigration::BackupMasterMigration(
     TaskQueue &taskQueue, uint64_t migrationId, ServerId sourceServerId,
-    ServerId targetServerId, uint32_t segmentSize,
+    ServerId targetServerId, uint64_t tableId, uint64_t firstKeyHash,
+    uint64_t lastKeyHash, uint32_t segmentSize,
     uint32_t readSpeed, uint32_t maxReplicasInMemory)
     : Task(taskQueue),
       migrationId(migrationId),
       sourceServerId(sourceServerId),
       targetServerId(targetServerId),
-      partitions(),
+      tableId(tableId),
+      firstKeyHash(firstKeyHash),
+      lastKeyHash(lastKeyHash),
       segmentSize(segmentSize),
-      numPartitions(),
       replicas(),
       segmentIdToReplica(),
       replicaBuffer(maxReplicasInMemory, segmentSize, readSpeed, this),
@@ -147,29 +149,12 @@ BackupMasterMigration::start(const std::vector<BackupStorage::FrameRef> &frames,
     populateStartResponse(buffer, response);
 }
 
-void BackupMasterMigration::setPartitionsAndSchedule(
-    ProtoBuf::MigrationPartition partitions)
+void BackupMasterMigration::setPartitionsAndSchedule()
 {
     assert(startCompleted);
-    // idempotency
-    if (this->partitions) {
-        schedule();
-        return;
-    }
-
-    this->partitions.construct(partitions);
-    for (int i = 0; i < partitions.tablet_size(); ++i) {
-        numPartitions = std::max(
-            numPartitions,
-            downCast<int>(partitions.tablet(i).user_data() + 1)
-        );
-    }
-
-    RAMCLOUD_LOG(NOTICE, "Recovery %lu building %d recovery segments for each "
-                         "replica for crashed master %s and filtering them according to "
-                         "the following " "partitions:\n%s",
-                 migrationId, numPartitions, sourceServerId.toString().c_str(),
-                 partitions.DebugString().c_str());
+    RAMCLOUD_LOG(NOTICE, "Recovery %lu building recovery segment for each "
+                         "replica for crashed master %s.",
+                 migrationId, sourceServerId.toString().c_str());
 
     RAMCLOUD_LOG(DEBUG, "Kicked off building recovery segments");
     buildingStartTicks = Cycles::rdtsc();
@@ -238,18 +223,10 @@ Status BackupMasterMigration::getRecoverySegment(uint64_t migrationId,
         throw e;
     }
 
-    if (partitionId >= numPartitions) {
-        RAMCLOUD_LOG(WARNING, "Asked for partition %d from segment <%s,%lu> "
-                              "but there are only %d partitions",
-                     partitionId, sourceServerId.toString().c_str(), segmentId,
-                     numPartitions);
-        throw BackupBadSegmentIdException(HERE);
-    }
-
     if (buffer)
-        replica->recoverySegments[partitionId].appendToBuffer(*buffer);
+        replica->migrationSegment->appendToBuffer(*buffer);
     if (certificate)
-        replica->recoverySegments[partitionId].getAppendedLength(certificate);
+        replica->migrationSegment->getAppendedLength(certificate);
 
     replica->fetchCount++;
     return STATUS_OK;
@@ -343,7 +320,7 @@ BackupMasterMigration::Replica::Replica(const BackupStorage::FrameRef &frame)
     : frame(frame),
       metadata(
           static_cast<const BackupReplicaMetadata *>(frame->getMetadata())),
-      recoverySegments(),
+      migrationSegment(),
       recoveryException(),
       built(),
       lastAccessTime(0),
@@ -464,7 +441,7 @@ bool BackupMasterMigration::CyclicReplicaBuffer::bufferNext()
         }
 
         // Evict
-        replicaToRemove->recoverySegments.release();
+        replicaToRemove->migrationSegment.release();
         replicaToRemove->built = false;
         inMemoryReplicas[oldestReplicaIdx] = nextReplica;
         RAMCLOUD_LOG(DEBUG, "Evicted replica <%s,%lu> from the recovery buffer",
@@ -504,7 +481,7 @@ bool BackupMasterMigration::CyclicReplicaBuffer::buildNext()
     }
 
     replicaToBuild->recoveryException.reset();
-    replicaToBuild->recoverySegments.reset();
+    replicaToBuild->migrationSegment.reset();
 
     void *replicaData = replicaToBuild->frame->load();
     CycleCounter<RawMetric> _(&metrics->backup.filterTicks);
@@ -512,17 +489,16 @@ bool BackupMasterMigration::CyclicReplicaBuffer::buildNext()
     // Recovery segments for this replica data are constructed by splitting data
     // among them according to #partitions. If we move to multiple worker
     // threads then replicas will need to be locked for this filtering.
-    std::unique_ptr<Segment[]> recoverySegments(
-        new Segment[migration->numPartitions]);
+    std::unique_ptr<Segment> migrationSegment(new Segment());
     uint64_t start = Cycles::rdtsc();
     try {
         if (!migration->testingSkipBuild) {
-            assert(migration->partitions);
             MigrationSegmentBuilder::build(replicaData, migration->segmentSize,
                                            replicaToBuild->metadata->certificate,
-                                           migration->numPartitions,
-                                           *(migration->partitions),
-                                           recoverySegments.get());
+                                           migrationSegment.get(),
+                                           migration->tableId,
+                                           migration->firstKeyHash,
+                                           migration->lastKeyHash);
         }
     } catch (const Exception &e) {
         // Can throw SegmentIteratorException or SegmentRecoveryFailedException.
@@ -544,7 +520,7 @@ bool BackupMasterMigration::CyclicReplicaBuffer::buildNext()
                  migration->sourceServerId.toString().c_str(),
                  replicaToBuild->metadata->segmentId,
                  Cycles::toNanoseconds(Cycles::rdtsc() - start) / 1000 / 1000);
-    replicaToBuild->recoverySegments = std::move(recoverySegments);
+    replicaToBuild->migrationSegment = std::move(migrationSegment);
     Fence::sfence();
     replicaToBuild->built = true;
     replicaToBuild->lastAccessTime = Cycles::rdtsc();

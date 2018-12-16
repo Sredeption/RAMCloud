@@ -611,6 +611,9 @@ void BackupService::migrationStartReading(
                                              reqHdr->migrationId,
                                              sourceServerId,
                                              targetServerId,
+                                             reqHdr->tableId,
+                                             reqHdr->firstKeyHash,
+                                             reqHdr->lastKeyHash,
                                              segmentSize,
                                              readSpeed,
                                              config->backup.maxRecoveryReplicas);
@@ -649,7 +652,7 @@ void BackupService::migrationStartPartitioning(
     ProtoBuf::MigrationPartition partitions;
     ProtoBuf::parseFromResponse(rpc->requestPayload, sizeof(*reqHdr),
                                 reqHdr->partitionsLength, &partitions);
-    migration->setPartitionsAndSchedule(partitions);
+    migration->setPartitionsAndSchedule();
 }
 
 /**

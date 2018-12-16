@@ -14,9 +14,8 @@ class MigrationSegmentBuilder {
 
     static void build(const void *buffer, uint32_t length,
                       const SegmentCertificate &certificate,
-                      int numPartitions,
-                      const ProtoBuf::MigrationPartition &partitions,
-                      Segment *recoverySegments);
+                      Segment *migrationSegment, uint64_t migrationTableId,
+                      uint64_t firstKeyHash, uint64_t lastKeyHash);
 
     static bool extractDigest(const void *buffer, uint32_t length,
                               const SegmentCertificate &certificate,
@@ -27,9 +26,6 @@ class MigrationSegmentBuilder {
     static bool isEntryAlive(const LogPosition &position,
                              const ProtoBuf::Tablets::Tablet *tablet);
 
-    static const ProtoBuf::Tablets::Tablet *
-    whichPartition(uint64_t tableId, KeyHash keyHash,
-                   const ProtoBuf::MigrationPartition &partitions);
 
     // Disallow construction.
     MigrationSegmentBuilder()

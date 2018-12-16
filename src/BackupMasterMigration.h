@@ -32,6 +32,9 @@ class BackupMasterMigration : public Task {
                           uint64_t migrationId,
                           ServerId sourceServerId,
                           ServerId targetServerId,
+                          uint64_t tableId,
+                          uint64_t firstKeyHash,
+                          uint64_t lastKeyHash,
                           uint32_t segmentSize,
                           uint32_t readSpeed,
                           uint32_t maxReplicasInMemory);
@@ -42,7 +45,7 @@ class BackupMasterMigration : public Task {
                Buffer *buffer,
                StartResponse *response);
 
-    void setPartitionsAndSchedule(ProtoBuf::MigrationPartition partitions);
+    void setPartitionsAndSchedule();
 
     Status getRecoverySegment(uint64_t migrationId,
                               uint64_t segmentId,
@@ -67,14 +70,12 @@ class BackupMasterMigration : public Task {
     uint64_t migrationId;
 
     ServerId sourceServerId;
-
     ServerId targetServerId;
-
-    Tub<ProtoBuf::MigrationPartition> partitions;
+    uint64_t tableId;
+    uint64_t firstKeyHash;
+    uint64_t lastKeyHash;
 
     uint32_t segmentSize;
-
-    int numPartitions;
 
     struct Replica {
         explicit Replica(const BackupStorage::FrameRef &frame);
@@ -83,7 +84,7 @@ class BackupMasterMigration : public Task {
 
         const BackupReplicaMetadata *metadata;
 
-        std::unique_ptr<Segment[]> recoverySegments;
+        std::unique_ptr<Segment> migrationSegment;
 
         std::unique_ptr<SegmentRecoveryFailedException> recoveryException;
 
