@@ -29,6 +29,8 @@
 
 namespace RAMCloud {
 
+class Tablet;
+
 /**
  * This class implements RPC requests that are sent to the cluster
  * coordinator but are not implemented in the RamCloud class. The class
@@ -72,6 +74,9 @@ class CoordinatorClient {
             const ProtoBuf::MasterRecoveryInfo& recoveryInfo);
     static void verifyMembership(Context* context, ServerId serverId,
             bool suicideOnFailure = true);
+    static void migrationInit(Context *context, ServerId sourceId,
+                              ServerId targetId, uint64_t tableId,
+                              uint64_t firstKeyHash, uint64_t lastKeyHash);
 
   private:
     CoordinatorClient();
@@ -176,6 +181,22 @@ class HintServerCrashedRpc : public CoordinatorRpcWrapper {
 
     PRIVATE:
     DISALLOW_COPY_AND_ASSIGN(HintServerCrashedRpc);
+};
+
+class MigrationInitRpc : public CoordinatorRpcWrapper {
+  public:
+    MigrationInitRpc(Context *context, ServerId sourceId, ServerId targetId,
+                     uint64_t tableId, uint64_t firstKeyHash,
+                     uint64_t lastKeyHash);
+
+    ~ MigrationInitRpc()
+    {}
+
+    void wait()
+    { simpleWait(context); }
+
+  PRIVATE:
+    DISALLOW_COPY_AND_ASSIGN(MigrationInitRpc);
 };
 
 /**

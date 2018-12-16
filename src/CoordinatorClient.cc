@@ -17,6 +17,8 @@
 #include "CoordinatorSession.h"
 #include "ShortMacros.h"
 #include "ProtoBuf.h"
+#include "MigrationPartition.pb.h"
+#include "Tablet.h"
 
 namespace RAMCloud {
 
@@ -847,6 +849,16 @@ CoordinatorClient::verifyMembership(
     rpc.wait(suicideOnFailure);
 }
 
+void CoordinatorClient::migrationInit(Context *context, ServerId sourceId,
+                                      ServerId targetId, uint64_t tableId,
+                                      uint64_t firstKeyHash,
+                                      uint64_t lastKeyHash)
+{
+    MigrationInitRpc rpc(context, sourceId, targetId, tableId, firstKeyHash,
+                         lastKeyHash);
+    rpc.wait();
+}
+
 /**
  * Constructor for VerifyMembershipRpc: initiates an RPC in the same way as
  * #CoordinatorClient::verifyMembership, but returns once the RPC has been
@@ -897,6 +909,25 @@ VerifyMembershipRpc::wait(bool suicideOnFailure)
         }
         ClientException::throwException(HERE, respHdr->common.status);
     }
+}
+
+MigrationInitRpc::MigrationInitRpc(Context *context, ServerId sourceId,
+                                   ServerId targetId, uint64_t tableId,
+                                   uint64_t firstKeyHash, uint64_t lastKeyHash)
+    : CoordinatorRpcWrapper(context,
+                            sizeof(WireFormat::MigrationInit::Response))
+{
+    ProtoBuf::MigrationPartition migrationPartition;
+    WireFormat::MigrationInit::Request *reqHdr(
+        allocHeader<WireFormat::MigrationInit>());
+
+    reqHdr->sourceId = sourceId.getId();
+    reqHdr->targetId = targetId.getId();
+    reqHdr->tableId = tableId;
+    reqHdr->firstKeyHash = firstKeyHash;
+    reqHdr->lastKeyHash = lastKeyHash;
+
+    send();
 }
 
 } // namespace RAMCloud

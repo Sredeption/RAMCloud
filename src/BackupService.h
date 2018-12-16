@@ -28,6 +28,7 @@
 #include "Service.h"
 #include "ServerConfig.h"
 #include "TaskQueue.h"
+#include "BackupMasterMigration.h"
 
 namespace RAMCloud {
 
@@ -69,6 +70,18 @@ class BackupService : public Service
         const WireFormat::BackupStartPartitioningReplicas::Request* reqHdr,
         WireFormat::BackupStartPartitioningReplicas::Response* respHdr,
         Rpc* rpc);
+    void migrationGetData(
+        const WireFormat::MigrationGetData::Request *reqHdr,
+        WireFormat::MigrationGetData::Response *respHdr,
+        Rpc *rpc);
+    void migrationStartReading(
+        const WireFormat::MigrationStartReading::Request *reqHdr,
+        WireFormat::MigrationStartReading::Response *respHdr,
+        Rpc *rpc);
+    void migrationStartPartitioning(
+        const WireFormat::MigrationStartPartitioning::Request *reqHdr,
+        WireFormat::MigrationStartPartitioning::Response *respHdr,
+        Rpc *rpc);
     void writeSegment(const WireFormat::BackupWrite::Request* req,
                       WireFormat::BackupWrite::Response* resp,
                       Rpc* rpc);
@@ -148,6 +161,8 @@ class BackupService : public Service
      * the crashed master is marked as down in the server list.
      */
     std::map<ServerId, BackupMasterRecovery*> recoveries;
+
+    std::map<uint64_t , BackupMasterMigration*> migrations;
 
     /// The uniform size of each segment this backup deals with.
     const uint32_t segmentSize;

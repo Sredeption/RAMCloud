@@ -608,6 +608,28 @@ TableManager::markAllTabletsRecovering(ServerId serverId)
     return results;
 }
 
+vector<Tablet>
+TableManager::markTabletsMigration(ServerId sourceId, uint64_t tableId,
+                                   uint64_t firstKeyHash,
+                                   uint64_t lastKeyHash)
+{
+    Lock lock(mutex);
+    vector<Tablet> results;
+    for (Directory::iterator it = directory.begin(); it != directory.end();
+         ++it) {
+        Table *table = it->second;
+        for (Tablet *tablet: table->tablets) {
+            if (tablet->serverId == sourceId && tablet->tableId == tableId &&
+                firstKeyHash <= tablet->startKeyHash &&
+                tablet->endKeyHash <= lastKeyHash) {
+                tablet->status = Tablet::MIGRATING;
+                results.push_back(*tablet);
+            }
+        }
+    }
+    return results;
+}
+
 /**
  * Switch ownership of a tablet from one master to another and alert the new
  * master that it should begin servicing requests on that tablet. This method
@@ -947,6 +969,35 @@ TableManager::splitRecoveringTablet(uint64_t tableId, uint64_t splitKeyHash)
     // has crashed.
 }
 
+void
+TableManager::splitMigrationTablet(uint64_t tableId, uint64_t splitKeyHash)
+{
+    Lock lock(mutex);
+    IdMap::iterator it = idMap.find(tableId);
+    if (it == idMap.end())
+        throw NoSuchTable(HERE);
+    Table* table = it->second;
+    Tablet* tablet = findTablet(lock, table, splitKeyHash);
+    if (splitKeyHash == tablet->startKeyHash)
+        return;
+    assert(tablet->status == Tablet::MIGRATING);
+
+    // Perform the split on our in-memory structures.
+    table->tablets.push_back(new Tablet(tablet->tableId, splitKeyHash,
+            tablet->endKeyHash, tablet->serverId, tablet->status,
+            tablet->ctime));
+    tablet->endKeyHash = splitKeyHash - 1;
+
+    // No need to record anything in external storage right now. If
+    // recovery completes successfully, the Table info will get written
+    // to external storage then, including the split information.
+    // If the coordinator crashes before completing recovery, it
+    // can restart with the old table structure (it will probably just
+    // split the tablet again).
+    //
+    // Also, no need to notify the tablet's current master, since it
+    // has crashed.
+}
 /**
  * Invoked by MasterRecoveryManager after recovery for a tablet has
  * successfully completed to inform coordinator about the new master

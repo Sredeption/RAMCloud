@@ -245,7 +245,7 @@ if __name__ == '__main__':
             metavar='SECS',
             help="Abort if the client application doesn't finish within "
                  'SECS seconds')
-    parser.add_option('-T', '--transport', default='basic+infud',
+    parser.add_option('-T', '--transport', default='infrc',
             help='Transport to use for communication with servers')
     parser.add_option('-v', '--verbose', action='store_true', default=False,
             help='Print progress messages')

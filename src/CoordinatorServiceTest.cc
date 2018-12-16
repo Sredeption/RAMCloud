@@ -486,4 +486,15 @@ TEST_F(CoordinatorServiceTest, verifyServerFailure) {
     EXPECT_FALSE(service->verifyServerFailure(deadId));
 }
 
+TEST_F(CoordinatorServiceTest, migration)
+{
+    ServerId sourceId(12);
+    ServerId targetId(22);
+    uint64_t tableId = 12;
+    uint64_t firstKeyHash = 23;
+    uint64_t lastKeyHash = 12266;
+    CoordinatorClient::migrationInit(&context, sourceId, targetId, tableId,
+                                     firstKeyHash, lastKeyHash);
+}
+
 }  // namespace RAMCloud

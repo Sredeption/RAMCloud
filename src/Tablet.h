@@ -47,6 +47,7 @@ struct Tablet {
         NORMAL = 0 ,
         /// The tablet is being recovered, it is not available.
         RECOVERING = 1,
+        MIGRATING = 2,
     };
 
     /// The status of the tablet, see Status.

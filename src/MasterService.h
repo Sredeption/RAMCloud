@@ -50,6 +50,7 @@ namespace RAMCloud {
 // forward declaration
 namespace MasterServiceInternal {
 class RecoveryTask;
+class MigrationTask;
 }
 
 /**
@@ -490,12 +491,20 @@ class MasterService : public Service {
 ///////////////////////////////////////////////////////////////////////////////
 /////////////////////////End of Recovery related code./////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
-
+    void migrateRecover(const WireFormat::MigrationRecover::Request *reqHdr,
+                        WireFormat::MigrationRecover::Response *respHdr,
+                        Rpc *rpc);
+    void migrateRecover(uint64_t migrationId,
+                        ServerId sourceId,
+                        uint64_t partitionId,
+                        vector<Replica> &replicas,
+                        std::unordered_map<uint64_t, uint64_t> &nextNodeIdMap);
     friend void recoveryCleanup(uint64_t maybeTomb, void *cookie);
     friend void removeObjectIfFromUnknownTablet(uint64_t reference,
                 void *cookie);
     friend class RecoverSegmentBenchmark;
     friend class MasterServiceInternal::RecoveryTask;
+    friend class MasterServiceInternal::MigrationTask;
 
     DISALLOW_COPY_AND_ASSIGN(MasterService);
 };

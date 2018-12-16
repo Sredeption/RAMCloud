@@ -194,6 +194,10 @@ MasterService::dispatch(WireFormat::Opcode opcode, Rpc* rpc)
             callHandler<WireFormat::MultiOp, MasterService,
                         &MasterService::multiOp>(rpc);
             break;
+        case WireFormat::MigrationRecover::opcode:
+            callHandler<WireFormat::MigrationRecover, MasterService,
+                &MasterService::migrateRecover>(rpc);
+            break;
         case WireFormat::PrepForIndexletMigration::opcode:
             callHandler<WireFormat::PrepForIndexletMigration, MasterService,
                         &MasterService::prepForIndexletMigration>(rpc);
@@ -3999,6 +4003,387 @@ MasterService::recover(const WireFormat::Recover::Request* reqHdr,
         objectManager.removeOrphanedObjects();
         transactionManager.removeOrphanedOps();
     }
+}
+
+namespace MasterServiceInternal {
+/**
+ * Each object of this class is responsible for fetching recovery data
+ * for a single segment from a single backup.
+ */
+class MigrationTask {
+  PUBLIC:
+    MigrationTask(Context* context,
+                 uint64_t migrationId,
+                 ServerId sourceId,
+                 uint64_t partitionId,
+                 MasterService::Replica& replica)
+        : context(context)
+        , recoveryId(migrationId)
+        , masterId(sourceId)
+        , partitionId(partitionId)
+        , replica(replica)
+        , response()
+        , startTime(Cycles::rdtsc())
+        , rpc()
+    {
+        rpc.construct(context, replica.backupId, migrationId, sourceId,
+                replica.segmentId, partitionId, &response);
+    }
+    ~MigrationTask()
+    {
+        if (rpc && !rpc->isReady()) {
+            LOG(WARNING, "Task destroyed while RPC active: segment %lu, "
+                    "server %s", replica.segmentId,
+                    context->serverList->toString(replica.backupId).c_str());
+        }
+    }
+    void resend() {
+        LOG(DEBUG, "Resend %lu", replica.segmentId);
+        response.reset();
+        rpc.construct(context, replica.backupId, recoveryId, masterId,
+                replica.segmentId, partitionId, &response);
+    }
+    Context* context;
+    uint64_t recoveryId;
+    ServerId masterId;
+    uint64_t partitionId;
+    MasterService::Replica& replica;
+    Buffer response;
+    const uint64_t startTime;
+    Tub<MigrationGetDataRpc> rpc;
+    DISALLOW_COPY_AND_ASSIGN(MigrationTask);
+};
+}
+
+void MasterService::migrateRecover(
+    const WireFormat::MigrationRecover::Request *reqHdr,
+    WireFormat::MigrationRecover::Response *respHdr,
+    Service::Rpc *rpc)
+{
+    uint64_t recoveryId = reqHdr->migrationId;
+    ServerId targetServerId(reqHdr->targetServerId);
+    uint64_t partitionId = reqHdr->partitionId;
+    if (partitionId == ~0u)
+        RAMCLOUD_DIE (
+            "Recovery master %s got super secret partition id; killing self.",
+            serverId.toString().c_str());
+    ProtoBuf::MigrationPartition migrationPartition;
+    ProtoBuf::parseFromResponse(rpc->requestPayload, sizeof(*reqHdr),
+                                reqHdr->tabletsLength, &migrationPartition);
+
+    uint32_t offset = sizeof32(*reqHdr) + reqHdr->tabletsLength;
+    vector<Replica> replicas;
+    replicas.reserve(reqHdr->numReplicas);
+    for (uint32_t i = 0; i < reqHdr->numReplicas; ++i) {
+        const WireFormat
+        ::MigrationRecover::Replica *replicaLocation =
+            rpc->requestPayload->
+                getOffset<WireFormat::MigrationRecover::Replica>(offset);
+        offset += sizeof32(WireFormat::MigrationRecover::Replica);
+        Replica replica(replicaLocation->backupId, replicaLocation->segmentId);
+        replicas.push_back(replica);
+    }
+    RAMCLOUD_LOG(DEBUG, "Starting recovery %lu for crashed master %s; "
+                        "recovering partition %lu (see user_data) of the following "
+                        "partitions:\n%s",
+                 recoveryId, targetServerId.toString().c_str(), partitionId,
+                 migrationPartition.DebugString().c_str());
+    rpc->sendReply();
+
+
+    GetLeaseInfoRpc getLeaseInfoRpc(context, 0);
+
+    for (const ProtoBuf::Tablets::Tablet &newTablet:migrationPartition.tablet()) {
+        newTablet.state();
+    }
+}
+
+void MasterService::migrateRecover(uint64_t migrationId, ServerId sourceId,
+                                   uint64_t partitionId,
+                                   vector<MasterService::Replica> &replicas,
+                                   std::unordered_map<uint64_t, uint64_t> &nextNodeIdMap)
+{
+    ObjectManager::TombstoneProtector p(&objectManager);
+    uint64_t usefulTime = 0;
+    uint64_t start = Cycles::rdtsc();
+    RAMCLOUD_LOG(NOTICE,
+                 "Migrating master %s, partition %lu, %lu replicas available",
+                 sourceId.toString().c_str(), partitionId, replicas.size());
+            std::unordered_set<uint64_t> runningSet;
+    Tub<MigrationTask> tasks[4];
+    uint32_t activeRequests = 0;
+
+    auto notStarted = replicas.begin();
+    auto replicasEnd = replicas.end();
+
+    // The SideLog we'll append recovered entries to. It will be committed after
+    // replay completes on all segments, making all of the recovered data
+    // durable.
+    SideLog sideLog(objectManager.getLog());
+
+    // Start RPCs
+    auto replicaIt = notStarted;
+    for (auto &task: tasks) {
+
+        while (!task) {
+            if (replicaIt == replicasEnd)
+                goto doneStartingInitialTasks;
+            auto &replica = *replicaIt;
+            RAMCLOUD_LOG(DEBUG,
+                         "Starting getRecoveryData from %s for segment %lu "
+                         "on channel %ld (initial round of RPCs)",
+                         context->serverList->toString(
+                             replica.backupId).c_str(),
+                         replica.segmentId,
+                         &task - &tasks[0]);
+
+            task.construct(context, migrationId, sourceId, partitionId,
+                           replica);
+            replica.state = Replica::State::WAITING;
+            runningSet.insert(replica.segmentId);
+            ++metrics->master.segmentReadCount;
+            ++activeRequests;
+            ++replicaIt;
+            while (replicaIt != replicasEnd &&
+                   contains(runningSet, replicaIt->segmentId)) {
+                ++replicaIt;
+            }
+        }
+    }
+    doneStartingInitialTasks:
+
+    // As RPCs complete, process them and start more
+    Tub<CycleCounter<RawMetric>> readStallTicks;
+
+    bool gotFirstGRD = false;
+    std::unordered_multimap<uint64_t, Replica *> segmentIdToBackups;
+    for (Replica &replica: replicas) {
+        segmentIdToBackups.insert({replica.segmentId, &replica});
+    }
+
+    while (activeRequests) {
+        if (!readStallTicks)
+            readStallTicks.construct(&metrics->master.segmentReadStallTicks);
+        objectManager.getReplicaManager()->proceed();
+        for (auto &task: tasks) {
+            if (!task)
+                continue;
+            if (!task->rpc->isReady())
+                continue;
+            readStallTicks.destroy();
+            RAMCLOUD_LOG(DEBUG,
+                         "Waiting on recovery data for segment %lu from %s",
+                         task->replica.segmentId,
+                         context->serverList->toString(
+                             task->replica.backupId).c_str());
+            try {
+                SegmentCertificate certificate = task->rpc->wait();
+                task->rpc.destroy();
+                uint64_t grdTime = Cycles::rdtsc() - task->startTime;
+                metrics->master.segmentReadTicks += grdTime;
+
+                if (!gotFirstGRD) {
+                    metrics->master.replicationBytes = 0 -
+                                                       metrics->transport.transmit.byteCount;
+                    metrics->master.replicationTransmitCopyTicks = 0 -
+                                                                   metrics->transport.transmit.copyTicks;
+                    metrics->master.replicationTransmitActiveTicks = 0 -
+                                                                     metrics->transport.infiniband.transmitActiveTicks;
+                    metrics->master.replicationPostingWriteRpcTicks = 0;
+                    metrics->master.replayMemoryReadBytes = 0 - (
+                        // tx
+                        metrics->master.replicationBytes +
+                        // tx copy
+                        metrics->master.replicationBytes +
+                        // backup write copy
+                        metrics->backup.writeCopyBytes +
+                        // read from filtering objects
+                        metrics->backup.storageReadBytes +
+                        // log append copy
+                        metrics->master.liveObjectBytes);
+                    metrics->master.replayMemoryWrittenBytes = 0 - (
+                        // tx copy
+                        metrics->master.replicationBytes +
+                        // backup write copy
+                        metrics->backup.writeCopyBytes +
+                        // disk read into memory
+                        metrics->backup.storageReadBytes +
+                        // copy from filtering objects
+                        metrics->backup.storageReadBytes +
+                        // rx into memory
+                        metrics->transport.receive.byteCount +
+                        // log append copy
+                        metrics->master.liveObjectBytes);
+                    gotFirstGRD = true;
+                }
+                if (LOG_RECOVERY_REPLICATION_RPC_TIMING) {
+                    RAMCLOUD_LOG(DEBUG,
+                                 "@%7lu: Got getRecoveryData response from %s, "
+                                 "took %.1f us on channel %ld",
+                                 Cycles::toMicroseconds(Cycles::rdtsc() -
+                                                        ReplicatedSegment::recoveryStart),
+                                 context->serverList->toString(
+                                     task->replica.backupId).c_str(),
+                                 Cycles::toSeconds(grdTime) * 1e06,
+                                 &task - &tasks[0]);
+                }
+
+                uint32_t responseLen = task->response.size();
+                metrics->master.segmentReadByteCount += responseLen;
+                uint64_t startUseful = Cycles::rdtsc();
+                SegmentIterator it(task->response.getRange(0, responseLen),
+                                   responseLen, certificate);
+                it.checkMetadataIntegrity();
+                if (LOG_RECOVERY_REPLICATION_RPC_TIMING) {
+                    RAMCLOUD_LOG(DEBUG,
+                                 "@%7lu: Replaying segment %lu with length %u",
+                                 Cycles::toMicroseconds(Cycles::rdtsc() -
+                                                        ReplicatedSegment::recoveryStart),
+                                 task->replica.segmentId, responseLen);
+                }
+                objectManager.replaySegment(&sideLog, it, &nextNodeIdMap);
+                usefulTime += Cycles::rdtsc() - startUseful;
+                TEST_LOG("Segment %lu replay complete",
+                         task->replica.segmentId);
+                if (LOG_RECOVERY_REPLICATION_RPC_TIMING) {
+                    RAMCLOUD_LOG(DEBUG, "@%7lu: Replaying segment %lu done",
+                                 Cycles::toMicroseconds(Cycles::rdtsc() -
+                                                        ReplicatedSegment::recoveryStart),
+                                 task->replica.segmentId);
+                }
+
+                runningSet.erase(task->replica.segmentId);
+                // Mark this and any other entries for this segment as OK.
+                RAMCLOUD_LOG(DEBUG, "Checking %s off the list for %lu",
+                             context->serverList->toString(
+                                 task->replica.backupId).c_str(),
+                             task->replica.segmentId);
+                task->replica.state = Replica::State::OK;
+                foreach (auto it, segmentIdToBackups.equal_range(
+                    task->replica.segmentId)) {
+                    Replica &otherReplica = *it.second;
+                    RAMCLOUD_LOG(DEBUG,
+                                 "Checking %s off the list for %lu",
+                                 context->serverList->toString(
+                                     otherReplica.backupId).c_str(),
+                                 otherReplica.segmentId);
+                    otherReplica.state = Replica::State::OK;
+                }
+            } catch (const SegmentIteratorException &e) {
+                RAMCLOUD_LOG(WARNING,
+                             "Recovery segment for segment %lu corrupted; "
+                             "trying next backup: %s",
+                             task->replica.segmentId,
+                             e.what());
+                task->replica.state = Replica::State::FAILED;
+                runningSet.erase(task->replica.segmentId);
+            } catch (const ServerNotUpException &e) {
+                RAMCLOUD_LOG(WARNING,
+                             "Backup %s no longer in cluster, trying next "
+                             "backup for segment %lu",
+                             task->replica.backupId.toString().c_str(),
+                             task->replica.segmentId);
+                task->replica.state = Replica::State::FAILED;
+                runningSet.erase(task->replica.segmentId);
+            } catch (const ClientException &e) {
+                RAMCLOUD_LOG(WARNING,
+                             "getRecoveryData failed on %s for segment %lu, "
+                             "trying next backup; failure was: %s",
+                             context->serverList->toString(
+                                 task->replica.backupId).c_str(),
+                             task->replica.segmentId,
+                             e.str().c_str());
+                task->replica.state = Replica::State::FAILED;
+                runningSet.erase(task->replica.segmentId);
+            }
+
+            task.destroy();
+
+            // move notStarted up as far as possible
+            while (notStarted != replicasEnd &&
+                   notStarted->state != Replica::State::NOT_STARTED) {
+                ++notStarted;
+            }
+
+            // Find the next NOT_STARTED entry that isn't in-flight
+            // from another entry.
+            auto replicaIt = notStarted;
+            while (!task && replicaIt != replicasEnd) {
+                while (replicaIt->state != Replica::State::NOT_STARTED ||
+                       contains(runningSet, replicaIt->segmentId)) {
+                    ++replicaIt;
+                    if (replicaIt == replicasEnd)
+                        goto outOfHosts;
+                }
+                Replica &replica = *replicaIt;
+                    LOG(DEBUG,
+                        "Starting getRecoveryData from %s for segment %lu "
+                        "on channel %ld (after RPC completion)",
+                        context->serverList->toString(replica.backupId).c_str(),
+                        replica.segmentId, &task - &tasks[0]);
+                task.construct(context, migrationId, sourceId,
+                               partitionId, replica);
+                replica.state = Replica::State::WAITING;
+                runningSet.insert(replica.segmentId);
+                ++metrics->master.segmentReadCount;
+            }
+            outOfHosts:
+            if (!task)
+                --activeRequests;
+        }
+    }
+
+    readStallTicks.destroy();
+
+    detectSegmentRecoveryFailure(sourceId, partitionId, replicas);
+    {
+        CycleCounter<RawMetric> logSyncTicks(&metrics->master.logSyncTicks);
+        LOG(NOTICE, "Committing the SideLog...");
+        metrics->master.logSyncBytes =
+                0 - metrics->transport.transmit.byteCount;
+        metrics->master.logSyncTransmitCopyTicks =
+                0 - metrics->transport.transmit.copyTicks;
+        metrics->master.logSyncTransmitActiveTicks =
+                0 - metrics->transport.infiniband.transmitActiveTicks;
+        metrics->master.logSyncPostingWriteRpcTicks =
+                0 - metrics->master.replicationPostingWriteRpcTicks;
+        sideLog.commit();
+        metrics->master.logSyncBytes += metrics->transport.transmit.byteCount;
+        metrics->master.logSyncTransmitCopyTicks +=
+                metrics->transport.transmit.copyTicks;
+        metrics->master.logSyncTransmitActiveTicks +=
+                metrics->transport.infiniband.transmitActiveTicks;
+        metrics->master.logSyncPostingWriteRpcTicks +=
+                metrics->master.replicationPostingWriteRpcTicks;
+        LOG(NOTICE, "SideLog finished committing (data is durable).");
+    }
+
+    metrics->master.replicationBytes += metrics->transport.transmit.byteCount;
+    metrics->master.replicationTransmitCopyTicks +=
+            metrics->transport.transmit.copyTicks;
+    // See the lines with "0 -" above to get the purpose of each of these
+    // fields in this metric.
+    metrics->master.replayMemoryReadBytes += (
+            metrics->master.replicationBytes +
+            metrics->master.replicationBytes +
+            metrics->backup.writeCopyBytes +
+            metrics->backup.storageReadBytes +
+            metrics->master.liveObjectBytes);
+    metrics->master.replayMemoryWrittenBytes += (
+            metrics->master.replicationBytes +
+            metrics->backup.writeCopyBytes +
+            metrics->backup.storageReadBytes +
+            metrics->transport.receive.byteCount +
+            metrics->backup.storageReadBytes +
+            metrics->master.liveObjectBytes);
+    metrics->master.replicationTransmitActiveTicks +=
+            metrics->transport.infiniband.transmitActiveTicks;
+
+    double totalSecs = Cycles::toSeconds(Cycles::rdtsc() - start);
+    double usefulSecs = Cycles::toSeconds(usefulTime);
+    LOG(NOTICE, "Recovery complete, took %.1f ms, useful replaying "
+            "time %.1f ms (%.1f%% effective)",
+            totalSecs * 1e03, usefulSecs * 1e03, 100 * usefulSecs / totalSecs);
 }
 
 } // namespace RAMCloud

@@ -38,8 +38,10 @@ Tablet::serialize(ProtoBuf::Tablets::Tablet& entry) const
         entry.set_state(ProtoBuf::Tablets::Tablet::NORMAL);
     else if (status == RECOVERING)
         entry.set_state(ProtoBuf::Tablets::Tablet::RECOVERING);
+    else if (status == MIGRATING)
+        entry.set_state(ProtoBuf::Tablets::Tablet::MIGRATING);
     else
-        DIE("Unknown status stored in tablet map");
+        DIE ("Unknown status stored in tablet map");
     entry.set_ctime_log_head_id(ctime.getSegmentId());
     entry.set_ctime_log_head_offset(ctime.getSegmentOffset());
 }

@@ -36,6 +36,7 @@ class ExternalStorage;
 class Logger;
 class MasterRecoveryManager;
 class MasterService;
+class MigrationManager;
 class MockContextMember;
 class ObjectFinder;
 class PortAlarmTimer;
@@ -137,6 +138,8 @@ class Context {
     // NULL except on coordinators. Owned elsewhere;
     // not freed by this class.
     MasterRecoveryManager* recoveryManager;
+
+    MigrationManager* migrationManager;
 
     // On masters, it points to a permanently mapped region of read-only
     // memory that can be used as zero-copy source buffer for transmission;

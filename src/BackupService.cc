@@ -47,6 +47,7 @@ BackupService::BackupService(Context* context,
     , storage()
     , frames()
     , recoveries()
+    , migrations()
     , segmentSize(config->segmentSize)
     , readSpeed()
     , bytesWritten(0)
@@ -214,6 +215,18 @@ BackupService::dispatch(WireFormat::Opcode opcode, Rpc* rpc)
         case WireFormat::BackupWrite::opcode:
             callHandler<WireFormat::BackupWrite, BackupService,
                         &BackupService::writeSegment>(rpc);
+            break;
+        case WireFormat::MigrationStartReading::opcode:
+            callHandler<WireFormat::MigrationStartReading, BackupService,
+                        &BackupService::migrationStartReading>(rpc);
+            break;
+        case WireFormat::MigrationStartPartitioning::opcode:
+            callHandler<WireFormat::MigrationStartPartitioning, BackupService,
+                &BackupService::migrationStartPartitioning>(rpc);
+            break;
+        case WireFormat::MigrationGetData::opcode:
+            callHandler<WireFormat::MigrationGetData, BackupService,
+                &BackupService::migrationGetData>(rpc);
             break;
         default:
             throw UnimplementedRequestError(HERE);
@@ -528,6 +541,115 @@ BackupService::startPartitioningReplicas(
     ProtoBuf::parseFromResponse(rpc->requestPayload, sizeof(*reqHdr),
                                 reqHdr->partitionsLength, &partitions);
     recovery->setPartitionsAndSchedule(partitions);
+}
+
+void BackupService::migrationGetData(
+    const WireFormat::MigrationGetData::Request *reqHdr,
+    WireFormat::MigrationGetData::Response *respHdr, Service::Rpc *rpc)
+{
+    ServerId sourceServerId(reqHdr->sourceId);
+        LOG(DEBUG,
+            "migrationGetData sourceId %s, segmentId %lu, partitionId %lu",
+            sourceServerId.toString().c_str(),
+            reqHdr->segmentId, reqHdr->partitionId);
+
+    auto migrationIt = migrations.find(reqHdr->migrationId);
+    if (migrationIt == migrations.end()) {
+            LOG(WARNING,
+                "Asked for recovery segment for <%s,%lu> but the master "
+                "wasn't under recovery on the backup",
+                sourceServerId.toString().c_str(), reqHdr->segmentId);
+        throw BackupBadSegmentIdException(HERE);
+    }
+
+    Status status =
+        migrationIt->second->getRecoverySegment(reqHdr->migrationId,
+                                                reqHdr->segmentId,
+                                                downCast<int>(
+                                                    reqHdr->partitionId),
+                                                rpc->replyPayload,
+                                                &respHdr->certificate);
+    if (status != STATUS_OK) {
+        respHdr->common.status = status;
+        return;
+    }
+
+    ++metrics->backup.readCompletionCount;
+        LOG(DEBUG, "getRecoveryData complete");
+}
+
+void BackupService::migrationStartReading(
+    const WireFormat::MigrationStartReading::Request *reqHdr,
+    WireFormat::MigrationStartReading::Response *respHdr,
+    Rpc *rpc)
+{
+    ServerId sourceServerId(reqHdr->sourceId);
+    ServerId targetServerId(reqHdr->targetId);
+    bool mustCreateMigration = false;
+    auto migrationIt = migrations.find(reqHdr->migrationId);
+    if (migrationIt == migrations.end()) {
+        mustCreateMigration = true;
+    } else if (migrationIt->second->getMigrationId() != reqHdr->migrationId) {
+        // The old recovery may be in the middle of processing so we can just
+        // delete it outright. Let it know it should schedule itself on the task
+        // queue and should delete itself on the next iteration.
+        RAMCLOUD_LOG(NOTICE,
+                     "Got startReadingData for recovery %lu for crashed master "
+                     "%s; abandoning existing recovery %lu for that master and starting "
+                     "anew.", reqHdr->migrationId,
+                     sourceServerId.toString().c_str(),
+                     migrationIt->second->getMigrationId());
+        BackupMasterMigration *oldMigration = migrationIt->second;
+        migrations.erase(migrationIt);
+        oldMigration->free();
+        mustCreateMigration = true;
+    }
+
+    BackupMasterMigration *migration;
+    if (mustCreateMigration) {
+        migration = new BackupMasterMigration(taskQueue,
+                                             reqHdr->migrationId,
+                                             sourceServerId,
+                                             targetServerId,
+                                             segmentSize,
+                                             readSpeed,
+                                             config->backup.maxRecoveryReplicas);
+        migrations[reqHdr->migrationId] = migration;
+    }
+    migration = migrations[reqHdr->migrationId];
+
+    std::vector<BackupStorage::FrameRef> framesForRecovery;
+    for (auto it = frames.lower_bound({sourceServerId, 0});
+         it != frames.end(); ++it) {
+        if (it->first.masterId != sourceServerId)
+            break;
+        framesForRecovery.emplace_back(it->second);
+    }
+    migration->start(framesForRecovery, rpc->replyPayload, respHdr);
+    metrics->backup.storageType = uint64_t(storage->storageType);
+}
+
+void BackupService::migrationStartPartitioning(
+    const WireFormat::MigrationStartPartitioning::Request *reqHdr,
+    WireFormat::MigrationStartPartitioning::Response *respHdr,
+    Service::Rpc *rpc)
+{
+    ServerId crashedMasterId(reqHdr->masterId);
+    BackupMasterMigration *migration = migrations[reqHdr->migrationId];
+
+    if (migration == NULL || migration->getMigrationId() != reqHdr->migrationId) {
+        RAMCLOUD_LOG(ERROR,
+                     "Cannot partition segments from master %s since they have "
+                     "not been read yet (no preceeding startReadingDataRpc call)",
+                     crashedMasterId.toString().c_str());
+
+        throw PartitionBeforeReadException(HERE);
+    }
+
+    ProtoBuf::MigrationPartition partitions;
+    ProtoBuf::parseFromResponse(rpc->requestPayload, sizeof(*reqHdr),
+                                reqHdr->partitionsLength, &partitions);
+    migration->setPartitionsAndSchedule(partitions);
 }
 
 /**

@@ -838,4 +838,97 @@ TEST_F(BackupServiceTest, trackerChangesEnqueued) {
     EXPECT_EQ(0lu, backup->taskQueue.outstandingTasks());
 }
 
+TEST_F(BackupServiceTest, migrationStartReading){
+    openSegment({99, 0}, 88);
+    closeSegment({99, 0}, 88);
+    openSegment({99, 0}, 89);
+    closeSegment({99, 0}, 89);
+
+    ServerId sourceId(99, 0);
+    ServerId targetId(100, 0);
+    uint64_t tableId = 12;
+    uint64_t firstKeyHash = 0;
+    uint64_t lastKeyHash = 100;
+
+    TestLog::Enable _;
+    ProtoBuf::MigrationPartition migrationPartition;
+    auto results = BackupClient::migrationStartReading(
+        &context, backupId, 456lu, sourceId, targetId, tableId, firstKeyHash,
+        lastKeyHash);
+    EXPECT_EQ(2lu, results.replicas.size());
+    EXPECT_EQ(1lu, backup->migrations.size());
+
+    results = BackupClient::migrationStartReading(
+        &context, backupId, 456lu, sourceId, targetId, tableId, firstKeyHash,
+        lastKeyHash);
+    BackupClient::migrationStartPartitioning(&context, backupId,
+                                             456lu, sourceId,
+                                             &migrationPartition);
+    EXPECT_EQ(2lu, results.replicas.size());
+    EXPECT_EQ(1lu, backup->migrations.size());
+    EXPECT_TRUE(TestUtil::matchesPosixRegex(
+        "CyclicReplicaBuffer: .* | "
+        "start: Backup preparing for recovery 456 of source server 99.0; "
+            "loading 0 primary replicas | "
+        "populateStartResponse: Crashed master 99.0 had closed secondary "
+            "replica for segment 88 | "
+        "populateStartResponse: Crashed master 99.0 had closed secondary "
+            "replica for segment 89 | "
+        "populateStartResponse: Sending 2 segment ids for this master "
+            "(0 primary) | "
+        "populateStartResponse: Crashed master 99.0 had closed secondary "
+            "replica for segment 88 | "
+        "populateStartResponse: Crashed master 99.0 had closed secondary "
+            "replica for segment 89 | "
+        "populateStartResponse: Sending 2 segment ids for this master "
+            "(0 primary) | "
+        "setPartitionsAndSchedule: Recovery 456 building 0 recovery segments "
+            "for each replica for crashed master 99.0 and filtering them "
+            "according to the following partitions:\n | "
+        "setPartitionsAndSchedule: Kicked off building recovery segments | "
+        "schedule: scheduled"
+            , TestLog::get()));
+}
+
+TEST_F(BackupServiceTest, migrationGetRecoveryData) {
+    openSegment({99, 0}, 88);
+    closeSegment({99, 0}, 88);
+
+    ServerId sourceId(99, 0);
+    ServerId targetId(100, 0);
+    uint64_t tableId = 12;
+    uint64_t firstKeyHash = 0lu;
+    uint64_t lastKeyHash = ~0lu;
+
+    ProtoBuf::Tablets tablets;
+    TabletsBuilder{tablets}
+        (1, 0, ~0lu, TabletsBuilder::NORMAL, 0);
+    auto results = BackupClient::migrationStartReading(
+        &context, backupId, 456lu, sourceId, targetId, tableId, firstKeyHash,
+        lastKeyHash);
+    ProtoBuf::MigrationPartition migrationPartition;
+    for (int i = 0; i < tablets.tablet_size(); i++) {
+        ProtoBuf::Tablets::Tablet& tablet(*migrationPartition.add_tablet());
+        tablet = tablets.tablet(i);
+    }
+    BackupClient::migrationStartPartitioning(&context, backupId,
+                                             456lu, sourceId,
+                                             &migrationPartition);
+    EXPECT_EQ(1lu, results.replicas.size());
+    EXPECT_EQ(1lu, backup->migrations.size());
+
+    std::thread taskQueueThread(&BackupService::gcMain, backup);
+
+    Buffer recoverySegment;
+    BackupClient::migrationGetData(&context, backupId,
+                                   456lu, {99, 0}, 88, 0,
+                                   &recoverySegment);
+    EXPECT_THROW(BackupClient::migrationGetData(&context, backupId,
+                                                457lu, {99, 0}, 88, 0,
+                                                &recoverySegment),
+                 BackupBadSegmentIdException);
+
+    backup->taskQueue.halt();
+    taskQueueThread.join();
+}
 } // namespace RAMCloud

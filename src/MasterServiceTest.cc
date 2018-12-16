@@ -4800,4 +4800,169 @@ TEST_F(MasterRecoverTest, failedToRecoverAll) {
             log.substr(0, log.find(" thrown at"))));
 }
 
+class MasterMigrationTest : public ::testing::Test {
+  public:
+    TestLog::Enable logEnabler;
+    Context context;
+    MockCluster cluster;
+    const uint32_t segmentSize;
+    const uint32_t segmentFrames;
+    ServerId backup1Id;
+    ServerId backup2Id;
+  public:
+    MasterMigrationTest()
+        : logEnabler(), context(), cluster(&context),
+          segmentSize(1 << 16)  // Smaller than usual to make tests faster.
+        , segmentFrames(30)     // Master's log uses one when constructed.
+        , backup1Id(), backup2Id()
+    {
+        Logger::get().setLogLevels(RAMCloud::SILENT_LOG_LEVEL);
+
+        ServerConfig config = ServerConfig::forTesting();
+        config.localLocator = "mock:host=backup1";
+        config.services = {WireFormat::BACKUP_SERVICE,
+                           WireFormat::ADMIN_SERVICE};
+        config.segmentSize = segmentSize;
+        config.backup.numSegmentFrames = segmentFrames;
+        Server *server = cluster.addServer(config);
+        server->backup->testingSkipCallerIdCheck = true;
+        backup1Id = server->serverId;
+
+        config.localLocator = "mock:host=backup2";
+        backup2Id = cluster.addServer(config)->serverId;
+        cluster.coordinatorContext.coordinatorServerList->sync();
+    }
+
+    ~MasterMigrationTest()
+    {}
+
+    MasterService *
+    createMasterService()
+    {
+        ServerConfig config = ServerConfig::forTesting();
+        config.localLocator = "mock:host=master";
+        config.services = {WireFormat::MASTER_SERVICE,
+                           WireFormat::ADMIN_SERVICE};
+        config.master.numReplicas = 2;
+        return cluster.addServer(config)->master.get();
+    }
+
+    void
+    appendRecoveryPartition(ProtoBuf::RecoveryPartition &recoveryPartition,
+                            uint64_t partitionId, uint64_t tableId,
+                            uint64_t start, uint64_t end,
+                            uint64_t ctimeHeadSegmentId,
+                            uint32_t ctimeHeadSegmentOffset)
+    {
+        ProtoBuf::Tablets::Tablet &tablet(*recoveryPartition.add_tablet());
+        tablet.set_table_id(tableId);
+        tablet.set_start_key_hash(start);
+        tablet.set_end_key_hash(end);
+        tablet.set_state(ProtoBuf::Tablets::Tablet::RECOVERING);
+        tablet.set_user_data(partitionId);
+        tablet.set_ctime_log_head_id(ctimeHeadSegmentId);
+        tablet.set_ctime_log_head_offset(ctimeHeadSegmentOffset);
+    }
+
+    void
+    createRecoveryPartition(ProtoBuf::RecoveryPartition &recoveryPartition)
+    {
+        appendRecoveryPartition(recoveryPartition, 0, 123, 0, 9, 0, 0);
+        appendRecoveryPartition(recoveryPartition, 0, 123, 10, 19, 0, 0);
+        appendRecoveryPartition(recoveryPartition, 0, 123, 20, 29, 0, 0);
+        appendRecoveryPartition(recoveryPartition, 0, 124, 20, 100, 0, 0);
+    }
+    DISALLOW_COPY_AND_ASSIGN(MasterMigrationTest);
+};
+
+TEST_F(MasterMigrationTest, recover)
+{
+    MasterService *master = createMasterService();
+
+    // Create a separate fake "server" (private context and serverList) and
+    // use it to replicate 2 segments worth of data on a single backup.
+    Context context2;
+    ServerList serverList2(&context2);
+    context2.transportManager->registerMock(&cluster.transport);
+    serverList2.testingAdd({backup1Id, "mock:host=backup1",
+                            {WireFormat::BACKUP_SERVICE,
+                             WireFormat::ADMIN_SERVICE},
+                            100, ServerStatus::UP});
+    ServerId serverId(99, 0);
+    ReplicaManager mgr(&context2, &serverId, 1, false, false);
+    MasterServiceTest::writeRecoverableSegment(&context, mgr, serverId, 99, 87);
+    MasterServiceTest::writeRecoverableSegment(&context, mgr, serverId, 99, 88);
+
+    // Now run recovery, as if the fake server failed.
+    ProtoBuf::RecoveryPartition recoveryPartition;
+    createRecoveryPartition(recoveryPartition);
+    {
+        BackupClient::startReadingData(&context, backup1Id, 456lu,
+                                       ServerId(99));
+        BackupClient::StartPartitioningReplicas(&context, backup1Id, 456lu,
+                                                ServerId(99),
+                                                &recoveryPartition);
+    }
+    {
+        BackupClient::startReadingData(&context, backup2Id, 456lu,
+                                       ServerId(99));
+        BackupClient::StartPartitioningReplicas(&context, backup2Id, 456lu,
+                                                ServerId(99),
+                                                &recoveryPartition);
+    }
+
+    vector<MasterService::Replica> replicas{
+        {backup1Id.getId(), 87},
+        {backup1Id.getId(), 88},
+        {backup1Id.getId(), 88},
+    };
+
+    MockRandom __(1); // triggers deterministic rand().
+    TestLog::Enable _("replaySegment", "recover", NULL);
+    std::unordered_map<uint64_t, uint64_t> nextNodeIdMap;
+    master->recover(456lu, ServerId(99, 0), 0, replicas, nextNodeIdMap);
+    EXPECT_EQ(0U, TestLog::get().find(
+        "recover: Recovering master 99.0, partition 0, 3 replicas "
+        "available"));
+    EXPECT_NE(string::npos, TestLog::get().find(
+        "recover: Segment 88 replay complete"));
+    EXPECT_NE(string::npos, TestLog::get().find(
+        "recover: Segment 87 replay complete"));
+}
+
+TEST_F(MasterMigrationTest, failedToRecoverAll)
+{
+    MasterService *master = createMasterService();
+
+    ProtoBuf::RecoveryPartition recoveryPartition;
+    ProtoBuf::ServerList backups;
+    vector<MasterService::Replica> replicas{
+        {backup1Id.getId(), 87},
+        {backup1Id.getId(), 88},
+    };
+
+    MockRandom __(1); // triggers deterministic rand().
+    TestLog::Enable _("replaySegment", "recover", NULL);
+    std::unordered_map<uint64_t, uint64_t> nextNodeIdMap;
+    EXPECT_THROW(master->recover(456lu, ServerId(99, 0), 0, replicas,
+                                 nextNodeIdMap),
+                 SegmentRecoveryFailedException);
+    string log = TestLog::get();
+    EXPECT_TRUE(TestUtil::matchesPosixRegex(
+        "recover: Recovering master 99.0, partition 0, "
+        "2 replicas available | "
+        "recover: Starting getRecoveryData from server .\\.0 at "
+        "mock:host=backup1 for segment 87 on channel 0 "
+        "(initial round of RPCs) | "
+        "recover: Starting getRecoveryData from server .\\.0 at "
+        "mock:host=backup1 for segment 88 on channel 1 "
+        "(initial round of RPCs) | "
+        "recover: Waiting on recovery data for segment 87 from "
+        "server .\\.0 at mock:host=backup1 | "
+        "recover: getRecoveryData failed on server .\\.0 at "
+        "mock:host=backup1 for segment 87, trying next backup; "
+        "failure was: bad segment id",
+        log.substr(0, log.find(" thrown at"))));
+}
+
 }  // namespace RAMCloud

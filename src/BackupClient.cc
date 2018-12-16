@@ -423,6 +423,190 @@ StartPartitioningRpc::StartPartitioningRpc(
     send();
 }
 
+MigrationStartReadingRpc::Result
+BackupClient::migrationStartReading(
+    Context *context, ServerId backupId, uint64_t migrationId,
+    ServerId sourceId, ServerId targetId, uint64_t tableId,
+    uint64_t firstKeyHash, uint64_t lastKeyHash)
+{
+    MigrationStartReadingRpc rpc(context, backupId, migrationId, sourceId,
+                                 targetId, tableId, firstKeyHash, lastKeyHash);
+    return rpc.wait();
+}
+
+MigrationStartReadingRpc::Result::Result()
+    : replicas(), primaryReplicaCount(0), logDigestBuffer(), tableStatsBuffer(),
+      logDigestBytes(0), logDigestSegmentId(-1), logDigestSegmentEpoch(-1),
+      tableStatsBytes(-1)
+{
+
+}
+
+MigrationStartReadingRpc::Result::Result(
+    Result &&other) : replicas(std::move(other.replicas)),
+                      primaryReplicaCount(other.primaryReplicaCount),
+                      logDigestBuffer(std::move(other.logDigestBuffer)),
+                      tableStatsBuffer(std::move(other.tableStatsBuffer)),
+                      logDigestBytes(other.logDigestBytes),
+                      logDigestSegmentId(other.logDigestSegmentId),
+                      logDigestSegmentEpoch(other.logDigestSegmentEpoch),
+                      tableStatsBytes(other.tableStatsBytes)
+{
+
+}
+
+MigrationStartReadingRpc::Result &MigrationStartReadingRpc::Result::operator=(
+    Result &&other)
+{
+    replicas = std::move(other.replicas);
+    primaryReplicaCount = other.primaryReplicaCount;
+    logDigestBuffer = std::move(other.logDigestBuffer);
+    tableStatsBuffer = std::move(other.tableStatsBuffer);
+    logDigestBytes = other.logDigestBytes;
+    logDigestSegmentId = other.logDigestSegmentId;
+    tableStatsBytes = other.tableStatsBytes;
+    logDigestSegmentEpoch = other.logDigestSegmentEpoch;
+    return *this;
+}
+
+MigrationStartReadingRpc::MigrationStartReadingRpc(
+    Context *context, ServerId backupId, uint64_t migrationId,
+    ServerId sourceId, ServerId targetId, uint64_t tabletId,
+    uint64_t firstKeyHash, uint64_t lastKeyHash)
+    : ServerIdRpcWrapper(context, backupId,
+                         sizeof(WireFormat::MigrationStartReading::Response))
+{
+    WireFormat::MigrationStartReading::Request *reqHdr(
+        allocHeader<WireFormat::MigrationStartReading>(backupId));
+    reqHdr->migrationId = migrationId;
+    reqHdr->sourceId = sourceId.getId();
+    reqHdr->targetId = targetId.getId();
+    reqHdr->tableId = tabletId;
+    reqHdr->firstKeyHash = firstKeyHash;
+    reqHdr->lastKeyHash = lastKeyHash;
+
+    send();
+}
+
+MigrationStartReadingRpc::Result MigrationStartReadingRpc::wait()
+{
+    waitAndCheckErrors();
+    Result result;
+
+    uint32_t replicaCount = 0;
+    {
+        const auto *respHdr(
+            getResponseHeader<WireFormat::BackupStartReadingData>());
+        replicaCount = respHdr->replicaCount;
+        result.primaryReplicaCount = respHdr->primaryReplicaCount;
+        result.logDigestBytes = respHdr->digestBytes;
+        result.logDigestSegmentId = respHdr->digestSegmentId;
+        result.logDigestSegmentEpoch = respHdr->digestSegmentEpoch;
+        result.tableStatsBytes = respHdr->tableStatsBytes;
+        response->truncateFront(sizeof(*respHdr));
+        // Remove header. Pointer now invalid.
+    }
+
+    // Build #replicas.
+    uint32_t offset = 0;
+    for (uint64_t i = 0; i < replicaCount; ++i) {
+        result.replicas.push_back(*(response->getOffset<Replica>(offset)));
+        offset += sizeof32(Replica);
+    }
+    response->truncateFront(offset);
+
+    // Copy out log digest.
+    if (result.logDigestBytes > 0) {
+        result.logDigestBuffer.reset(new char[result.logDigestBytes]);
+        response->copy(0, result.logDigestBytes, result.logDigestBuffer.get());
+    }
+    response->truncateFront(result.logDigestBytes);
+
+    // Copy out tabletMetrics fields
+    if (result.tableStatsBytes > 0) {
+        result.tableStatsBuffer.reset(new char[result.tableStatsBytes]);
+        response->copy(0, result.tableStatsBytes,
+                       result.tableStatsBuffer.get());
+    }
+
+    return result;
+}
+
+void BackupClient::migrationStartPartitioning(
+    Context *context,
+    ServerId backupId,
+    uint64_t recoveryId,
+    ServerId masterId,
+    const ProtoBuf::MigrationPartition *partitions)
+{
+    MigrationStartPartitioningRpc rpc(context, backupId, recoveryId,
+                                      masterId, partitions);
+    rpc.wait();
+}
+
+MigrationStartPartitioningRpc::MigrationStartPartitioningRpc(
+    Context *context,
+    ServerId backupId,
+    uint64_t migrationId,
+    ServerId masterId,
+    const ProtoBuf::MigrationPartition *partitions)
+    : ServerIdRpcWrapper(context, backupId,
+                         sizeof(WireFormat::MigrationStartPartitioning::Response))
+{
+    WireFormat::MigrationStartPartitioning::Request* reqHdr(
+            allocHeader<WireFormat::MigrationStartPartitioning>(backupId));
+    reqHdr->migrationId = migrationId;
+    reqHdr->masterId = masterId.getId();
+    reqHdr->partitionsLength = ProtoBuf::serializeToRequest(&request,
+            partitions);
+    send();
+}
+
+
+SegmentCertificate
+BackupClient::migrationGetData(Context *context, ServerId backupId,
+                               uint64_t migrationId, ServerId sourceId,
+                               uint64_t segmentId, uint64_t partitionId,
+                               Buffer *response)
+{
+    MigrationGetDataRpc rpc(context, backupId, migrationId,
+                            sourceId, segmentId,
+                            partitionId, response);
+    return rpc.wait();
+}
+
+MigrationGetDataRpc::MigrationGetDataRpc(Context *context, ServerId backupId,
+                                         uint64_t migrationId, ServerId sourceId,
+                                         uint64_t segmentId,
+                                         uint64_t partitionId,
+                                         Buffer *responseBuffer)
+    : ServerIdRpcWrapper(context, backupId,
+                         sizeof(WireFormat::MigrationGetData::Response),
+                         responseBuffer)
+{
+    WireFormat::MigrationGetData::Request* reqHdr(
+            allocHeader<WireFormat::MigrationGetData>(backupId));
+    reqHdr->migrationId = migrationId;
+    reqHdr->sourceId = sourceId.getId();
+    reqHdr->segmentId = segmentId;
+    reqHdr->partitionId = partitionId;
+    send();
+}
+
+SegmentCertificate MigrationGetDataRpc::wait()
+{
+    waitAndCheckErrors();
+    const WireFormat::MigrationGetData::Response *respHdr(
+        getResponseHeader<WireFormat::MigrationGetData>());
+    SegmentCertificate certificate = respHdr->certificate;
+
+    // respHdr off limits.
+    response->truncateFront(sizeof(
+                                WireFormat::MigrationGetData::Response));
+
+    return certificate;
+}
+
 StartReadingDataRpc::Result::Result()
     : replicas()
     , primaryReplicaCount(0)

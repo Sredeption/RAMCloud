@@ -16,6 +16,7 @@
 #include <memory>
 #include <string>
 #include <list>
+#include <MigrationPartition.pb.h>
 
 #include "BackupClient.h"
 #include "CoordinatorService.h"
@@ -54,6 +55,7 @@ CoordinatorService::CoordinatorService(Context* context,
     , leaseAuthority(context)
     , runtimeOptions()
     , recoveryManager(context, tableManager, &runtimeOptions)
+    , migrationManager(context, tableManager, &runtimeOptions)
     , activeVerifications()
     , mutex("CoordinatorService::mutex")
     , forceServerDownForTesting(false)
@@ -64,6 +66,7 @@ CoordinatorService::CoordinatorService(Context* context,
 {
     context->services[WireFormat::COORDINATOR_SERVICE] = this;
     context->recoveryManager = &recoveryManager;
+    context->migrationManager= &migrationManager;
 
     // Invoke the rest of initialization in a separate thread (except during
     // unit tests). This is needed because some of the recovery operations
@@ -83,6 +86,7 @@ CoordinatorService::~CoordinatorService()
 {
     context->services[WireFormat::COORDINATOR_SERVICE] = NULL;
     recoveryManager.halt();
+    migrationManager.halt();
 }
 
 /**
@@ -124,6 +128,7 @@ CoordinatorService::init(CoordinatorService* service,
             // it will need accurate information about which tables are stored
             // on a crashed server).
             service->recoveryManager.start();
+            service->migrationManager.start();
         }
 
 
@@ -203,6 +208,10 @@ CoordinatorService::dispatch(WireFormat::Opcode opcode,
         case WireFormat::HintServerCrashed::opcode:
             callHandler<WireFormat::HintServerCrashed, CoordinatorService,
                         &CoordinatorService::hintServerCrashed>(rpc);
+            break;
+        case WireFormat::MigrationInit::opcode:
+            callHandler<WireFormat::MigrationInit, CoordinatorService,
+                &CoordinatorService::migrationInit>(rpc);
             break;
         case WireFormat::ReassignTabletOwnership::opcode:
             callHandler<WireFormat::ReassignTabletOwnership, CoordinatorService,
@@ -536,6 +545,17 @@ CoordinatorService::hintServerCrashed(
      serverList.serverCrashed(serverId);
 }
 
+void CoordinatorService::migrationInit(
+    const WireFormat::MigrationInit::Request *reqHdr,
+    WireFormat::MigrationInit::Response *respHdr,
+    Rpc *rpc)
+{
+    migrationManager.startMigration(ServerId(reqHdr->sourceId),
+                                    ServerId(reqHdr->targetId),
+                                    reqHdr->tableId, reqHdr->firstKeyHash,
+                                    reqHdr->lastKeyHash);
+}
+
 /**
  * Handle the REASSIGN_TABLET_OWNER RPC.
  *
@@ -863,5 +883,6 @@ CoordinatorService::verifyServerFailure(ServerId serverId)
     }
     return result;
 }
+
 
 } // namespace RAMCloud

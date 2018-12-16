@@ -35,6 +35,7 @@ TESTS_SRCFILES := \
 		  src/ArpCacheTest.cc \
 		  src/BackupFailureMonitorTest.cc \
 		  src/BackupMasterRecoveryTest.cc \
+		  src/BackupMasterMigrationTest.cc \
 		  src/BackupSelectorTest.cc \
 		  src/BackupServiceTest.cc \
 		  src/BackupStorageTest.cc \
@@ -99,6 +100,9 @@ TESTS_SRCFILES := \
 		  src/MasterTableMetadataTest.cc \
 		  src/MemoryMonitorTest.cc \
 		  src/MinCopysetsBackupSelectorTest.cc \
+		  src/MigrationTest.cc \
+		  src/MigrationManagerTest.cc \
+		  src/MigrationSegmentBuilderTest.cc \
 		  src/MockCluster.cc \
 		  src/MockClusterTest.cc \
 		  src/MockDriver.cc \
@@ -170,7 +174,6 @@ TESTS_SRCFILES := \
 		  src/TestRunner.cc \
 		  src/TestUtil.cc \
 		  src/TestUtilTest.cc \
-		  src/TpcCTest.cc \
 		  src/ThreadIdTest.cc \
 		  src/TimeTraceTest.cc \
 		  src/TimeTraceUtilTest.cc \
@@ -280,7 +283,7 @@ endif
 # does *not* use the normal compilation flags, since we only want installed
 # info to be available.
 testInstall: install
-	$(CXX) --std=$(CXX_STANDARD) $(GLIBCXX_ABI) -g -DNDEBUG -Iinstall/include -I. \
+	$(CXX) --std=$(CXX_STANDARD) -g -DNDEBUG -Iinstall/include -I. \
 	        src/TestClient.cc -o $(OBJDIR)/TestClient -Linstall/lib/ramcloud/ \
 	        -lramcloud -Wl,-rpath=install/bin $(TEST_INSTALL_FLAGS)
 

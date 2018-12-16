@@ -699,6 +699,28 @@ RecoverRpc::RecoverRpc(Context* context, ServerId serverId,
     send();
 }
 
+MigrationRecoverRpc::MigrationRecoverRpc(Context *context, ServerId serverId,
+                                         uint64_t recoveryId,
+                                         ServerId targetServerId,
+                                         uint64_t partitionId,
+                                         const ProtoBuf::MigrationPartition *migrationPartition,
+                                         const WireFormat::MigrationRecover::Replica *replicas,
+                                         uint32_t numReplicas)
+    : ServerIdRpcWrapper(context, serverId,
+                         sizeof(WireFormat::MigrationRecover::Response))
+{
+    WireFormat::MigrationRecover::Request *reqHdr(
+        allocHeader<WireFormat::MigrationRecover>(serverId));
+    reqHdr->migrationId = recoveryId;
+    reqHdr->targetServerId = targetServerId.getId();
+    reqHdr->partitionId = partitionId;
+    reqHdr->tabletsLength = serializeToRequest(&request, migrationPartition);
+    reqHdr->numReplicas = numReplicas;
+    request.append(replicas,
+                   downCast<uint32_t>(sizeof(replicas[0])) * numReplicas);
+    send();
+}
+
 /**
  * This RPC is sent to an index server to request that it remove an index
  * entry from an indexlet it holds.
@@ -1112,5 +1134,6 @@ TxHintFailedRpc::TxHintFailedRpc(
                                  * participantCount);
     send();
 }
+
 
 }  // namespace RAMCloud

@@ -1,4 +1,5 @@
 SERVER_SRCFILES := \
+		   src/BackupMasterMigration.cc \
 		   src/BackupMasterRecovery.cc \
 		   src/BackupService.cc \
 		   src/BackupStorage.cc \
@@ -7,6 +8,7 @@ SERVER_SRCFILES := \
 		   src/MultiFileStorage.cc \
 		   src/PriorityTaskQueue.cc \
 		   src/RecoverySegmentBuilder.cc \
+		   src/MigrationSegmentBuilder.cc \
 		   src/Server.cc \
 		   $(NULL)
 

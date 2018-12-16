@@ -17,6 +17,7 @@
 #define RAMCLOUD_BACKUPCLIENT_H
 
 #include <list>
+#include <MigrationPartition.pb.h>
 
 #include "Common.h"
 #include "ProtoBuf.h"
@@ -180,6 +181,128 @@ class StartPartitioningRpc : public ServerIdRpcWrapper {
     DISALLOW_COPY_AND_ASSIGN(StartPartitioningRpc);
 };
 
+class MigrationStartReadingRpc : public ServerIdRpcWrapper {
+  public:
+    typedef WireFormat::MigrationStartReading::Replica Replica;
+
+    /**
+    * The result of a startReadingData RPC, as returned by the backup.
+    */
+    struct Result {
+        Result();
+
+        Result(Result &&other);
+
+        Result &operator=(Result &&other);
+
+        /**
+         * Information about each of the replicas found on the backup.
+         * Includes any details needed to determine whether the replica is
+         * consistent and safe to use during recovery. See
+         * WireFormat::BackupStartReadingData::Replica for exact fields.
+         */
+        vector<Replica> replicas;
+
+        /**
+         * The number of primary replicas this backup has returned at the
+         * start of #replicaDetails.
+         */
+        uint32_t primaryReplicaCount;
+
+        /**
+         * A buffer containing the LogDigest of the newest open segment
+         * replica found on this backup from this master, if one exists.
+         */
+        std::unique_ptr<char[]> logDigestBuffer;
+
+        /**
+         * A buffer containing the table stats gathered from the
+         * newest open segment replica found on this master, if one exists.
+         * These metrics may not be completely up-to-date as the metrics
+         * are updated only when a new log head is created.
+         */
+        std::unique_ptr<char[]> tableStatsBuffer;
+
+        /**
+          * The number of bytes that make up logDigestBuffer.
+         */
+        uint32_t logDigestBytes;
+
+        /**
+         * The segment ID the log digest came from.
+         * This will be -1 if there is no log digest.
+         */
+        uint64_t logDigestSegmentId;
+
+        /**
+         * Epoch of the replica from which the log digest was taken.
+         * Used by the coordinator to detect if the replica the
+         * digest was extracted may be inconsistent. If it might be
+         * then the coordinator will discard the returned log digest.
+         * This will be -1 if there is no log digest.
+         */
+        uint64_t logDigestSegmentEpoch;
+
+        /**
+         * The number of bytes making up the TabletMetrics.
+         * This will be -1 if no metrics were found.
+         */
+        uint32_t tableStatsBytes;
+
+        DISALLOW_COPY_AND_ASSIGN(Result);
+    };
+
+    MigrationStartReadingRpc(Context *context, ServerId backupId,
+                             uint64_t migrationId,
+                             ServerId sourceId, ServerId targetId,
+                             uint64_t tabletId,
+                             uint64_t firstKeyHash,
+                             uint64_t lastKeyHash);
+
+    ~MigrationStartReadingRpc() {}
+
+    Result wait();
+
+  PRIVATE:
+    DISALLOW_COPY_AND_ASSIGN(MigrationStartReadingRpc);
+};
+
+class MigrationStartPartitioningRpc : public ServerIdRpcWrapper {
+  public:
+    MigrationStartPartitioningRpc(Context *context, ServerId backupId,
+                                  uint64_t migrationId, ServerId masterId,
+                                  const ProtoBuf::MigrationPartition *partitions);
+
+    ~MigrationStartPartitioningRpc()
+    {}
+
+    /// \copydoc ServerIdRpcWrapper::waitAndCheckErrors
+    void wait()
+    { waitAndCheckErrors(); }
+
+  PRIVATE:
+    DISALLOW_COPY_AND_ASSIGN(MigrationStartPartitioningRpc);
+};
+
+class MigrationGetDataRpc : public ServerIdRpcWrapper {
+  public:
+    MigrationGetDataRpc(Context *context,
+                        ServerId backupId,
+                        uint64_t migrationId,
+                        ServerId sourceId,
+                        uint64_t segmentId,
+                        uint64_t partitionId,
+                        Buffer *responseBuffer);
+
+    ~MigrationGetDataRpc()
+    {}
+
+    SegmentCertificate wait();
+
+  PRIVATE:
+    DISALLOW_COPY_AND_ASSIGN(MigrationGetDataRpc);
+};
+
 /**
  * Encapsulates the state of a BackupClient::writeSegment operation,
  * allowing it to execute asynchronously.
@@ -225,6 +348,27 @@ class BackupClient {
     static void StartPartitioningReplicas(Context* context, ServerId backupId,
             uint64_t recoveryId, ServerId masterId,
             const ProtoBuf::RecoveryPartition* partitions);
+
+    static SegmentCertificate migrationGetData(Context *context,
+                                               ServerId backupId,
+                                               uint64_t migrationId,
+                                               ServerId sourceId,
+                                               uint64_t segmentId,
+                                               uint64_t partitionId,
+                                               Buffer *response);
+
+    static MigrationStartReadingRpc::Result
+    migrationStartReading(
+        Context *context, ServerId backupId, uint64_t migrationId,
+        ServerId sourceId, ServerId targetId, uint64_t tableId,
+        uint64_t firstKeyHash, uint64_t lastKeyHash);
+
+    static void
+    migrationStartPartitioning(
+        Context *context, ServerId backupId,
+        uint64_t recoveryId, ServerId masterId,
+        const ProtoBuf::MigrationPartition *partitions);
+
     static void writeSegment(Context* context, ServerId backupId,
             ServerId masterId, uint64_t segmentId, uint64_t segmentEpoch,
             const Segment* segment, uint32_t offset, uint32_t length,

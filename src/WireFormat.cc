@@ -122,6 +122,8 @@ opcodeSymbol(uint32_t opcode)
         case TX_REQUEST_ABORT:             return "TX_REQUEST_ABORT";
         case TX_HINT_FAILED:               return "TX_HINT_FAILED";
         case ECHO:                         return "ECHO";
+        case MIGRATION_STARTREADING:       return "MIGRATION_STARTREADING";
+        case MIGRATION_GETDATA:            return "MIGRATION_GETDATA";
         case ILLEGAL_RPC_TYPE:             return "ILLEGAL_RPC_TYPE";
     }
 
@@ -204,5 +206,28 @@ operator<<(std::ostream& stream, const Recover::Replica& replica) {
     return stream;
 }
 
+bool
+operator==(const MigrationRecover::Replica &a,
+           const MigrationRecover::Replica &b)
+{
+    return (a.backupId == b.backupId &&
+            a.segmentId == b.segmentId);
+}
+
+bool
+operator!=(const MigrationRecover::Replica &a,
+           const MigrationRecover::Replica &b)
+{
+    return !(a == b);
+}
+
+std::ostream &
+operator<<(std::ostream &stream, const MigrationRecover::Replica &replica)
+{
+    stream << "Replica(backupId=" << replica.backupId
+           << ", segmentId=" << replica.segmentId
+           << ")";
+    return stream;
+}
 }  // namespace WireFormat
 }  // namespace RAMCloud

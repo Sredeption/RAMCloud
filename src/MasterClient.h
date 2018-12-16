@@ -16,6 +16,7 @@
 #ifndef RAMCLOUD_MASTERCLIENT_H
 #define RAMCLOUD_MASTERCLIENT_H
 
+#include <MigrationPartition.pb.h>
 #include "Buffer.h"
 #include "Context.h"
 #include "CoordinatorClient.h"
@@ -196,6 +197,26 @@ class PrepForIndexletMigrationRpc : public ServerIdRpcWrapper {
 
   PRIVATE:
     DISALLOW_COPY_AND_ASSIGN(PrepForIndexletMigrationRpc);
+};
+
+class MigrationRecoverRpc : public ServerIdRpcWrapper {
+  public:
+    MigrationRecoverRpc(Context *context, ServerId serverId,
+                        uint64_t recoveryId,
+                        ServerId targetServerId, uint64_t partitionId,
+                        const ProtoBuf::MigrationPartition *recoverPartition,
+                        const WireFormat::MigrationRecover::Replica *replicas,
+                        uint32_t numReplicas);
+
+    ~MigrationRecoverRpc()
+    {}
+
+    /// \copydoc ServerIdRpcWrapper::waitAndCheckErrors
+    void wait()
+    { waitAndCheckErrors(); }
+
+  PRIVATE:
+    DISALLOW_COPY_AND_ASSIGN(MigrationRecoverRpc);
 };
 
 /**

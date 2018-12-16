@@ -89,6 +89,7 @@ Context::Context(bool hasDedicatedDispatchThread,
     , coordinatorServerList(NULL)
     , tableManager(NULL)
     , recoveryManager(NULL)
+    , migrationManager(NULL)
 #if HOMA_BENCHMARK
     , masterZeroCopyRegion(NULL)
 #else

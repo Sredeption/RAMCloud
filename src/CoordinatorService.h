@@ -36,6 +36,7 @@
 #include "TableManager.h"
 #include "TransportManager.h"
 #include "ServerConfig.h"
+#include "MigrationManager.h"
 
 namespace RAMCloud {
 
@@ -98,6 +99,9 @@ class CoordinatorService : public Service {
     void hintServerCrashed(const WireFormat::HintServerCrashed::Request* reqHdr,
             WireFormat::HintServerCrashed::Response* respHdr,
             Rpc* rpc);
+    void migrationInit(const WireFormat::MigrationInit::Request *reqHdr,
+            WireFormat::MigrationInit::Response *respHdr,
+            Rpc *rpc);
     void reassignTabletOwnership(
             const WireFormat::ReassignTabletOwnership::Request* reqHdr,
             WireFormat::ReassignTabletOwnership::Response* respHdr,
@@ -199,6 +203,8 @@ class CoordinatorService : public Service {
      * Handles all master recovery details on behalf of the coordinator.
      */
     MasterRecoveryManager recoveryManager;
+
+    MigrationManager migrationManager;
 
     /**
      * Keeps track of the servers that we are currently checking to see if

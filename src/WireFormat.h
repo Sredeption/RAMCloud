@@ -130,7 +130,12 @@ enum Opcode {
     TX_REQUEST_ABORT            = 78,
     TX_HINT_FAILED              = 79,
     ECHO                        = 80,
-    ILLEGAL_RPC_TYPE            = 81, // 1 + the highest legitimate Opcode
+    MIGRATION_STARTREADING      = 81,
+    MIGRATION_STARTPARTITION    = 82,
+    MIGRATION_GETDATA           = 83,
+    MIGRATION_INIT              = 84,
+    MIGRATION_RECOVER           = 85,
+    ILLEGAL_RPC_TYPE            = 86, // 1 + the highest legitimate Opcode
 };
 
 /**
@@ -292,6 +297,7 @@ struct BackupRecoveryComplete {
         ResponseCommon common;
     } __attribute__((packed));
 };
+
 
 struct BackupStartReadingData {
     static const Opcode opcode = BACKUP_STARTREADINGDATA;
@@ -1024,6 +1030,147 @@ struct MigrateTablet {
     } __attribute__((packed));
     struct Response {
         ResponseCommon common;
+    } __attribute__((packed));
+};
+
+struct MigrationInit {
+    static const Opcode opcode = MIGRATION_INIT;
+    static const ServiceType service = COORDINATOR_SERVICE;
+    struct Request {
+        RequestCommon common;
+        uint64_t sourceId;
+        uint64_t targetId;
+        uint64_t tableId;           // TabletId of the tablet to migrate.
+        uint64_t firstKeyHash;      // First key of the tablet to migrate.
+        uint64_t lastKeyHash;       // Last key of the tablet to migrate.
+    } __attribute__((packed));
+    struct Response {
+        ResponseCommon common;
+    } __attribute__((packed));
+};
+
+struct MigrationRecover {
+    static const Opcode opcode = MIGRATION_RECOVER;
+    static const ServiceType service = MASTER_SERVICE;
+    struct Request {
+        RequestCommonWithId common;
+        uint64_t migrationId;
+        uint64_t targetServerId;
+        uint64_t partitionId;
+        uint32_t tabletsLength;    // Number of bytes in the tablet map.
+        // The bytes of the tablet map follow
+        // immediately after this header. See
+        // ProtoBuf::Tablets.
+        uint32_t numReplicas;      // Number of Replica entries in the replica
+        // list. The bytes of the replica list
+        // follow after the bytes for the Tablets.
+        // See Replica below.
+    } __attribute__((packed));
+    struct Response {
+        ResponseCommon common;
+    } __attribute__((packed));
+
+    /**
+     * Where to find a replica for a particular segment.
+     */
+    struct Replica {
+        /**
+         * The backup storing the replica.
+         */
+        uint64_t backupId;
+        /**
+         * The ID of the segment.
+         */
+        uint64_t segmentId;
+
+        friend bool operator==(const Replica &, const Replica &);
+
+        friend bool operator!=(const Replica &, const Replica &);
+
+        friend std::ostream &operator<<(std::ostream &stream, const Replica &);
+    } __attribute__((packed));
+};
+
+struct MigrationStartReading {
+    static const Opcode opcode = MIGRATION_STARTREADING;
+    static const ServiceType service = BACKUP_SERVICE;
+    struct Request {
+        RequestCommonWithId common;
+        uint64_t migrationId;
+        uint64_t sourceId;
+        uint64_t targetId;
+        uint64_t tableId;
+        uint64_t firstKeyHash;
+        uint64_t lastKeyHash;
+    } __attribute__((packed));
+    struct Response {
+        ResponseCommon common;
+        uint32_t replicaCount;
+        uint32_t primaryReplicaCount;
+        uint32_t digestBytes;
+        uint64_t digestSegmentId;
+        uint64_t digestSegmentEpoch;
+        uint32_t tableStatsBytes;
+    } __attribute__((packed));
+
+    struct Replica {
+        uint64_t segmentId;
+        uint64_t segmentEpoch;
+        bool closed;
+
+        Replica(uint64_t segmentId, uint64_t segmentEpoch, bool closed)
+            : segmentId(segmentId), segmentEpoch(segmentEpoch), closed(closed)
+        {}
+
+        friend bool operator==(const Replica &left, const Replica &right)
+        {
+            return left.segmentId == right.segmentId &&
+                   left.segmentEpoch == right.segmentEpoch &&
+                   left.closed == right.closed;
+        }
+    } __attribute__((packed));
+};
+
+struct MigrationStartPartitioning {
+    static const Opcode opcode = MIGRATION_STARTPARTITION;
+    static const ServiceType service = BACKUP_SERVICE;
+    struct Request {
+        RequestCommonWithId common;
+        uint64_t migrationId;
+        uint64_t masterId;
+        uint32_t partitionsLength;
+    } __attribute__((packed));
+    struct Response {
+        ResponseCommon common;
+    } __attribute__((packed));
+};
+
+struct MigrationGetData {
+    static const Opcode opcode = MIGRATION_GETDATA;
+    static const ServiceType service = BACKUP_SERVICE;
+    struct Request {
+        RequestCommonWithId common;
+        uint64_t migrationId;
+        uint64_t sourceId;
+        uint64_t segmentId;
+        uint64_t partitionId;
+    } __attribute__((packed));
+    struct Response {
+        Response()
+            : common()
+            , certificate()
+        {}
+        Response(const ResponseCommon& common,
+                 const SegmentCertificate& certificate)
+            : common(common)
+            , certificate(certificate)
+        {}
+        ResponseCommon common;
+        SegmentCertificate certificate; ///< Certificate for the segment
+                                        ///< which follows this fields in
+                                        ///< the response field. Used by
+                                        ///< master to iterate over the
+                                        ///< segment.
     } __attribute__((packed));
 };
 
