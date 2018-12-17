@@ -163,7 +163,6 @@ void BackupMasterMigration::setPartitionsAndSchedule()
 
 Status BackupMasterMigration::getRecoverySegment(uint64_t migrationId,
                                                  uint64_t segmentId,
-                                                 int partitionId,
                                                  Buffer *buffer,
                                                  SegmentCertificate *certificate)
 {
@@ -171,8 +170,7 @@ Status BackupMasterMigration::getRecoverySegment(uint64_t migrationId,
         RAMCLOUD_LOG(ERROR,
                      "Requested recovery segment from recovery %lu, but "
                      "current recovery for that master is %lu",
-                     migrationId,
-                     this->migrationId);
+                     migrationId, this->migrationId);
         throw BackupBadSegmentIdException(HERE);
     }
     auto replicaIt = segmentIdToReplica.find(segmentId);

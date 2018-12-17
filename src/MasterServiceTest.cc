@@ -4847,31 +4847,6 @@ class MasterMigrationTest : public ::testing::Test {
         return cluster.addServer(config)->master.get();
     }
 
-    void
-    appendRecoveryPartition(ProtoBuf::RecoveryPartition &recoveryPartition,
-                            uint64_t partitionId, uint64_t tableId,
-                            uint64_t start, uint64_t end,
-                            uint64_t ctimeHeadSegmentId,
-                            uint32_t ctimeHeadSegmentOffset)
-    {
-        ProtoBuf::Tablets::Tablet &tablet(*recoveryPartition.add_tablet());
-        tablet.set_table_id(tableId);
-        tablet.set_start_key_hash(start);
-        tablet.set_end_key_hash(end);
-        tablet.set_state(ProtoBuf::Tablets::Tablet::RECOVERING);
-        tablet.set_user_data(partitionId);
-        tablet.set_ctime_log_head_id(ctimeHeadSegmentId);
-        tablet.set_ctime_log_head_offset(ctimeHeadSegmentOffset);
-    }
-
-    void
-    createRecoveryPartition(ProtoBuf::RecoveryPartition &recoveryPartition)
-    {
-        appendRecoveryPartition(recoveryPartition, 0, 123, 0, 9, 0, 0);
-        appendRecoveryPartition(recoveryPartition, 0, 123, 10, 19, 0, 0);
-        appendRecoveryPartition(recoveryPartition, 0, 123, 20, 29, 0, 0);
-        appendRecoveryPartition(recoveryPartition, 0, 124, 20, 100, 0, 0);
-    }
     DISALLOW_COPY_AND_ASSIGN(MasterMigrationTest);
 };
 
@@ -4921,16 +4896,16 @@ TEST_F(MasterMigrationTest, recover)
     };
 
     MockRandom __(1); // triggers deterministic rand().
-    TestLog::Enable _("replaySegment", "recover", NULL);
+    TestLog::Enable _("replaySegment", "migrateRecover", NULL);
     std::unordered_map<uint64_t, uint64_t> nextNodeIdMap;
-    master->recover(456lu, ServerId(99, 0), 0, replicas, nextNodeIdMap);
+    master->migrateRecover(456lu, sourceId, replicas, nextNodeIdMap);
     EXPECT_EQ(0U, TestLog::get().find(
-        "recover: Recovering master 99.0, partition 0, 3 replicas "
+        "migrateRecover: Migrating master 99.0, 3 replicas "
         "available"));
     EXPECT_NE(string::npos, TestLog::get().find(
-        "recover: Segment 88 replay complete"));
+        "migrateRecover: Segment 88 replay complete"));
     EXPECT_NE(string::npos, TestLog::get().find(
-        "recover: Segment 87 replay complete"));
+        "migrateRecover: Segment 87 replay complete"));
 }
 
 TEST_F(MasterMigrationTest, failedToRecoverAll)

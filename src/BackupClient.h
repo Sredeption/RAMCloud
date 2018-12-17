@@ -291,7 +291,6 @@ class MigrationGetDataRpc : public ServerIdRpcWrapper {
                         uint64_t migrationId,
                         ServerId sourceId,
                         uint64_t segmentId,
-                        uint64_t partitionId,
                         Buffer *responseBuffer);
 
     ~MigrationGetDataRpc()
@@ -354,7 +353,6 @@ class BackupClient {
                                                uint64_t migrationId,
                                                ServerId sourceId,
                                                uint64_t segmentId,
-                                               uint64_t partitionId,
                                                Buffer *response);
 
     static MigrationStartReadingRpc::Result

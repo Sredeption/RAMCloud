@@ -882,9 +882,8 @@ TEST_F(BackupServiceTest, migrationStartReading){
             "replica for segment 89 | "
         "populateStartResponse: Sending 2 segment ids for this master "
             "(0 primary) | "
-        "setPartitionsAndSchedule: Recovery 456 building 0 recovery segments "
-            "for each replica for crashed master 99.0 and filtering them "
-            "according to the following partitions:\n | "
+        "setPartitionsAndSchedule: Recovery 456 building recovery segment "
+            "for each replica for crashed master 99.0. | "
         "setPartitionsAndSchedule: Kicked off building recovery segments | "
         "schedule: scheduled"
             , TestLog::get()));
@@ -921,10 +920,10 @@ TEST_F(BackupServiceTest, migrationGetRecoveryData) {
 
     Buffer recoverySegment;
     BackupClient::migrationGetData(&context, backupId,
-                                   456lu, {99, 0}, 88, 0,
+                                   456lu, {99, 0}, 88,
                                    &recoverySegment);
     EXPECT_THROW(BackupClient::migrationGetData(&context, backupId,
-                                                457lu, {99, 0}, 88, 0,
+                                                457lu, {99, 0}, 88,
                                                 &recoverySegment),
                  BackupBadSegmentIdException);
 

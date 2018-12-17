@@ -81,7 +81,7 @@ struct BackupMasterMigrationTest : public ::testing::Test {
         ASSERT_EQ(replicaBuffer->normalPriorityQueuedReplicas.size(), 1u);
 
         // Enqueue the secondary replica
-        EXPECT_THROW(migration->getRecoverySegment(456, 88, 0, NULL, NULL),
+        EXPECT_THROW(migration->getRecoverySegment(456, 88, NULL, NULL),
                      RetryException);
         ASSERT_EQ(replicaBuffer->highPriorityQueuedReplicas.size(), 1u);
 
@@ -227,13 +227,13 @@ TEST_F(BackupMasterMigrationTest, getRecoverySegment)
     migration->start(frames, NULL, NULL);
     migration->setPartitionsAndSchedule();
 
-    EXPECT_THROW(migration->getRecoverySegment(456, 89, 0, NULL, NULL),
+    EXPECT_THROW(migration->getRecoverySegment(456, 89, NULL, NULL),
                  RetryException);
-    EXPECT_THROW(migration->getRecoverySegment(456, 88, 0, NULL, NULL),
+    EXPECT_THROW(migration->getRecoverySegment(456, 88, NULL, NULL),
                  RetryException);
 
     taskQueue.performTask();
-    Status status = migration->getRecoverySegment(456, 88, 0, NULL, NULL);
+    Status status = migration->getRecoverySegment(456, 88, NULL, NULL);
     EXPECT_EQ(STATUS_OK, status);
 
     taskQueue.performTask();
@@ -244,7 +244,7 @@ TEST_F(BackupMasterMigrationTest, getRecoverySegment)
     buffer.reset();
     SegmentCertificate certificate;
     memset(&certificate, 0xff, sizeof(certificate));
-    status = migration->getRecoverySegment(456, 88, 0, &buffer, &certificate);
+    status = migration->getRecoverySegment(456, 88, &buffer, &certificate);
     EXPECT_EQ(STATUS_OK, status);
     EXPECT_EQ(12lu, certificate.segmentLength);
     EXPECT_STREQ("important",
@@ -257,7 +257,7 @@ TEST_F(BackupMasterMigrationTest, getRecoverySegment_exceptionDuringBuild)
     migration->start(frames, NULL, NULL);
     migration->setPartitionsAndSchedule();
     taskQueue.performTask();
-    EXPECT_THROW(migration->getRecoverySegment(456, 89, 0, NULL, NULL),
+    EXPECT_THROW(migration->getRecoverySegment(456, 89, NULL, NULL),
                  SegmentRecoveryFailedException);
 }
 
@@ -269,12 +269,10 @@ TEST_F(BackupMasterMigrationTest, getRecoverySegment_badArgs)
     migration->start(frames, NULL, NULL);
     migration->setPartitionsAndSchedule();
     taskQueue.performTask();
-    EXPECT_THROW(migration->getRecoverySegment(455, 88, 0, NULL, NULL),
+    EXPECT_THROW(migration->getRecoverySegment(455, 88, NULL, NULL),
                  BackupBadSegmentIdException);
-    migration->getRecoverySegment(456, 88, 0, NULL, NULL);
-    EXPECT_THROW(migration->getRecoverySegment(456, 89, 0, NULL, NULL),
-                 BackupBadSegmentIdException);
-    EXPECT_THROW(migration->getRecoverySegment(456, 88, 1000, NULL, NULL),
+    migration->getRecoverySegment(456, 88, NULL, NULL);
+    EXPECT_THROW(migration->getRecoverySegment(456, 89, NULL, NULL),
                  BackupBadSegmentIdException);
 }
 

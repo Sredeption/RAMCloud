@@ -565,8 +565,6 @@ void BackupService::migrationGetData(
     Status status =
         migrationIt->second->getRecoverySegment(reqHdr->migrationId,
                                                 reqHdr->segmentId,
-                                                downCast<int>(
-                                                    reqHdr->partitionId),
                                                 rpc->replyPayload,
                                                 &respHdr->certificate);
     if (status != STATUS_OK) {

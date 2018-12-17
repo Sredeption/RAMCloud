@@ -496,7 +496,6 @@ class MasterService : public Service {
                         Rpc *rpc);
     void migrateRecover(uint64_t migrationId,
                         ServerId sourceId,
-                        uint64_t partitionId,
                         vector<Replica> &replicas,
                         std::unordered_map<uint64_t, uint64_t> &nextNodeIdMap);
     friend void recoveryCleanup(uint64_t maybeTomb, void *cookie);

@@ -133,6 +133,7 @@ CLIENT_SRCFILES := \
 		   $(OBJDIR)/Tablets.pb.cc \
 		   $(OBJDIR)/Indexlet.pb.cc \
 		   $(OBJDIR)/RecoveryPartition.pb.cc \
+		   $(OBJDIR)/MigrationPartition.pb.cc \
 		   $(OBJDIR)/TableConfig.pb.cc \
 		   $(NULL)
 

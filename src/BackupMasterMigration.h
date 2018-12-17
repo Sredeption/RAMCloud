@@ -49,7 +49,6 @@ class BackupMasterMigration : public Task {
 
     Status getRecoverySegment(uint64_t migrationId,
                               uint64_t segmentId,
-                              int partitionId,
                               Buffer *buffer,
                               SegmentCertificate *certificate);
 

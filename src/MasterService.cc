@@ -4015,19 +4015,17 @@ class MigrationTask {
     MigrationTask(Context* context,
                  uint64_t migrationId,
                  ServerId sourceId,
-                 uint64_t partitionId,
                  MasterService::Replica& replica)
         : context(context)
-        , recoveryId(migrationId)
+        , migrationId(migrationId)
         , masterId(sourceId)
-        , partitionId(partitionId)
         , replica(replica)
         , response()
         , startTime(Cycles::rdtsc())
         , rpc()
     {
         rpc.construct(context, replica.backupId, migrationId, sourceId,
-                replica.segmentId, partitionId, &response);
+                replica.segmentId, &response);
     }
     ~MigrationTask()
     {
@@ -4040,13 +4038,12 @@ class MigrationTask {
     void resend() {
         LOG(DEBUG, "Resend %lu", replica.segmentId);
         response.reset();
-        rpc.construct(context, replica.backupId, recoveryId, masterId,
-                replica.segmentId, partitionId, &response);
+        rpc.construct(context, replica.backupId, migrationId, masterId,
+                replica.segmentId, &response);
     }
     Context* context;
-    uint64_t recoveryId;
+    uint64_t migrationId;
     ServerId masterId;
-    uint64_t partitionId;
     MasterService::Replica& replica;
     Buffer response;
     const uint64_t startTime;
@@ -4099,7 +4096,6 @@ void MasterService::migrateRecover(
 }
 
 void MasterService::migrateRecover(uint64_t migrationId, ServerId sourceId,
-                                   uint64_t partitionId,
                                    vector<MasterService::Replica> &replicas,
                                    std::unordered_map<uint64_t, uint64_t> &nextNodeIdMap)
 {
@@ -4107,8 +4103,8 @@ void MasterService::migrateRecover(uint64_t migrationId, ServerId sourceId,
     uint64_t usefulTime = 0;
     uint64_t start = Cycles::rdtsc();
     RAMCLOUD_LOG(NOTICE,
-                 "Migrating master %s, partition %lu, %lu replicas available",
-                 sourceId.toString().c_str(), partitionId, replicas.size());
+                 "Migrating master %s, %lu replicas available",
+                 sourceId.toString().c_str(), replicas.size());
             std::unordered_set<uint64_t> runningSet;
     Tub<MigrationTask> tasks[4];
     uint32_t activeRequests = 0;
@@ -4137,8 +4133,7 @@ void MasterService::migrateRecover(uint64_t migrationId, ServerId sourceId,
                          replica.segmentId,
                          &task - &tasks[0]);
 
-            task.construct(context, migrationId, sourceId, partitionId,
-                           replica);
+            task.construct(context, migrationId, sourceId, replica);
             replica.state = Replica::State::WAITING;
             runningSet.insert(replica.segmentId);
             ++metrics->master.segmentReadCount;
@@ -4321,8 +4316,7 @@ void MasterService::migrateRecover(uint64_t migrationId, ServerId sourceId,
                         "on channel %ld (after RPC completion)",
                         context->serverList->toString(replica.backupId).c_str(),
                         replica.segmentId, &task - &tasks[0]);
-                task.construct(context, migrationId, sourceId,
-                               partitionId, replica);
+                task.construct(context, migrationId, sourceId, replica);
                 replica.state = Replica::State::WAITING;
                 runningSet.insert(replica.segmentId);
                 ++metrics->master.segmentReadCount;
@@ -4335,7 +4329,7 @@ void MasterService::migrateRecover(uint64_t migrationId, ServerId sourceId,
 
     readStallTicks.destroy();
 
-    detectSegmentRecoveryFailure(sourceId, partitionId, replicas);
+    detectSegmentRecoveryFailure(sourceId, -1, replicas);
     {
         CycleCounter<RawMetric> logSyncTicks(&metrics->master.logSyncTicks);
         LOG(NOTICE, "Committing the SideLog...");

@@ -566,19 +566,16 @@ MigrationStartPartitioningRpc::MigrationStartPartitioningRpc(
 SegmentCertificate
 BackupClient::migrationGetData(Context *context, ServerId backupId,
                                uint64_t migrationId, ServerId sourceId,
-                               uint64_t segmentId, uint64_t partitionId,
-                               Buffer *response)
+                               uint64_t segmentId, Buffer *response)
 {
     MigrationGetDataRpc rpc(context, backupId, migrationId,
-                            sourceId, segmentId,
-                            partitionId, response);
+                            sourceId, segmentId, response);
     return rpc.wait();
 }
 
 MigrationGetDataRpc::MigrationGetDataRpc(Context *context, ServerId backupId,
                                          uint64_t migrationId, ServerId sourceId,
                                          uint64_t segmentId,
-                                         uint64_t partitionId,
                                          Buffer *responseBuffer)
     : ServerIdRpcWrapper(context, backupId,
                          sizeof(WireFormat::MigrationGetData::Response),
@@ -589,7 +586,6 @@ MigrationGetDataRpc::MigrationGetDataRpc(Context *context, ServerId backupId,
     reqHdr->migrationId = migrationId;
     reqHdr->sourceId = sourceId.getId();
     reqHdr->segmentId = segmentId;
-    reqHdr->partitionId = partitionId;
     send();
 }
 
