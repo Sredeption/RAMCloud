@@ -203,8 +203,7 @@ class MigrationRecoverRpc : public ServerIdRpcWrapper {
   public:
     MigrationRecoverRpc(Context *context, ServerId serverId,
                         uint64_t recoveryId,
-                        ServerId targetServerId, uint64_t partitionId,
-                        const ProtoBuf::MigrationPartition *recoverPartition,
+                        ServerId targetServerId,
                         const WireFormat::MigrationRecover::Replica *replicas,
                         uint32_t numReplicas);
 

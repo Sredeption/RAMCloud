@@ -26,7 +26,8 @@ Migration::Migration(Context *context, TaskQueue &taskQueue,
                      TableManager *tableManager, MigrationTracker *tracker,
                      Owner *owner, ServerId sourceServerId,
                      ServerId targetServerId, uint64_t tableId,
-                     uint64_t firstKeyHash, uint64_t lastKeyHash)
+                     uint64_t firstKeyHash, uint64_t lastKeyHash,
+                     const ProtoBuf::MasterRecoveryInfo masterRecoveryInfo)
     : Task(taskQueue),
       context(context),
       sourceServerId(sourceServerId),
@@ -34,25 +35,25 @@ Migration::Migration(Context *context, TaskQueue &taskQueue,
       tableId(tableId),
       firstKeyHash(firstKeyHash),
       lastKeyHash(lastKeyHash),
-      masterRecoveryInfo(),
+      masterRecoveryInfo(masterRecoveryInfo),
       dataToMigration(),
       tableManager(tableManager),
       tracker(tracker),
       owner(owner),
       migrationId(generateRandom()),
       status(START_RECOVERY_ON_BACKUPS),
+      migrateSuccessful(0),
       replicaMap(),
       numPartitions(),
       testingBackupStartTaskSendCallback(),
       testingMasterStartTaskSendCallback(),
+      testingBackupEndTaskSendCallback(),
       testingFailRecoveryMasters()
 {
 }
 
 void Migration::performTask()
 {
-    TEST_LOG("lastKeyHash:%lx", lastKeyHash);
-    return;
     if (status == DONE) {
         // We get here only if there were no tablets in the crashed master
         // when the constructor for this Recovery object was invoked.
@@ -71,7 +72,7 @@ void Migration::performTask()
             startBackups();
             break;
         case START_RECOVERY_MASTERS:
-            startMasters();
+            startMaster();
             break;
         case WAIT_FOR_RECOVERY_MASTERS:
             // Calls to recoveryMasterFinished drive
@@ -106,7 +107,16 @@ void Migration::performTask()
 
 void Migration::migrationFinished(bool successful)
 {
-
+    if (successful) {
+        migrateSuccessful = 1;
+        status = ALL_RECOVERY_MASTERS_FINISHED;
+#if BCAST_INLINE
+        broadcastMigrationComplete();
+#endif
+        schedule();
+    } else {
+        migrateSuccessful = -1;
+    }
 }
 
 bool Migration::operator==(Migration &that) const
@@ -125,7 +135,7 @@ uint64_t Migration::getMigrationId() const
 
 bool Migration::wasCompletelySuccessful() const
 {
-    return true;
+    return migrateSuccessful == 1;
 }
 
 namespace MigrationInternal {
@@ -162,7 +172,6 @@ void BackupStartTask::filterOutInvalidReplicas()
     vector<MigrationStartReadingRpc::Replica> newReplicas;
     newReplicas.reserve(result.replicas.size());
     uint32_t newPrimaryReplicaCount = 0;
-
 
     for (size_t i = 0; i < result.replicas.size(); ++i) {
         auto &replica = result.replicas[i];
@@ -330,7 +339,7 @@ findLogDigest(Tub<BackupStartTask> *tasks, size_t taskCount)
 
 /// Used in buildReplicaMap().
 struct ReplicaAndLoadTime {
-    WireFormat::Recover::Replica replica;
+    WireFormat::MigrationRecover::Replica replica;
     uint64_t expectedLoadTimeMs;
 
     bool operator<(const ReplicaAndLoadTime &r) const
@@ -339,7 +348,7 @@ struct ReplicaAndLoadTime {
     }
 };
 
-vector<WireFormat::Recover::Replica>
+vector<WireFormat::MigrationRecover::Replica>
 buildReplicaMap(Tub<BackupStartTask> *tasks, size_t taskCount,
                 MigrationTracker *tracker, uint64_t headId)
 {
@@ -389,7 +398,7 @@ buildReplicaMap(Tub<BackupStartTask> *tasks, size_t taskCount,
     }
 
     std::sort(replicasToSort.begin(), replicasToSort.end());
-    vector<WireFormat::Recover::Replica> replicaMap;
+    vector<WireFormat::MigrationRecover::Replica> replicaMap;
     for (const auto &sortedReplica: replicasToSort) {
         RAMCLOUD_LOG(DEBUG, "Load segment %lu replica from backup %s "
                             "with expected load time of %lu ms",
@@ -406,10 +415,9 @@ struct MasterStartTask {
     MasterStartTask(
         Migration &recovery,
         ServerId serverId,
-        uint32_t partitionId,
         const vector<WireFormat::MigrationRecover::Replica> &replicaMap)
-        : recovery(recovery), serverId(serverId), replicaMap(replicaMap),
-          partitionId(partitionId), dataToRecover(), rpc(), done(false),
+        : migration(recovery), serverId(serverId), replicaMap(replicaMap),
+          rpc(), done(false),
           testingCallback(recovery.testingMasterStartTaskSendCallback)
     {}
 
@@ -421,31 +429,24 @@ struct MasterStartTask {
 
     void send()
     {
-            LOG(NOTICE, "Starting migration %lu on recovery master %s, "
-                        "partition %d", recovery.migrationId,
-                serverId.toString().c_str(),
-                partitionId);
-        (*recovery.tracker)[serverId] = &recovery;
+        RAMCLOUD_LOG(NOTICE, "Starting migration %lu on recovery master %s",
+                     migration.migrationId, serverId.toString().c_str());
+        (*migration.tracker)[serverId] = &migration;
         if (!testingCallback) {
-            rpc.construct(recovery.context,
+            rpc.construct(migration.context,
                           serverId,
-                          recovery.migrationId,
-                          recovery.targetServerId,
-                          recovery.testingFailRecoveryMasters > 0
-                          ? ~0u : partitionId,
-                          &dataToRecover,
+                          migration.migrationId,
+                          migration.targetServerId,
                           replicaMap.data(),
                           downCast<uint32_t>(replicaMap.size()));
-            if (recovery.testingFailRecoveryMasters > 0) {
+            if (migration.testingFailRecoveryMasters > 0) {
                     LOG(NOTICE, "Told recovery master %s to kill itself",
                         serverId.toString().c_str());
-                --recovery.testingFailRecoveryMasters;
+                --migration.testingFailRecoveryMasters;
             }
         } else {
-            testingCallback->masterStartTaskSend(recovery.migrationId,
-                                                 recovery.targetServerId,
-                                                 partitionId,
-                                                 dataToRecover,
+            testingCallback->masterStartTaskSend(migration.migrationId,
+                                                 migration.targetServerId,
                                                  replicaMap.data(),
                                                  replicaMap.size());
         }
@@ -465,23 +466,73 @@ struct MasterStartTask {
                 LOG(WARNING, "Couldn't contact server %s to start recovery: %s",
                     serverId.toString().c_str(), e.what());
         }
-        recovery.migrationFinished(false);
+        migration.migrationFinished(false);
         done = true;
     }
 
     /// The parent recovery object.
-    Migration &recovery;
+    Migration &migration;
 
     /// Id of master server to kick off this partition's recovery on.
     ServerId serverId;
 
     const vector<WireFormat::MigrationRecover::Replica> &replicaMap;
-    const uint32_t partitionId;
-    ProtoBuf::MigrationPartition dataToRecover;
     Tub<MigrationRecoverRpc> rpc;
     bool done;
     MasterStartTaskTestingCallback *testingCallback;
     DISALLOW_COPY_AND_ASSIGN(MasterStartTask);
+};
+
+struct BackupEndTask {
+    BackupEndTask(Migration &recovery,
+                  ServerId serverId,
+                  uint64_t migrationId)
+        : recovery(recovery), serverId(serverId), migrationId(migrationId),
+          rpc(), done(false),
+          testingCallback(recovery.testingBackupEndTaskSendCallback)
+    {}
+
+    bool isReady()
+    { return rpc && rpc->isReady(); }
+
+    bool isDone()
+    { return done; }
+
+    void send()
+    {
+        if (testingCallback) {
+            testingCallback->backupEndTaskSend(serverId, migrationId);
+            done = true;
+            return;
+        }
+        rpc.construct(recovery.context, serverId, migrationId);
+    }
+
+    void wait()
+    {
+        if (!rpc)
+            return;
+        try {
+            rpc->wait();
+        } catch (const ServerNotUpException &e) {
+                LOG(DEBUG, "recoveryComplete failed on %s, ignoring; "
+                           "server no longer in the servers list",
+                    serverId.toString().c_str());
+        } catch (const ClientException &e) {
+                LOG(DEBUG, "recoveryComplete failed on %s, ignoring; "
+                           "failure was: %s", serverId.toString().c_str(),
+                    e.what());
+        }
+        done = true;
+    }
+
+    Migration &recovery;
+    const ServerId serverId;
+    uint64_t migrationId;
+    Tub<MigrationCompleteRpc> rpc;
+    bool done;
+    BackupEndTaskTestingCallback *testingCallback;
+    DISALLOW_COPY_AND_ASSIGN(BackupEndTask);
 };
 }
 
@@ -569,14 +620,39 @@ void Migration::startBackups()
     schedule();
 }
 
-void Migration::startMasters()
+void Migration::startMaster()
 {
+    CycleCounter<RawMetric> _(&metrics->coordinator.recoveryStartTicks);
+    RAMCLOUD_LOG(NOTICE, "Starting migration %lu for crashed server %s with %u "
+                         "partitions", migrationId,
+                 sourceServerId.toString().c_str(),
+                 numPartitions);
+
+    Tub<MasterStartTask> migrationTask;
+
+    migrationTask.construct(*this, targetServerId, replicaMap);
+
+    parallelRun(&migrationTask, 1, 1);
+
+    if (status > WAIT_FOR_RECOVERY_MASTERS)
+        return;
+    status = WAIT_FOR_RECOVERY_MASTERS;
+        LOG(DEBUG, "Waiting for recovery to complete on recovery masters");
 
 }
 
 void Migration::broadcastMigrationComplete()
 {
-
+    RAMCLOUD_LOG(DEBUG, "Broadcasting the end of migration %lu to backups",
+                 migrationId);
+    CycleCounter<RawMetric> ticks(&metrics->coordinator.recoveryCompleteTicks);
+    std::vector<ServerId> backups =
+        tracker->getServersWithService(WireFormat::BACKUP_SERVICE);
+    Tub<BackupEndTask> tasks[backups.size()];
+    size_t taskNum = 0;
+    for (ServerId backup: backups)
+        tasks[taskNum++].construct(*this, backup, migrationId);
+    parallelRun(tasks, backups.size(), 10);
 }
 
 void Migration::splitTablets(vector<Tablet> *tablets,

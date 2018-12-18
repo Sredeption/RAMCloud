@@ -29,7 +29,8 @@ class MigrationManager
 
     void startMigration(ServerId sourceServerId, ServerId targetServerId,
                         uint64_t tableId, uint64_t firstKeyHash,
-                        uint64_t lastKeyHash);
+                        uint64_t lastKeyHash,
+                        const ProtoBuf::MasterRecoveryInfo &masterRecoveryInfo);
 
     void start();
 

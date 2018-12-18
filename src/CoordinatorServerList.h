@@ -176,6 +176,8 @@ class CoordinatorServerList : public AbstractServerList{
     virtual void serverCrashed(ServerId serverId);
     bool setMasterRecoveryInfo(ServerId serverId,
                 const ProtoBuf::MasterRecoveryInfo* recoveryInfo);
+    const ProtoBuf::MasterRecoveryInfo
+    getMasterRecoveryInfo(ServerId serverId);
     void startUpdater();
 
   PRIVATE:

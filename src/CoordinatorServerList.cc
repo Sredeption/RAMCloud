@@ -536,6 +536,13 @@ CoordinatorServerList::setMasterRecoveryInfo(
     }
 }
 
+const ProtoBuf::MasterRecoveryInfo
+CoordinatorServerList::getMasterRecoveryInfo(ServerId serverId)
+{
+    Lock lock(mutex);
+    Entry* entry = getEntry(serverId);
+    return entry->masterRecoveryInfo;
+}
 //////////////////////////////////////////////////////////////////////
 // CoordinatorServerList Private Methods
 //////////////////////////////////////////////////////////////////////

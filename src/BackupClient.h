@@ -302,6 +302,22 @@ class MigrationGetDataRpc : public ServerIdRpcWrapper {
     DISALLOW_COPY_AND_ASSIGN(MigrationGetDataRpc);
 };
 
+class MigrationCompleteRpc : public ServerIdRpcWrapper {
+  public:
+    MigrationCompleteRpc(Context *context, ServerId backupId,
+                         uint64_t migrationId);
+
+    ~MigrationCompleteRpc()
+    {}
+
+    /// \copydoc ServerIdRpcWrapper::waitAndCheckErrors
+    void wait()
+    { waitAndCheckErrors(); }
+
+  PRIVATE:
+    DISALLOW_COPY_AND_ASSIGN(MigrationCompleteRpc);
+};
+
 /**
  * Encapsulates the state of a BackupClient::writeSegment operation,
  * allowing it to execute asynchronously.

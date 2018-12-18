@@ -135,7 +135,8 @@ enum Opcode {
     MIGRATION_GETDATA           = 83,
     MIGRATION_INIT              = 84,
     MIGRATION_RECOVER           = 85,
-    ILLEGAL_RPC_TYPE            = 86, // 1 + the highest legitimate Opcode
+    MIGRATION_BACKUPCOMPLETE    = 86,
+    ILLEGAL_RPC_TYPE            = 87, // 1 + the highest legitimate Opcode
 };
 
 /**
@@ -1171,6 +1172,18 @@ struct MigrationGetData {
                                         ///< the response field. Used by
                                         ///< master to iterate over the
                                         ///< segment.
+    } __attribute__((packed));
+};
+
+struct MigrationBackupComplete {
+    static const Opcode opcode = MIGRATION_BACKUPCOMPLETE;
+    static const ServiceType service = BACKUP_SERVICE;
+    struct Request {
+        RequestCommonWithId common;
+        uint64_t migrationId;
+    } __attribute__((packed));
+    struct Response {
+        ResponseCommon common;
     } __attribute__((packed));
 };
 

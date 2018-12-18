@@ -83,11 +83,13 @@ TEST_F(MigrationManagerTest, startMigration)
 
     TestLog::reset();
 //    TestLog::Enable _("startMigration");
-    mgr->startMigration(sourceId, targetId, tableId, 0, (~0lu) / 2);
+    ProtoBuf::MasterRecoveryInfo masterRecoveryInfo =
+        (*serverList)[sourceId].masterRecoveryInfo;
+    mgr->startMigration(sourceId, targetId, tableId, 0, (~0lu) / 2,
+                        masterRecoveryInfo);
     mgr->taskQueue.performTask();
     mgr->taskQueue.performTask();
     mgr->taskQueue.performTask();
-    std::cout << TestLog::get() << std::endl;
 }
 
 }

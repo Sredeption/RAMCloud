@@ -603,6 +603,17 @@ SegmentCertificate MigrationGetDataRpc::wait()
     return certificate;
 }
 
+MigrationCompleteRpc::MigrationCompleteRpc(Context *context, ServerId backupId,
+                                           uint64_t migrationId)
+    : ServerIdRpcWrapper(context, backupId,
+                         sizeof(WireFormat::BackupRecoveryComplete::Response))
+{
+    WireFormat::MigrationBackupComplete::Request *reqHdr(
+        allocHeader<WireFormat::MigrationBackupComplete>(backupId));
+    reqHdr->migrationId = migrationId;
+    send();
+}
+
 StartReadingDataRpc::Result::Result()
     : replicas()
     , primaryReplicaCount(0)
@@ -831,5 +842,6 @@ WriteSegmentRpc::wait()
 {
     waitAndCheckErrors();
 }
+
 
 } // namespace RAMCloud

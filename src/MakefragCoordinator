@@ -6,6 +6,8 @@ COORDINATOR_SRCFILES := \
 			src/CoordinatorUpdateManager.cc \
 			src/MasterRecoveryManager.cc \
 			src/MockExternalStorage.cc \
+		    src/Migration.cc \
+		    src/MigrationManager.cc \
 			src/Tablet.cc \
 			src/TableManager.cc \
 			src/Recovery.cc \

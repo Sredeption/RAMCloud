@@ -702,8 +702,6 @@ RecoverRpc::RecoverRpc(Context* context, ServerId serverId,
 MigrationRecoverRpc::MigrationRecoverRpc(Context *context, ServerId serverId,
                                          uint64_t recoveryId,
                                          ServerId targetServerId,
-                                         uint64_t partitionId,
-                                         const ProtoBuf::MigrationPartition *migrationPartition,
                                          const WireFormat::MigrationRecover::Replica *replicas,
                                          uint32_t numReplicas)
     : ServerIdRpcWrapper(context, serverId,
@@ -713,8 +711,6 @@ MigrationRecoverRpc::MigrationRecoverRpc(Context *context, ServerId serverId,
         allocHeader<WireFormat::MigrationRecover>(serverId));
     reqHdr->migrationId = recoveryId;
     reqHdr->targetServerId = targetServerId.getId();
-    reqHdr->partitionId = partitionId;
-    reqHdr->tabletsLength = serializeToRequest(&request, migrationPartition);
     reqHdr->numReplicas = numReplicas;
     request.append(replicas,
                    downCast<uint32_t>(sizeof(replicas[0])) * numReplicas);

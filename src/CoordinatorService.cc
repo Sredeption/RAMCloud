@@ -550,10 +550,13 @@ void CoordinatorService::migrationInit(
     WireFormat::MigrationInit::Response *respHdr,
     Rpc *rpc)
 {
-    migrationManager.startMigration(ServerId(reqHdr->sourceId),
+    ServerId sourceServerId(reqHdr->sourceId);
+    ProtoBuf::MasterRecoveryInfo masterRecoveryInfo =
+        serverList[sourceServerId].masterRecoveryInfo;
+    migrationManager.startMigration(sourceServerId,
                                     ServerId(reqHdr->targetId),
                                     reqHdr->tableId, reqHdr->firstKeyHash,
-                                    reqHdr->lastKeyHash);
+                                    reqHdr->lastKeyHash, masterRecoveryInfo);
 }
 
 /**

@@ -30,6 +30,7 @@ struct MigrationTest : public ::testing::Test {
     MockExternalStorage storage;
     CoordinatorUpdateManager manager;
     TableManager tableManager;
+    ProtoBuf::MasterRecoveryInfo recoveryInfo;
     std::mutex mutex;
 
     MigrationTest()
@@ -40,6 +41,7 @@ struct MigrationTest : public ::testing::Test {
           storage(true),
           manager(&storage),
           tableManager(&context, &manager),
+          recoveryInfo(),
           mutex()
     {
         Logger::get().setLogLevels(SILENT_LOG_LEVEL);
@@ -104,7 +106,8 @@ TEST_F(MigrationTest, splitTabletsNoEstimator)
          {}});
 
     migration.construct(&context, taskQueue, &tableManager, &tracker, own,
-                        sourceId, targetId, tableId, firstKeyHash, lastKeyHash);
+                        sourceId, targetId, tableId, firstKeyHash, lastKeyHash,
+                        recoveryInfo);
 
     auto tablets = tableManager.markTabletsMigration(sourceId, tableId,
                                                      firstKeyHash, lastKeyHash);
@@ -142,7 +145,8 @@ TEST_F(MigrationTest, splitTabletsBadEstimator)
         {tableId, firstKeyHash, lastKeyHash, sourceId, Tablet::NORMAL, {}});
 
     recovery.construct(&context, taskQueue, &tableManager, &tracker, own,
-                       sourceId, targetId, tableId, firstKeyHash, lastKeyHash);
+                       sourceId, targetId, tableId, firstKeyHash, lastKeyHash,
+                       recoveryInfo);
     auto tablets = tableManager.markTabletsMigration(sourceId, tableId,
                                                      firstKeyHash, lastKeyHash);
 
@@ -183,7 +187,7 @@ TEST_F(MigrationTest, splitTabletsMultiTablet)
     tableManager.testAddTablet({tableId, 10, 29, sourceId, Tablet::NORMAL, {}});
     tableManager.testAddTablet({tableId, 30, 49, sourceId, Tablet::NORMAL, {}});
     migration.construct(&context, taskQueue, &tableManager, &tracker, own,
-                        sourceId, targetId, tableId, 0, 29);
+                        sourceId, targetId, tableId, 0, 29, recoveryInfo);
     auto tablets = tableManager.markTabletsMigration(sourceId, tableId, 0, 29);
 
     char buffer[sizeof(TableStats::DigestHeader) +
@@ -232,7 +236,8 @@ TEST_F(MigrationTest, splitTabletsBasic)
     tableManager.testAddTablet(
         {tableId, 1, keyHashCount, sourceId, Tablet::NORMAL, {}});
     migration.construct(&context, taskQueue, &tableManager, &tracker, own,
-                        sourceId, targetId, tableId, 1, keyHashCount);
+                        sourceId, targetId, tableId, 1, keyHashCount,
+                        recoveryInfo);
 
     auto tablets = tableManager.markTabletsMigration(sourceId, tableId, 1,
                                                      keyHashCount);
@@ -299,7 +304,8 @@ TEST_F(MigrationTest, splitTabletsByteDominated)
     tableManager.testAddTablet(
         {tableId, 1, keyHashCount, sourceId, Tablet::NORMAL, {}});
     recovery.construct(&context, taskQueue, &tableManager, &tracker, own,
-                       sourceId, targetId, tableId, 1, keyHashCount);
+                       sourceId, targetId, tableId, 1, keyHashCount,
+                       recoveryInfo);
     auto tablets = tableManager.markTabletsMigration(sourceId, tableId, 1,
                                                      keyHashCount);
 
@@ -336,7 +342,8 @@ TEST_F(MigrationTest, splitTabletsRecordDominated)
     tableManager.testAddTablet(
         {tableId, 1, keyHashCount, {99, 0}, Tablet::NORMAL, {}});
     recovery.construct(&context, taskQueue, &tableManager, &tracker, own,
-                       sourceId, targetId, tableId, 1, keyHashCount);
+                       sourceId, targetId, tableId, 1, keyHashCount,
+                       recoveryInfo);
     auto tablets = tableManager.markTabletsMigration(sourceId, tableId, 1,
                                                      keyHashCount);
 
@@ -369,7 +376,7 @@ TEST_F(MigrationTest, partitionTabletsNoEstimator)
     Migration::Owner *own = static_cast<Migration::Owner *>(NULL);
 
     recovery.construct(&context, taskQueue, &tableManager, &tracker, own,
-                       sourceId, targetId, tableId, 0, 30);
+                       sourceId, targetId, tableId, 0, 30, recoveryInfo);
     auto tablets = tableManager.markTabletsMigration(sourceId, tableId, 0, 30);
     recovery->partitionTablets(tablets, NULL);
     EXPECT_EQ(0lu, recovery->numPartitions);
@@ -380,7 +387,7 @@ TEST_F(MigrationTest, partitionTabletsNoEstimator)
     tableManager.testAddTablet(
         {tableId, 20, 29, sourceId, Tablet::RECOVERING, {}});
     recovery.construct(&context, taskQueue, &tableManager, &tracker, own,
-                       sourceId, targetId, tableId, 0, 30);
+                       sourceId, targetId, tableId, 0, 30, recoveryInfo);
     tablets = tableManager.markAllTabletsRecovering(ServerId(99));
     recovery->partitionTablets(tablets, NULL);
     EXPECT_EQ(2lu, recovery->numPartitions);
@@ -388,7 +395,7 @@ TEST_F(MigrationTest, partitionTabletsNoEstimator)
     tableManager.testAddTablet(
         {tableId, 10, 19, sourceId, Tablet::RECOVERING, {}});
     recovery.construct(&context, taskQueue, &tableManager, &tracker, own,
-                       sourceId, targetId, tableId, 0, 30);
+                       sourceId, targetId, tableId, 0, 30, recoveryInfo);
     tablets = tableManager.markAllTabletsRecovering(ServerId(99));
     recovery->partitionTablets(tablets, NULL);
     EXPECT_EQ(3lu, recovery->numPartitions);
@@ -410,7 +417,7 @@ TEST_F(MigrationTest, partitionTabletsSplits)
         {tableId, 100, 199, sourceId, Tablet::NORMAL, {}});
 
     migration.construct(&context, taskQueue, &tableManager, &tracker, own,
-                        sourceId, targetId, tableId, 0, 199);
+                        sourceId, targetId, tableId, 0, 199, recoveryInfo);
     auto tablets = tableManager.markTabletsMigration(sourceId, tableId, 0, 199);
 
     char buffer[sizeof(TableStats::DigestHeader) +
@@ -455,7 +462,7 @@ TEST_F(MigrationTest, partitionTabletsBasic)
             {tableId, i * 10, i * 10 + 9, sourceId, Tablet::NORMAL, {}});
     }
     migration.construct(&context, taskQueue, &tableManager, &tracker, own,
-                        sourceId, targetId, tableId, 0, 2499);
+                        sourceId, targetId, tableId, 0, 2499, recoveryInfo);
     auto tablets = tableManager.markTabletsMigration(sourceId, tableId, 0,
                                                      2499);
 
@@ -492,7 +499,7 @@ TEST_F(MigrationTest, partitionTabletsAllPartitionsOpen)
             {tableId, i * 10, i * 10 + 9, sourceId, Tablet::NORMAL, {}});
     }
     migration.construct(&context, taskQueue, &tableManager, &tracker, own,
-                        sourceId, targetId, tableId, 0, 199);
+                        sourceId, targetId, tableId, 0, 199, recoveryInfo);
     auto tablets = tableManager.markTabletsMigration(sourceId, tableId, 0, 199);
 
     char buffer[sizeof(TableStats::DigestHeader) +
@@ -543,7 +550,7 @@ TEST_F(MigrationTest, partitionTabletsMixed)
              sourceId, Tablet::NORMAL, {}});
     }
     migration.construct(&context, taskQueue, &tableManager, &tracker, own,
-                        sourceId, targetId, tableId, 0, 5399);
+                        sourceId, targetId, tableId, 0, 5399, recoveryInfo);
     vector<Tablet> tablets =
         tableManager.markTabletsMigration(sourceId, tableId, 0, 5399);
 
@@ -611,10 +618,10 @@ TEST_F(MigrationTest, startBackups)
     tableManager.testCreateTable("t", tableId);
     tableManager.testAddTablet({tableId, 10, 19, sourceId, Tablet::NORMAL, {}});
     Migration recovery(&context, taskQueue, &tableManager, &tracker, NULL,
-                       sourceId, targetId, tableId, 10, 19);
+                       sourceId, targetId, tableId, 10, 19, recoveryInfo);
     recovery.testingBackupStartTaskSendCallback = &callback;
     recovery.startBackups();
-    EXPECT_EQ((vector<WireFormat::Recover::Replica>{
+    EXPECT_EQ((vector<WireFormat::MigrationRecover::Replica>{
         {1, 88},
         {2, 88},
         {1, 89},
@@ -624,7 +631,7 @@ TEST_F(MigrationTest, startBackups)
 TEST_F(MigrationTest, startBackupsFailureContactingSomeBackup)
 {
     Migration recovery(&context, taskQueue, &tableManager, &tracker, NULL,
-                       ServerId(99), ServerId(100), 123, 0, 9);
+                       ServerId(99), ServerId(100), 123, 0, 9, recoveryInfo);
     BackupStartTask task(&recovery, {2, 0});
     EXPECT_NO_THROW(task.send());
 }
@@ -662,11 +669,343 @@ TEST_F(MigrationTest, startBackupsSecondariesEarlyInSomeList)
     tableManager.testCreateTable("t", 123);
     tableManager.testAddTablet({123, 10, 19, {99, 0}, Tablet::RECOVERING, {}});
     Migration migration(&context, taskQueue, &tableManager, &tracker, NULL,
-                       ServerId(99), ServerId(100), 123, 10, 19);
+                        ServerId(99), ServerId(100), 123, 10, 19, recoveryInfo);
     migration.testingBackupStartTaskSendCallback = &callback;
     migration.startBackups();
     ASSERT_EQ(6U, migration.replicaMap.size());
     // The secondary of segment 91 must be last in the list.
     EXPECT_EQ(91U, migration.replicaMap.at(5).segmentId);
+}
+
+TEST_F(MigrationTest, startBackups_noLogDigestFound)
+{
+    BackupStartTask::TestingCallback callback; // No-op callback.
+    Lock lock(mutex);     // To trick TableManager internal calls.
+    addServersToTracker(3, {WireFormat::BACKUP_SERVICE});
+    tableManager.testCreateTable("t", 123);
+    tableManager.testAddTablet({123, 10, 19, {99, 0}, Tablet::RECOVERING, {}});
+    Migration migration(&context, taskQueue, &tableManager, &tracker, NULL,
+                        ServerId(99), ServerId(100), 123, 10, 19, recoveryInfo);
+    migration.testingBackupStartTaskSendCallback = &callback;
+    TestLog::Enable _("startBackups");
+    migration.startBackups();
+    EXPECT_EQ(
+        "startBackups: Getting segment lists from backups and preparing "
+        "them for recovery | "
+        "startBackups: No log digest among replicas on available backups. "
+        "Will retry recovery later.", TestLog::get());
+}
+
+TEST_F(MigrationTest, startBackups_someReplicasMissing)
+{
+    // See buildReplicaMap test for info about how the callback is used.
+    struct Cb : public BackupStartTask::TestingCallback {
+        void backupStartTaskSend(MigrationStartReadingRpc::Result &result)
+        {
+            populateLogDigest(result, 91, {91});
+        }
+    } callback;
+    Lock lock(mutex);     // To trick TableManager internal calls.
+    addServersToTracker(3, {WireFormat::BACKUP_SERVICE});
+    tableManager.testCreateTable("t", 123);
+    tableManager.testAddTablet({123, 10, 19, {99, 0}, Tablet::RECOVERING, {}});
+    Migration migration(&context, taskQueue, &tableManager, &tracker, NULL,
+                        ServerId(99), ServerId(100), 123, 10, 19, recoveryInfo);
+    migration.testingBackupStartTaskSendCallback = &callback;
+    TestLog::Enable _("startBackups");
+    migration.startBackups();
+    EXPECT_EQ(
+        "startBackups: Getting segment lists from backups and preparing "
+        "them for recovery | "
+        "startBackups: Segment 91 is the head of the log | "
+        "startBackups: Some replicas from log digest not on available backups. "
+        "Will retry recovery later.", TestLog::get());
+}
+
+TEST_F(MigrationTest, BackupStartTask_filterOutInvalidReplicas)
+{
+    recoveryInfo.set_min_open_segment_id(10);
+    recoveryInfo.set_min_open_segment_epoch(1);
+    Migration migration(&context, taskQueue, &tableManager, &tracker, NULL,
+                        ServerId(99), ServerId(100), 123, 10, 19, recoveryInfo);
+    BackupStartTask task(&migration, {2, 0});
+    auto &segments = task.result.replicas;
+    segments = {
+        {2,  1, true},
+        {2,  0, false},
+        {10, 1, false},
+        {10, 0, true},
+        {10, 0, false},
+        {11, 1, true},
+        {11, 0, false},
+    };
+
+    task.result.primaryReplicaCount = 2;
+    uint32_t bytes = 4; // Doesn't really matter.
+    task.result.logDigestBytes = bytes;
+    task.result.logDigestBuffer = std::unique_ptr<char[]>(new char[bytes]);
+    task.result.logDigestSegmentId = 9;
+    task.result.logDigestSegmentEpoch = 1;
+    task.filterOutInvalidReplicas();
+    ASSERT_EQ(5lu, segments.size());
+    EXPECT_EQ((vector<MigrationStartReadingRpc::Replica>{
+        {2,  1, true},
+        {10, 1, false},
+        {10, 0, true},
+        {11, 1, true},
+        {11, 0, false},
+    }), segments);
+    EXPECT_EQ(1lu, task.result.primaryReplicaCount);
+    EXPECT_EQ(0u, task.result.logDigestBytes);
+    EXPECT_EQ(static_cast<char *>(NULL), task.result.logDigestBuffer.get());
+    EXPECT_EQ(~0lu, task.result.logDigestSegmentId);
+    EXPECT_EQ(~0lu, task.result.logDigestSegmentEpoch);
+}
+
+TEST_F(MigrationTest, verifyLogComplete)
+{
+    LogDigest digest;
+    digest.addSegmentId(10);
+    digest.addSegmentId(11);
+    digest.addSegmentId(12);
+
+
+    Tub<BackupStartTask> tasks[1];
+    Migration migration(&context, taskQueue, &tableManager, &tracker, NULL,
+                        ServerId(99), ServerId(100), 123, 10, 19, recoveryInfo);
+    tasks[0].construct(&migration, ServerId(2, 0));
+    auto &segments = tasks[0]->result.replicas;
+
+    TestLog::Enable _;
+    segments = {{10, 0, false},
+                {12, 0, true}};
+    EXPECT_FALSE(verifyLogComplete(tasks, 1, digest));
+    EXPECT_EQ(
+        "verifyLogComplete: Segment 11 listed in the log digest but "
+        "not found among available backups | "
+        "verifyLogComplete: 1 segments in the digest but not available "
+        "from backups", TestLog::get());
+    segments = {{10, 0, false},
+                {11, 0, false},
+                {12, 0, true}};
+    EXPECT_TRUE(verifyLogComplete(tasks, 1, digest));
+}
+
+TEST_F(MigrationTest, findLogDigest)
+{
+    recoveryInfo.set_min_open_segment_id(10);
+    recoveryInfo.set_min_open_segment_epoch(1);
+    Tub<BackupStartTask> tasks[2];
+    Migration migration(&context, taskQueue, &tableManager, &tracker, NULL,
+                        ServerId(99), ServerId(100), 123, 10, 19, recoveryInfo);
+    tasks[0].construct(&migration, ServerId(2, 0));
+    tasks[1].construct(&migration, ServerId(3, 0));
+
+    // No log digest found.
+    auto digest = findLogDigest(tasks, 2);
+    EXPECT_FALSE(digest);
+
+    auto &result0 = tasks[0]->result;
+    auto &result1 = tasks[1]->result;
+
+    // Two digests with different contents to differentiate them below.
+    LogDigest result0Digest, result1Digest;
+    result0Digest.addSegmentId(0);
+    result1Digest.addSegmentId(1);
+
+    Buffer result0Buffer, result1Buffer;
+    result0Digest.appendToBuffer(result0Buffer);
+    result1Digest.appendToBuffer(result1Buffer);
+
+    uint32_t bytes = result0Buffer.size();
+
+    result0.logDigestBytes = bytes;
+    result0.logDigestBuffer = std::unique_ptr<char[]>(new char[bytes]);
+    result0.logDigestSegmentId = 10;
+    result0Buffer.copy(0, bytes, result0.logDigestBuffer.get());
+
+    result1.logDigestBytes = bytes;
+    result1.logDigestBuffer = std::unique_ptr<char[]>(new char[bytes]);
+    result1.logDigestSegmentId = 10;
+    result1Buffer.copy(0, bytes, result1.logDigestBuffer.get());
+
+    // Two log digests, same segment id, keeps earlier of two.
+    digest = findLogDigest(tasks, 2);
+    ASSERT_TRUE(digest);
+    EXPECT_EQ(10lu, std::get<0>(*digest.get()));
+    EXPECT_EQ(0u, std::get<1>(*digest.get())[0]);
+
+    result1.logDigestSegmentId = 9;
+    // Two log digests, later one has a lower segment id.
+    digest = findLogDigest(tasks, 2);
+    ASSERT_TRUE(digest);
+    EXPECT_EQ(9lu, std::get<0>(*digest.get()));
+    EXPECT_EQ(1u, std::get<1>(*digest.get())[0]);
+}
+
+TEST_F(MigrationTest, buildReplicaMap)
+{
+    Tub<BackupStartTask> tasks[2];
+    Migration migration(&context, taskQueue, &tableManager, &tracker, NULL,
+                        ServerId(99), ServerId(100), 123, 10, 19, recoveryInfo);
+    tasks[0].construct(&migration, ServerId(2, 0));
+    auto *result = &tasks[0]->result;
+    result->replicas.push_back(Replica{88lu, 100u, false});
+    result->replicas.push_back(Replica{89lu, 100u, false});
+    result->replicas.push_back(Replica{90lu, 100u, false});
+    result->primaryReplicaCount = 3;
+
+    tasks[1].construct(&migration, ServerId(3, 0));
+    result = &tasks[1]->result;
+    result->replicas.push_back(Replica{88lu, 100u, false});
+    result->replicas.push_back(Replica{91lu, 100u, false});
+    result->primaryReplicaCount = 1;
+
+    addServersToTracker(3, {WireFormat::BACKUP_SERVICE});
+
+    auto replicaMap = buildReplicaMap(tasks, 2, &tracker, 91);
+    EXPECT_EQ((vector<WireFormat::MigrationRecover::Replica>{
+        {2, 88},
+        {3, 88},
+        {2, 89},
+        {2, 90},
+        {3, 91},
+    }), replicaMap);
+
+    tracker.getServerDetails({3, 0})->expectedReadMBytesPerSec = 101;
+    TestLog::Enable _;
+    replicaMap = buildReplicaMap(tasks, 2, &tracker, 91);
+    EXPECT_EQ((vector<WireFormat::MigrationRecover::Replica>{
+        {3, 88},
+        {2, 88},
+        {2, 89},
+        {2, 90},
+        {3, 91},
+    }), replicaMap);
+}
+
+TEST_F(MigrationTest, buildReplicaMap_badReplicas)
+{
+    Tub<BackupStartTask> tasks[1];
+    Migration migration(&context, taskQueue, &tableManager, &tracker, NULL,
+                        ServerId(99), ServerId(100), 123, 10, 19, recoveryInfo);
+    tasks[0].construct(&migration, ServerId(2, 0));
+    auto *result = &tasks[0]->result;
+    result->replicas.push_back(Replica{92lu, 100u, true}); // beyond head
+    result->primaryReplicaCount = 1;
+
+    addServersToTracker(2, {WireFormat::BACKUP_SERVICE});
+
+    auto replicaMap = buildReplicaMap(tasks, 1, &tracker, 91);
+    EXPECT_EQ((vector<WireFormat::MigrationRecover::Replica>()), replicaMap);
+}
+
+TEST_F(MigrationTest, startMaster)
+{
+    MockRandom _(1);
+    struct Cb : public MasterStartTaskTestingCallback {
+        int callCount;
+
+        Cb() : callCount()
+        {}
+
+        void masterStartTaskSend(
+            uint64_t migrationId, ServerId targetServerId,
+            const WireFormat::MigrationRecover::Replica replicaMap[],
+            size_t replicaMapSize)
+        {
+            if (callCount == 0) {
+                EXPECT_EQ(1lu, migrationId);
+                EXPECT_EQ(ServerId(2, 0), targetServerId);
+            } else if (callCount == 1) {
+                EXPECT_EQ(1lu, migrationId);
+                EXPECT_EQ(ServerId(2, 0), targetServerId);
+            } else {
+                FAIL();
+            }
+            ++callCount;
+        }
+    } callback;
+    Lock lock(mutex);     // To trick TableManager internal calls.
+    addServersToTracker(2, {WireFormat::MASTER_SERVICE});
+    tableManager.testCreateTable("t", 123);
+    tableManager.testAddTablet({123, 0, 9, {99, 0}, Tablet::NORMAL, {}});
+    tableManager.testAddTablet({123, 20, 29, {99, 0}, Tablet::NORMAL, {}});
+    tableManager.testAddTablet({123, 10, 19, {99, 0}, Tablet::NORMAL, {}});
+    Migration migration(&context, taskQueue, &tableManager, &tracker, NULL,
+                        ServerId(1, 0), ServerId(2, 0), 123, 10, 19,
+                        recoveryInfo);
+    migration.partitionTablets(
+        tableManager.markTabletsMigration({1, 0}, 123, 10, 19), NULL);
+    // Hack 'tablets' to get the first two tablets on the same server.
+    migration.testingMasterStartTaskSendCallback = &callback;
+    migration.startMaster();
+
+    EXPECT_EQ(0, migration.migrateSuccessful);
+}
+
+TEST_F(MigrationTest, startRecoveryMasters_tooFewIdleMasters)
+{
+    MockRandom _(1);
+    struct Cb : public MasterStartTaskTestingCallback {
+        int callCount;
+
+        Cb() : callCount()
+        {}
+
+        void masterStartTaskSend(
+            uint64_t migrationId, ServerId targetServerId,
+            const WireFormat::MigrationRecover::Replica replicaMap[],
+            size_t replicaMapSize)
+        {
+            if (callCount == 0) {
+                EXPECT_EQ(1lu, migrationId);
+                EXPECT_EQ(ServerId(2, 0), targetServerId);
+            } else {
+                FAIL();
+            }
+            ++callCount;
+        }
+    } callback;
+    Lock lock(mutex);     // To trick TableManager internal calls.
+    addServersToTracker(2, {WireFormat::MASTER_SERVICE});
+    tracker[ServerId(1, 0)] = reinterpret_cast<Migration *>(0x1);
+    tableManager.testCreateTable("t", 123);
+    tableManager.testAddTablet({123, 0, 9, {99, 0}, Tablet::NORMAL, {}});
+    tableManager.testAddTablet({123, 20, 29, {99, 0}, Tablet::NORMAL, {}});
+    tableManager.testAddTablet({123, 10, 19, {99, 0}, Tablet::NORMAL, {}});
+    Migration migration(&context, taskQueue, &tableManager, &tracker, NULL,
+                        ServerId(1, 0), ServerId(2, 0), 123, 10, 19,
+                        recoveryInfo);
+    // Hack 'tablets' to get the first two tablets on the same server.
+    migration.testingMasterStartTaskSendCallback = &callback;
+    migration.startMaster();
+
+    migration.migrationFinished(true);
+
+    EXPECT_EQ(1, migration.migrateSuccessful);
+    EXPECT_TRUE(migration.wasCompletelySuccessful());
+}
+
+TEST_F(MigrationTest, broadcastRecoveryComplete)
+{
+    addServersToTracker(3, {WireFormat::BACKUP_SERVICE});
+    struct Cb : public BackupEndTaskTestingCallback {
+        int callCount;
+
+        Cb() : callCount()
+        {}
+
+        void backupEndTaskSend(ServerId backupId, uint64_t migrationId)
+        {
+            ++callCount;
+        }
+    } callback;
+    Migration recovery(&context, taskQueue, &tableManager, &tracker, NULL,
+                       ServerId(1, 0), ServerId(2, 0), 123, 10, 19,
+                       recoveryInfo);
+    recovery.testingBackupEndTaskSendCallback = &callback;
+    recovery.broadcastMigrationComplete();
+    EXPECT_EQ(3, callback.callCount);
 }
 }

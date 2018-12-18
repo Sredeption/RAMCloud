@@ -43,10 +43,11 @@ class MaybeStartMigrationTask : public Task {
                 migration->schedule();
                 mgr.activeMigrations[migration->getMigrationId()] = migration;
                 mgr.waitingMigrations.pop();
-                LOG(NOTICE, "Starting recovery of server %s (now %lu active "
-                            "recoveries)",
-                    migration->targetServerId.toString().c_str(),
-                    mgr.activeMigrations.size());
+                    LOG(NOTICE,
+                        "Starting recovery of server %s (now %lu active "
+                        "recoveries)",
+                        migration->targetServerId.toString().c_str(),
+                        mgr.activeMigrations.size());
             }
         }
         for (auto *migration: alreadyActive)
@@ -68,10 +69,13 @@ class EnqueueMigrationTask : public Task {
     EnqueueMigrationTask(MigrationManager &migrationManager,
                          ServerId sourceServerId, ServerId targetServerId,
                          uint64_t tableId, uint64_t firstKeyHash,
-                         uint64_t lastKeyHash)
+                         uint64_t lastKeyHash,
+                         const ProtoBuf::MasterRecoveryInfo &masterRecoveryInfo)
         : Task(migrationManager.taskQueue), mgr(migrationManager),
           sourceServerId(sourceServerId), targetServerId(targetServerId),
-          tableId(tableId), firstKeyHash(firstKeyHash), lastKeyHash(lastKeyHash)
+          tableId(tableId), firstKeyHash(firstKeyHash),
+          lastKeyHash(lastKeyHash),
+          masterRecoveryInfo(masterRecoveryInfo)
     {}
 
     void performTask()
@@ -81,7 +85,8 @@ class EnqueueMigrationTask : public Task {
                                                  &mgr.tracker,
                                                  &mgr, sourceServerId,
                                                  targetServerId, tableId,
-                                                 firstKeyHash, lastKeyHash));
+                                                 firstKeyHash, lastKeyHash,
+                                                 masterRecoveryInfo));
         (new MaybeStartMigrationTask(mgr))->schedule();
         delete this;
     }
@@ -93,6 +98,7 @@ class EnqueueMigrationTask : public Task {
     uint64_t tableId;
     uint64_t firstKeyHash;
     uint64_t lastKeyHash;
+    const ProtoBuf::MasterRecoveryInfo masterRecoveryInfo;
     DISALLOW_COPY_AND_ASSIGN(EnqueueMigrationTask);
 };
 
@@ -178,7 +184,8 @@ try
 void MigrationManager::startMigration(ServerId sourceServerId,
                                       ServerId targetServerId,
                                       uint64_t tableId, uint64_t firstKeyHash,
-                                      uint64_t lastKeyHash)
+                                      uint64_t lastKeyHash,
+                                      const ProtoBuf::MasterRecoveryInfo &masterRecoveryInfo)
 {
     if (!thread && !startMigrationsEvenIfNoThread) {
         // Recovery has not yet been officially enabled, so don't do
@@ -200,7 +207,7 @@ void MigrationManager::startMigration(ServerId sourceServerId,
     }
     (new MigrationManagerInternal::EnqueueMigrationTask(
         *this, sourceServerId, targetServerId, tableId, firstKeyHash,
-        lastKeyHash))->schedule();
+        lastKeyHash, masterRecoveryInfo))->schedule();
 }
 
 void MigrationManager::start()
@@ -259,7 +266,7 @@ void MigrationManager::migrationFinished(Migration *migration)
         (new MigrationManagerInternal::EnqueueMigrationTask(
             *this, migration->sourceServerId, migration->targetServerId,
             migration->tableId, migration->firstKeyHash,
-            migration->lastKeyHash))->schedule();
+            migration->lastKeyHash, migration->masterRecoveryInfo))->schedule();
     }
 
     activeMigrations.erase(migration->getMigrationId());

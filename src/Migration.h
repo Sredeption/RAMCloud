@@ -105,7 +105,7 @@ bool verifyLogComplete(Tub<BackupStartTask> tasks[],
 Tub<std::tuple<uint64_t, LogDigest, TableStats::Digest *>>
 findLogDigest(Tub<BackupStartTask> tasks[], size_t taskCount);
 
-vector<WireFormat::Recover::Replica> buildReplicaMap(
+vector<WireFormat::MigrationRecover::Replica> buildReplicaMap(
     Tub<BackupStartTask> tasks[], size_t taskCount,
     MigrationTracker *tracker, uint64_t headId);
 
@@ -113,9 +113,8 @@ struct MasterStartTask;
 
 struct MasterStartTaskTestingCallback {
     virtual void masterStartTaskSend(
-        uint64_t recoveryId,
-        ServerId crashedServerId, uint32_t partitionId,
-        const ProtoBuf::MigrationPartition &dataToRecover,
+        uint64_t migrationId,
+        ServerId targetServerId,
         const WireFormat::MigrationRecover::Replica replicaMap[],
         size_t replicaMapSize)
     {}
@@ -124,6 +123,15 @@ struct MasterStartTaskTestingCallback {
     {}
 };
 
+struct BackupEndTask;
+
+struct BackupEndTaskTestingCallback {
+    virtual void backupEndTaskSend(ServerId backup, uint64_t migrationId)
+    {}
+
+    virtual ~BackupEndTaskTestingCallback()
+    {}
+};
 }
 
 class Migration : public Task {
@@ -140,7 +148,8 @@ class Migration : public Task {
               TableManager *tableManager, MigrationTracker *tracker,
               Owner *owner, ServerId sourceServerId,
               ServerId targetServerId, uint64_t tableId, uint64_t firstKeyHash,
-              uint64_t lastKeyHash);
+              uint64_t lastKeyHash,
+              const ProtoBuf::MasterRecoveryInfo masterRecoveryInfo);
 
     /// Shared RAMCloud information.
     Context *context;
@@ -204,23 +213,24 @@ class Migration : public Task {
 
     Status status;
 
+    int migrateSuccessful;
+
     void startBackups();
 
-    void startMasters();
+    void startMaster();
 
     void broadcastMigrationComplete();
 
-    vector<WireFormat::Recover::Replica> replicaMap;
+    vector<WireFormat::MigrationRecover::Replica> replicaMap;
     uint32_t numPartitions;
 
   PUBLIC:
     MigrationInternal::BackupStartTask::TestingCallback *
         testingBackupStartTaskSendCallback;
-
     MigrationInternal::MasterStartTaskTestingCallback *
         testingMasterStartTaskSendCallback;
-//    MigrationInternal::BackupEndTaskTestingCallback *
-//        testingBackupEndTaskSendCallback;
+    MigrationInternal::BackupEndTaskTestingCallback *
+        testingBackupEndTaskSendCallback;
     uint32_t testingFailRecoveryMasters;
 
     friend class MigrationInternal::BackupStartTask;
