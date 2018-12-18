@@ -4057,47 +4057,101 @@ void MasterService::migrateRecover(
     WireFormat::MigrationRecover::Response *respHdr,
     Service::Rpc *rpc)
 {
+    ReplicatedSegment::recoveryStart = Cycles::rdtsc();
+    CycleCounter<RawMetric> recoveryTicks(&metrics->master.recoveryTicks);
+    metrics->master.recoveryCount++;
+    metrics->master.replicas = objectManager.getReplicaManager()->numReplicas;
+
     uint64_t recoveryId = reqHdr->migrationId;
     ServerId targetServerId(reqHdr->targetServerId);
-    uint64_t partitionId = reqHdr->partitionId;
-    if (partitionId == ~0u)
-        RAMCLOUD_DIE (
-            "Recovery master %s got super secret partition id; killing self.",
-            serverId.toString().c_str());
-    ProtoBuf::MigrationPartition migrationPartition;
-    ProtoBuf::parseFromResponse(rpc->requestPayload, sizeof(*reqHdr),
-                                reqHdr->tabletsLength, &migrationPartition);
 
-    uint32_t offset = sizeof32(*reqHdr) + reqHdr->tabletsLength;
+    uint32_t offset = sizeof32(*reqHdr);
     vector<Replica> replicas;
     replicas.reserve(reqHdr->numReplicas);
     for (uint32_t i = 0; i < reqHdr->numReplicas; ++i) {
-        const WireFormat
-        ::MigrationRecover::Replica *replicaLocation =
+        const WireFormat::MigrationRecover::Replica *replicaLocation =
             rpc->requestPayload->
                 getOffset<WireFormat::MigrationRecover::Replica>(offset);
         offset += sizeof32(WireFormat::MigrationRecover::Replica);
         Replica replica(replicaLocation->backupId, replicaLocation->segmentId);
         replicas.push_back(replica);
     }
-    RAMCLOUD_LOG(DEBUG, "Starting recovery %lu for crashed master %s; "
-                        "recovering partition %lu (see user_data) of the following "
-                        "partitions:\n%s",
-                 recoveryId, targetServerId.toString().c_str(), partitionId,
-                 migrationPartition.DebugString().c_str());
+    RAMCLOUD_LOG(DEBUG, "Starting migration %lu for crashed master %s; ",
+                 recoveryId, targetServerId.toString().c_str());
     rpc->sendReply();
-
 
     GetLeaseInfoRpc getLeaseInfoRpc(context, 0);
 
-    for (const ProtoBuf::Tablets::Tablet &newTablet:migrationPartition.tablet()) {
-        newTablet.state();
+    bool added = tabletManager.addTablet(reqHdr->tableId,
+                                         reqHdr->firstKeyHash,
+                                         reqHdr->lastKeyHash,
+                                         TabletManager::NOT_READY);
+    if (!added) {
+        throw Exception(HERE,
+                        format("Cannot recover tablet that overlaps "
+                               "an already existing one (tablet to recover: %lu "
+                               "range [0x%lx,0x%lx], current tablet map: %s)",
+                               reqHdr->tableId,
+                               reqHdr->firstKeyHash, reqHdr->lastKeyHash,
+                               tabletManager.toString().c_str()));
+    } else {
+        TableStats::addKeyHashRange(&masterTableMetadata,
+                                    reqHdr->tableId,
+                                    reqHdr->firstKeyHash, reqHdr->lastKeyHash);
+    }
+
+    WireFormat::ClientLease clientLease = getLeaseInfoRpc.wait();
+    clusterClock.updateClock(ClusterTime(clientLease.timestamp));
+
+//    LogPosition headOfLog = objectManager.getLog()->rollHeadOver();
+
+    bool successful = false;
+    try {
+        migrateRecover(recoveryId, ServerId(reqHdr->sourceServerId), replicas);
+        successful = true;
+    } catch (const SegmentRecoveryFailedException &e) {
+        // Recovery wasn't successful.
+    } catch (const OutOfSpaceException &e) {
+        // Recovery wasn't successful.
+    } catch (const Exception &e) {
+            LOG(ERROR, "Unexpected exception during recovery: %s",
+                e.message.c_str());
+    } catch (const ClientException &e) {
+            LOG(ERROR, "Unexpected ClientException during recovery: %s",
+                statusToString(e.status));
+    }
+    bool cancelRecovery = CoordinatorClient::migrationMasterFinished(
+        context, recoveryId, serverId, successful);
+    if (!cancelRecovery) {
+        // Re-grab all transaction locks.
+        transactionManager.regrabLocksAfterRecovery(&objectManager);
+        bool changed = tabletManager.changeState(
+            reqHdr->tableId,
+            reqHdr->firstKeyHash, reqHdr->lastKeyHash,
+            TabletManager::NOT_READY, TabletManager::NORMAL);
+        if (!changed) {
+            throw FatalError(
+                HERE, format("Could not change recovering "
+                             "tablet's state to NORMAL (%lu range [%lu,%lu])",
+                             reqHdr->tableId,
+                             reqHdr->firstKeyHash,
+                             reqHdr->lastKeyHash));
+         }
+    } else {
+        bool removed = tabletManager.deleteTablet(
+            reqHdr->tableId, reqHdr->firstKeyHash, reqHdr->lastKeyHash);
+        if (removed) {
+            TableStats::deleteKeyHashRange(
+                &masterTableMetadata, reqHdr->tableId,
+                reqHdr->firstKeyHash, reqHdr->lastKeyHash);
+        }
+        objectManager.removeOrphanedObjects();
+        transactionManager.removeOrphanedOps();
     }
 }
 
 void MasterService::migrateRecover(uint64_t migrationId, ServerId sourceId,
-                                   vector<MasterService::Replica> &replicas,
-                                   std::unordered_map<uint64_t, uint64_t> &nextNodeIdMap)
+                                   vector<MasterService::Replica> &replicas)
 {
     ObjectManager::TombstoneProtector p(&objectManager);
     uint64_t usefulTime = 0;
@@ -4236,7 +4290,7 @@ void MasterService::migrateRecover(uint64_t migrationId, ServerId sourceId,
                                                         ReplicatedSegment::recoveryStart),
                                  task->replica.segmentId, responseLen);
                 }
-                objectManager.replaySegment(&sideLog, it, &nextNodeIdMap);
+                objectManager.replaySegment(&sideLog, it);
                 usefulTime += Cycles::rdtsc() - startUseful;
                 TEST_LOG("Segment %lu replay complete",
                          task->replica.segmentId);

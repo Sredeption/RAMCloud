@@ -201,11 +201,16 @@ class PrepForIndexletMigrationRpc : public ServerIdRpcWrapper {
 
 class MigrationRecoverRpc : public ServerIdRpcWrapper {
   public:
-    MigrationRecoverRpc(Context *context, ServerId serverId,
-                        uint64_t recoveryId,
-                        ServerId targetServerId,
-                        const WireFormat::MigrationRecover::Replica *replicas,
-                        uint32_t numReplicas);
+    MigrationRecoverRpc(
+        Context *context, ServerId serverId,
+        uint64_t migrationId,
+        ServerId sourceServerId,
+        ServerId targetServerId,
+        uint64_t tableId,
+        uint64_t firstKeyHash,
+        uint64_t lastKeyHash,
+        const WireFormat::MigrationRecover::Replica *replicas,
+        uint32_t numReplicas);
 
     ~MigrationRecoverRpc()
     {}

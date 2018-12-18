@@ -496,8 +496,7 @@ class MasterService : public Service {
                         Rpc *rpc);
     void migrateRecover(uint64_t migrationId,
                         ServerId sourceId,
-                        vector<Replica> &replicas,
-                        std::unordered_map<uint64_t, uint64_t> &nextNodeIdMap);
+                        vector<Replica> &replicas);
     friend void recoveryCleanup(uint64_t maybeTomb, void *cookie);
     friend void removeObjectIfFromUnknownTablet(uint64_t reference,
                 void *cookie);

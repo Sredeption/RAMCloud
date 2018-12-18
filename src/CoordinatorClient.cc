@@ -930,4 +930,38 @@ MigrationInitRpc::MigrationInitRpc(Context *context, ServerId sourceId,
     send();
 }
 
+bool
+CoordinatorClient::migrationMasterFinished(Context *context, uint64_t migrationId,
+                                        ServerId targetServerId,
+                                        bool successful)
+{
+    MigrationMasterFinishedRpc rpc(context, migrationId, targetServerId,
+                                   successful);
+    return rpc.wait();
+}
+
+MigrationMasterFinishedRpc::MigrationMasterFinishedRpc(
+    Context *context, uint64_t migrationId,
+    ServerId targetServerId, bool successful)
+    : CoordinatorRpcWrapper(context,
+                            sizeof(WireFormat::RecoveryMasterFinished::Response))
+{
+    WireFormat::MigrationMasterFinished::Request *reqHdr(
+        allocHeader<WireFormat::MigrationMasterFinished>());
+    reqHdr->migrationId = migrationId;
+    reqHdr->targetId = targetServerId.getId();
+    reqHdr->successful = successful;
+    send();
+}
+
+bool
+MigrationMasterFinishedRpc::wait()
+{
+    waitInternal(context->dispatch);
+    const WireFormat::MigrationMasterFinished::Response *respHdr(
+        getResponseHeader<WireFormat::MigrationMasterFinished>());
+    if (respHdr->common.status != STATUS_OK)
+        ClientException::throwException(HERE, respHdr->common.status);
+    return respHdr->cancelRecovery;
+}
 } // namespace RAMCloud

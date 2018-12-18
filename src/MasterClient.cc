@@ -699,18 +699,27 @@ RecoverRpc::RecoverRpc(Context* context, ServerId serverId,
     send();
 }
 
-MigrationRecoverRpc::MigrationRecoverRpc(Context *context, ServerId serverId,
-                                         uint64_t recoveryId,
-                                         ServerId targetServerId,
-                                         const WireFormat::MigrationRecover::Replica *replicas,
-                                         uint32_t numReplicas)
+MigrationRecoverRpc::MigrationRecoverRpc(
+    Context *context, ServerId serverId,
+    uint64_t migrationId,
+    ServerId sourceServerId,
+    ServerId targetServerId,
+    uint64_t tableId,
+    uint64_t firstKeyHash,
+    uint64_t lastKeyHash,
+    const WireFormat::MigrationRecover::Replica *replicas,
+    uint32_t numReplicas)
     : ServerIdRpcWrapper(context, serverId,
                          sizeof(WireFormat::MigrationRecover::Response))
 {
     WireFormat::MigrationRecover::Request *reqHdr(
         allocHeader<WireFormat::MigrationRecover>(serverId));
-    reqHdr->migrationId = recoveryId;
+    reqHdr->migrationId = migrationId;
+    reqHdr->sourceServerId = sourceServerId.getId();
     reqHdr->targetServerId = targetServerId.getId();
+    reqHdr->tableId = tableId;
+    reqHdr->firstKeyHash = firstKeyHash;
+    reqHdr->lastKeyHash = lastKeyHash;
     reqHdr->numReplicas = numReplicas;
     request.append(replicas,
                    downCast<uint32_t>(sizeof(replicas[0])) * numReplicas);

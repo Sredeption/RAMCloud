@@ -436,7 +436,11 @@ struct MasterStartTask {
             rpc.construct(migration.context,
                           serverId,
                           migration.migrationId,
+                          migration.sourceServerId,
                           migration.targetServerId,
+                          migration.tableId,
+                          migration.firstKeyHash,
+                          migration.lastKeyHash,
                           replicaMap.data(),
                           downCast<uint32_t>(replicaMap.size()));
             if (migration.testingFailRecoveryMasters > 0) {

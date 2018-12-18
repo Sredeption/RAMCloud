@@ -136,7 +136,8 @@ enum Opcode {
     MIGRATION_INIT              = 84,
     MIGRATION_RECOVER           = 85,
     MIGRATION_BACKUPCOMPLETE    = 86,
-    ILLEGAL_RPC_TYPE            = 87, // 1 + the highest legitimate Opcode
+    MIGRATION_MASTERFINISH      = 87,
+    ILLEGAL_RPC_TYPE            = 88, // 1 + the highest legitimate Opcode
 };
 
 /**
@@ -1056,12 +1057,11 @@ struct MigrationRecover {
     struct Request {
         RequestCommonWithId common;
         uint64_t migrationId;
+        uint64_t sourceServerId;
         uint64_t targetServerId;
-        uint64_t partitionId;
-        uint32_t tabletsLength;    // Number of bytes in the tablet map.
-        // The bytes of the tablet map follow
-        // immediately after this header. See
-        // ProtoBuf::Tablets.
+        uint64_t tableId;           // TabletId of the tablet to migrate.
+        uint64_t firstKeyHash;      // First key of the tablet to migrate.
+        uint64_t lastKeyHash;       // Last key of the tablet to migrate.
         uint32_t numReplicas;      // Number of Replica entries in the replica
         // list. The bytes of the replica list
         // follow after the bytes for the Tablets.
@@ -1184,6 +1184,21 @@ struct MigrationBackupComplete {
     } __attribute__((packed));
     struct Response {
         ResponseCommon common;
+    } __attribute__((packed));
+};
+
+struct MigrationMasterFinished {
+    static const Opcode opcode = MIGRATION_MASTERFINISH;
+    static const ServiceType service = COORDINATOR_SERVICE;
+    struct Request {
+        RequestCommon common;
+        uint64_t migrationId;
+        uint64_t targetId;
+        bool successful;
+    } __attribute__((packed));
+    struct Response {
+        ResponseCommon common;
+        bool cancelRecovery;
     } __attribute__((packed));
 };
 

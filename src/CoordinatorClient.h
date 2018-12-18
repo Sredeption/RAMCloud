@@ -77,7 +77,9 @@ class CoordinatorClient {
     static void migrationInit(Context *context, ServerId sourceId,
                               ServerId targetId, uint64_t tableId,
                               uint64_t firstKeyHash, uint64_t lastKeyHash);
-
+    static bool migrationMasterFinished(Context *context, uint64_t migrationId,
+                                        ServerId targetServerId,
+                                        bool successful);
   private:
     CoordinatorClient();
 };
@@ -197,6 +199,20 @@ class MigrationInitRpc : public CoordinatorRpcWrapper {
 
   PRIVATE:
     DISALLOW_COPY_AND_ASSIGN(MigrationInitRpc);
+};
+
+class MigrationMasterFinishedRpc : public CoordinatorRpcWrapper {
+  public:
+    MigrationMasterFinishedRpc(Context *context, uint64_t migrationId,
+                               ServerId targetServerId, bool successful);
+
+    ~MigrationMasterFinishedRpc()
+    {}
+
+    bool wait();
+
+  PRIVATE:
+    DISALLOW_COPY_AND_ASSIGN(MigrationMasterFinishedRpc);
 };
 
 /**

@@ -4897,8 +4897,7 @@ TEST_F(MasterMigrationTest, recover)
 
     MockRandom __(1); // triggers deterministic rand().
     TestLog::Enable _("replaySegment", "migrateRecover", NULL);
-    std::unordered_map<uint64_t, uint64_t> nextNodeIdMap;
-    master->migrateRecover(456lu, sourceId, replicas, nextNodeIdMap);
+    master->migrateRecover(456lu, sourceId, replicas);
     EXPECT_EQ(0U, TestLog::get().find(
         "migrateRecover: Migrating master 99.0, 3 replicas "
         "available"));
