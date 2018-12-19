@@ -74,7 +74,7 @@ class CoordinatorClient {
             const ProtoBuf::MasterRecoveryInfo& recoveryInfo);
     static void verifyMembership(Context* context, ServerId serverId,
             bool suicideOnFailure = true);
-    static void migrationInit(Context *context, ServerId sourceId,
+    static void migrationInit(Context *context,
                               ServerId targetId, uint64_t tableId,
                               uint64_t firstKeyHash, uint64_t lastKeyHash);
     static bool migrationMasterFinished(Context *context, uint64_t migrationId,
@@ -187,7 +187,7 @@ class HintServerCrashedRpc : public CoordinatorRpcWrapper {
 
 class MigrationInitRpc : public CoordinatorRpcWrapper {
   public:
-    MigrationInitRpc(Context *context, ServerId sourceId, ServerId targetId,
+    MigrationInitRpc(Context *context, ServerId targetId,
                      uint64_t tableId, uint64_t firstKeyHash,
                      uint64_t lastKeyHash);
 

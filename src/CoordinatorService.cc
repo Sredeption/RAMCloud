@@ -213,6 +213,10 @@ CoordinatorService::dispatch(WireFormat::Opcode opcode,
             callHandler<WireFormat::MigrationInit, CoordinatorService,
                 &CoordinatorService::migrationInit>(rpc);
             break;
+        case WireFormat::MigrationQuery::opcode:
+            callHandler<WireFormat::MigrationQuery, CoordinatorService,
+                &CoordinatorService::migrationQuery>(rpc);
+            break;
         case WireFormat::ReassignTabletOwnership::opcode:
             callHandler<WireFormat::ReassignTabletOwnership, CoordinatorService,
                         &CoordinatorService::reassignTabletOwnership>(rpc);
@@ -550,7 +554,8 @@ void CoordinatorService::migrationInit(
     WireFormat::MigrationInit::Response *respHdr,
     Rpc *rpc)
 {
-    ServerId sourceServerId(reqHdr->sourceId);
+    ServerId sourceServerId =
+        tableManager.getTablet(reqHdr->tableId, reqHdr->firstKeyHash).serverId;
     ProtoBuf::MasterRecoveryInfo masterRecoveryInfo =
         serverList[sourceServerId].masterRecoveryInfo;
     migrationManager.startMigration(sourceServerId,
@@ -559,6 +564,12 @@ void CoordinatorService::migrationInit(
                                     reqHdr->lastKeyHash, masterRecoveryInfo);
 }
 
+void CoordinatorService::migrationQuery(
+    const WireFormat::MigrationQuery::Request *reqHdr,
+    WireFormat::MigrationQuery::Response *respHdr, Service::Rpc *rpc)
+{
+    respHdr->finish= migrationManager.testFinish();
+}
 /**
  * Handle the REASSIGN_TABLET_OWNER RPC.
  *

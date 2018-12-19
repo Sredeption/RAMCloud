@@ -490,10 +490,11 @@ TEST_F(CoordinatorServiceTest, migration)
 {
     ServerId sourceId(12);
     ServerId targetId(22);
-    uint64_t tableId = 12;
+    uint64_t tableId = ramcloud->createTable("12");
     uint64_t firstKeyHash = 23;
     uint64_t lastKeyHash = 12266;
-    CoordinatorClient::migrationInit(&context, sourceId, targetId, tableId,
+
+    CoordinatorClient::migrationInit(&context, targetId, tableId,
                                      firstKeyHash, lastKeyHash);
 }
 

@@ -40,6 +40,8 @@ class MigrationManager
 
     virtual void migrationFinished(Migration *migration);
 
+    bool testFinish();
+
   PRIVATE:
 
     void main();

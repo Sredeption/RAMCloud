@@ -4,6 +4,10 @@ $(APPOBJDIR)/%.o: $(TOP)/apps/%.cc $(AUTO_GEN_HEADERS)
 	@mkdir -p $(@D)
 	$(call run-cxx,$@,$<, -fPIC)
 
+$(APPOBJDIR)/backupMigration: $(APPOBJDIR)/BackupMigrationMain.o $(OBJDIR)/OptionParser.o $(OBJDIR)/libramcloud.a
+	@mkdir -p $(@D)
+	$(CXX) $(LDFLAGS) -o $@ $^ -L$(OBJDIR) $(LIBS)
+
 $(APPOBJDIR)/backuprecovery: $(APPOBJDIR)/BackupRecoveryMain.o $(OBJDIR)/OptionParser.o $(OBJDIR)/libramcloud.a
 	@mkdir -p $(@D)
 	$(CXX) $(LDFLAGS) -o $@ $^ -L$(OBJDIR) $(LIBS)
@@ -38,7 +42,8 @@ $(APPOBJDIR)/dumpPerfStats: $(APPOBJDIR)/DumpPerfStats.o $(OBJDIR)/OptionParser.
 
 .PHONY: apps
 
-apps: $(APPOBJDIR)/backuprecovery \
+apps: $(APPOBJDIR)/backupMigration \
+      $(APPOBJDIR)/backuprecovery \
       $(APPOBJDIR)/client \
       $(APPOBJDIR)/ClusterPerf \
       $(APPOBJDIR)/CoordinatorCrashRecovery \

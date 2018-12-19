@@ -273,4 +273,9 @@ void MigrationManager::migrationFinished(Migration *migration)
     delete migration;
 }
 
+bool MigrationManager::testFinish()
+{
+    return activeMigrations.empty();
+}
+
 }

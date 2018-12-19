@@ -1870,6 +1870,20 @@ RamCloud::migrateTablet(uint64_t tableId, uint64_t firstKeyHash,
     rpc.wait();
 }
 
+void RamCloud::backupMigrate(uint64_t tableId, uint64_t firstKeyHash,
+                             uint64_t lastKeyHash, ServerId newOwnerMasterId)
+{
+    BackupMigrationRpc rpc(this, newOwnerMasterId, tableId, firstKeyHash,
+                           lastKeyHash);
+    rpc.wait();
+}
+
+
+bool RamCloud::migrationQuery(uint64_t migrationId)
+{
+    MigrationQueryRpc rpc(this, migrationId);
+    return  rpc.wait();
+}
 /**
  * Constructor for MigrateTabletRpc: initiates an RPC in the same way as
  * #RamCloud::migrateTablet, but returns once the RPC has been initiated, without
@@ -1901,6 +1915,41 @@ MigrateTabletRpc::MigrateTabletRpc(RamCloud* ramcloud, uint64_t tableId,
     send();
 }
 
+BackupMigrationRpc::BackupMigrationRpc(RamCloud *ramcloud, ServerId targetId,
+                                   uint64_t tableId, uint64_t firstKeyHash,
+                                   uint64_t lastKeyHash)
+    : CoordinatorRpcWrapper(ramcloud->clientContext,
+                            sizeof(WireFormat::MigrationInit::Response))
+{
+    WireFormat::MigrationInit::Request *reqHdr(
+        allocHeader<WireFormat::MigrationInit>());
+
+    reqHdr->targetId = targetId.getId();
+    reqHdr->tableId = tableId;
+    reqHdr->firstKeyHash = firstKeyHash;
+    reqHdr->lastKeyHash = lastKeyHash;
+
+    send();
+}
+
+MigrationQueryRpc::MigrationQueryRpc(RamCloud *ramcloud, uint64_t migrationId)
+    : CoordinatorRpcWrapper(ramcloud->clientContext,
+                            sizeof(WireFormat::MigrationQuery::Response))
+{
+    WireFormat::MigrationQuery::Request *reqHdr(
+        allocHeader<WireFormat::MigrationQuery>());
+    reqHdr->migrationId = migrationId;
+
+    send();
+}
+
+bool MigrationQueryRpc::wait()
+{
+    simpleWait(context);
+    const WireFormat::MigrationQuery::Response *respHdr(
+        getResponseHeader<WireFormat::MigrationQuery>());
+    return respHdr->finish;
+}
 /**
  * Increment multiple objects. This method has two performance advantages over
  * calling RamCloud::increment separately for each object:

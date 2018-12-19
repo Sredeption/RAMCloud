@@ -849,12 +849,12 @@ CoordinatorClient::verifyMembership(
     rpc.wait(suicideOnFailure);
 }
 
-void CoordinatorClient::migrationInit(Context *context, ServerId sourceId,
+void CoordinatorClient::migrationInit(Context *context,
                                       ServerId targetId, uint64_t tableId,
                                       uint64_t firstKeyHash,
                                       uint64_t lastKeyHash)
 {
-    MigrationInitRpc rpc(context, sourceId, targetId, tableId, firstKeyHash,
+    MigrationInitRpc rpc(context, targetId, tableId, firstKeyHash,
                          lastKeyHash);
     rpc.wait();
 }
@@ -911,17 +911,15 @@ VerifyMembershipRpc::wait(bool suicideOnFailure)
     }
 }
 
-MigrationInitRpc::MigrationInitRpc(Context *context, ServerId sourceId,
-                                   ServerId targetId, uint64_t tableId,
-                                   uint64_t firstKeyHash, uint64_t lastKeyHash)
+MigrationInitRpc::MigrationInitRpc(Context *context, ServerId targetId,
+                                   uint64_t tableId, uint64_t firstKeyHash,
+                                   uint64_t lastKeyHash)
     : CoordinatorRpcWrapper(context,
                             sizeof(WireFormat::MigrationInit::Response))
 {
-    ProtoBuf::MigrationPartition migrationPartition;
     WireFormat::MigrationInit::Request *reqHdr(
         allocHeader<WireFormat::MigrationInit>());
 
-    reqHdr->sourceId = sourceId.getId();
     reqHdr->targetId = targetId.getId();
     reqHdr->tableId = tableId;
     reqHdr->firstKeyHash = firstKeyHash;

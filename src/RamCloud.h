@@ -114,6 +114,9 @@ class RamCloud {
             uint64_t* nextKeyHash);
     void migrateTablet(uint64_t tableId, uint64_t firstKeyHash,
             uint64_t lastKeyHash, ServerId newOwnerMasterId);
+    void backupMigrate(uint64_t tableId, uint64_t firstKeyHash,
+                       uint64_t lastKeyHash, ServerId newOwnerMasterId);
+    bool migrationQuery(uint64_t migrationId);
     void multiIncrement(MultiIncrementObject* requests[], uint32_t numRequests);
     void multiRead(MultiReadObject* requests[], uint32_t numRequests);
     void multiRemove(MultiRemoveObject* requests[], uint32_t numRequests);
@@ -578,6 +581,35 @@ class MigrateTabletRpc : public ObjectRpcWrapper {
 
   PRIVATE:
     DISALLOW_COPY_AND_ASSIGN(MigrateTabletRpc);
+};
+
+class BackupMigrationRpc : public CoordinatorRpcWrapper {
+  public:
+    BackupMigrationRpc(RamCloud *ramcloud, ServerId targetId,
+                       uint64_t tableId, uint64_t firstKeyHash,
+                       uint64_t lastKeyHash);
+
+    ~ BackupMigrationRpc()
+    {}
+
+    void wait()
+    { simpleWait(context); }
+
+  PRIVATE:
+    DISALLOW_COPY_AND_ASSIGN(BackupMigrationRpc);
+};
+
+class MigrationQueryRpc : public CoordinatorRpcWrapper {
+  public:
+    MigrationQueryRpc(RamCloud *ramcloud, uint64_t migrationId);
+
+    ~ MigrationQueryRpc()
+    {}
+
+    bool wait();
+
+  PRIVATE:
+    DISALLOW_COPY_AND_ASSIGN(MigrationQueryRpc);
 };
 
 /**

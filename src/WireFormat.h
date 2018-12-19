@@ -137,7 +137,8 @@ enum Opcode {
     MIGRATION_RECOVER           = 85,
     MIGRATION_BACKUPCOMPLETE    = 86,
     MIGRATION_MASTERFINISH      = 87,
-    ILLEGAL_RPC_TYPE            = 88, // 1 + the highest legitimate Opcode
+    MIGRATION_QUERY             = 88,
+    ILLEGAL_RPC_TYPE            = 89, // 1 + the highest legitimate Opcode
 };
 
 /**
@@ -1040,7 +1041,6 @@ struct MigrationInit {
     static const ServiceType service = COORDINATOR_SERVICE;
     struct Request {
         RequestCommon common;
-        uint64_t sourceId;
         uint64_t targetId;
         uint64_t tableId;           // TabletId of the tablet to migrate.
         uint64_t firstKeyHash;      // First key of the tablet to migrate.
@@ -1199,6 +1199,20 @@ struct MigrationMasterFinished {
     struct Response {
         ResponseCommon common;
         bool cancelRecovery;
+    } __attribute__((packed));
+};
+
+struct MigrationQuery {
+    static const Opcode opcode = MIGRATION_QUERY;
+    static const ServiceType service = COORDINATOR_SERVICE;
+    struct Request {
+        RequestCommon common;
+        uint64_t migrationId;
+    } __attribute__((packed));
+    struct Response {
+        ResponseCommon common;
+        bool finish;
+        bool successful;
     } __attribute__((packed));
 };
 
