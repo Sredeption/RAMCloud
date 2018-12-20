@@ -144,7 +144,7 @@ class Migration : public Task {
         {}
     };
 
-    Migration(Context *context, TaskQueue &taskQueue,
+    Migration(Context *context, TaskQueue &taskQueue, uint64_t migrationId,
               TableManager *tableManager, MigrationTracker *tracker,
               Owner *owner, ServerId sourceServerId,
               ServerId targetServerId, uint64_t tableId, uint64_t firstKeyHash,

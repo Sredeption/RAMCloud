@@ -562,10 +562,11 @@ void CoordinatorService::migrationInit(
         tableManager.getTablet(reqHdr->tableId, reqHdr->firstKeyHash).serverId;
     ProtoBuf::MasterRecoveryInfo masterRecoveryInfo =
         serverList[sourceServerId].masterRecoveryInfo;
-    migrationManager.startMigration(sourceServerId,
-                                    ServerId(reqHdr->targetId),
-                                    reqHdr->tableId, reqHdr->firstKeyHash,
-                                    reqHdr->lastKeyHash, masterRecoveryInfo);
+    respHdr->migrationId = migrationManager.startMigration(
+        sourceServerId,
+        ServerId(reqHdr->targetId),
+        reqHdr->tableId, reqHdr->firstKeyHash,
+        reqHdr->lastKeyHash, masterRecoveryInfo);
 }
 
 
@@ -582,6 +583,7 @@ void CoordinatorService::migrationQuery(
     const WireFormat::MigrationQuery::Request *reqHdr,
     WireFormat::MigrationQuery::Response *respHdr, Service::Rpc *rpc)
 {
+    reqHdr->migrationId;
     respHdr->finish= migrationManager.testFinish();
 }
 /**

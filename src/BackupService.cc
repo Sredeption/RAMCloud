@@ -584,7 +584,6 @@ void BackupService::migrationStartReading(
     ServerId sourceServerId(reqHdr->sourceId);
     ServerId targetServerId(reqHdr->targetId);
     bool mustCreateMigration = false;
-    RAMCLOUD_LOG(NOTICE, "BackupService::migrationStartReading");
     auto migrationIt = migrations.find(reqHdr->migrationId);
     if (migrationIt == migrations.end()) {
         mustCreateMigration = true;

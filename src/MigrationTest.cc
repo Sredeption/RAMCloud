@@ -105,7 +105,7 @@ TEST_F(MigrationTest, splitTabletsNoEstimator)
         {tableId, lastKeyHash + 1, lastKeyHash + 10, sourceId, Tablet::NORMAL,
          {}});
 
-    migration.construct(&context, taskQueue, &tableManager, &tracker, own,
+    migration.construct(&context, taskQueue, 1, &tableManager, &tracker, own,
                         sourceId, targetId, tableId, firstKeyHash, lastKeyHash,
                         recoveryInfo);
 
@@ -144,7 +144,7 @@ TEST_F(MigrationTest, splitTabletsBadEstimator)
     tableManager.testAddTablet(
         {tableId, firstKeyHash, lastKeyHash, sourceId, Tablet::NORMAL, {}});
 
-    recovery.construct(&context, taskQueue, &tableManager, &tracker, own,
+    recovery.construct(&context, taskQueue, 1, &tableManager, &tracker, own,
                        sourceId, targetId, tableId, firstKeyHash, lastKeyHash,
                        recoveryInfo);
     auto tablets = tableManager.markTabletsMigration(sourceId, tableId,
@@ -186,7 +186,7 @@ TEST_F(MigrationTest, splitTabletsMultiTablet)
     tableManager.testAddTablet({tableId, 0, 9, sourceId, Tablet::NORMAL, {}});
     tableManager.testAddTablet({tableId, 10, 29, sourceId, Tablet::NORMAL, {}});
     tableManager.testAddTablet({tableId, 30, 49, sourceId, Tablet::NORMAL, {}});
-    migration.construct(&context, taskQueue, &tableManager, &tracker, own,
+    migration.construct(&context, taskQueue, 1, &tableManager, &tracker, own,
                         sourceId, targetId, tableId, 0, 29, recoveryInfo);
     auto tablets = tableManager.markTabletsMigration(sourceId, tableId, 0, 29);
 
@@ -235,7 +235,7 @@ TEST_F(MigrationTest, splitTabletsBasic)
     tableManager.testCreateTable("t1", tableId);
     tableManager.testAddTablet(
         {tableId, 1, keyHashCount, sourceId, Tablet::NORMAL, {}});
-    migration.construct(&context, taskQueue, &tableManager, &tracker, own,
+    migration.construct(&context, taskQueue, 1, &tableManager, &tracker, own,
                         sourceId, targetId, tableId, 1, keyHashCount,
                         recoveryInfo);
 
@@ -303,7 +303,7 @@ TEST_F(MigrationTest, splitTabletsByteDominated)
     tableManager.testCreateTable("t1", tableId);
     tableManager.testAddTablet(
         {tableId, 1, keyHashCount, sourceId, Tablet::NORMAL, {}});
-    recovery.construct(&context, taskQueue, &tableManager, &tracker, own,
+    recovery.construct(&context, taskQueue, 1, &tableManager, &tracker, own,
                        sourceId, targetId, tableId, 1, keyHashCount,
                        recoveryInfo);
     auto tablets = tableManager.markTabletsMigration(sourceId, tableId, 1,
@@ -341,7 +341,7 @@ TEST_F(MigrationTest, splitTabletsRecordDominated)
     tableManager.testCreateTable("t1", tableId);
     tableManager.testAddTablet(
         {tableId, 1, keyHashCount, {99, 0}, Tablet::NORMAL, {}});
-    recovery.construct(&context, taskQueue, &tableManager, &tracker, own,
+    recovery.construct(&context, taskQueue, 1, &tableManager, &tracker, own,
                        sourceId, targetId, tableId, 1, keyHashCount,
                        recoveryInfo);
     auto tablets = tableManager.markTabletsMigration(sourceId, tableId, 1,
@@ -372,33 +372,33 @@ TEST_F(MigrationTest, partitionTabletsNoEstimator)
     ServerId sourceId = {99, 0};
     ServerId targetId = {100, 0};
 
-    Tub<Migration> recovery;
+    Tub<Migration> migration;
     Migration::Owner *own = static_cast<Migration::Owner *>(NULL);
 
-    recovery.construct(&context, taskQueue, &tableManager, &tracker, own,
-                       sourceId, targetId, tableId, 0, 30, recoveryInfo);
+    migration.construct(&context, taskQueue, 1, &tableManager, &tracker, own,
+                        sourceId, targetId, tableId, 0, 30, recoveryInfo);
     auto tablets = tableManager.markTabletsMigration(sourceId, tableId, 0, 30);
-    recovery->partitionTablets(tablets, NULL);
-    EXPECT_EQ(0lu, recovery->numPartitions);
+    migration->partitionTablets(tablets, NULL);
+    EXPECT_EQ(0lu, migration->numPartitions);
 
     tableManager.testCreateTable("t", tableId);
     tableManager.testAddTablet(
         {tableId, 0, 9, sourceId, Tablet::RECOVERING, {}});
     tableManager.testAddTablet(
         {tableId, 20, 29, sourceId, Tablet::RECOVERING, {}});
-    recovery.construct(&context, taskQueue, &tableManager, &tracker, own,
-                       sourceId, targetId, tableId, 0, 30, recoveryInfo);
+    migration.construct(&context, taskQueue, 1, &tableManager, &tracker, own,
+                        sourceId, targetId, tableId, 0, 30, recoveryInfo);
     tablets = tableManager.markAllTabletsRecovering(ServerId(99));
-    recovery->partitionTablets(tablets, NULL);
-    EXPECT_EQ(2lu, recovery->numPartitions);
+    migration->partitionTablets(tablets, NULL);
+    EXPECT_EQ(2lu, migration->numPartitions);
 
     tableManager.testAddTablet(
         {tableId, 10, 19, sourceId, Tablet::RECOVERING, {}});
-    recovery.construct(&context, taskQueue, &tableManager, &tracker, own,
-                       sourceId, targetId, tableId, 0, 30, recoveryInfo);
+    migration.construct(&context, taskQueue, 1, &tableManager, &tracker, own,
+                        sourceId, targetId, tableId, 0, 30, recoveryInfo);
     tablets = tableManager.markAllTabletsRecovering(ServerId(99));
-    recovery->partitionTablets(tablets, NULL);
-    EXPECT_EQ(3lu, recovery->numPartitions);
+    migration->partitionTablets(tablets, NULL);
+    EXPECT_EQ(3lu, migration->numPartitions);
 }
 
 TEST_F(MigrationTest, partitionTabletsSplits)
@@ -416,7 +416,7 @@ TEST_F(MigrationTest, partitionTabletsSplits)
     tableManager.testAddTablet(
         {tableId, 100, 199, sourceId, Tablet::NORMAL, {}});
 
-    migration.construct(&context, taskQueue, &tableManager, &tracker, own,
+    migration.construct(&context, taskQueue, 1, &tableManager, &tracker, own,
                         sourceId, targetId, tableId, 0, 199, recoveryInfo);
     auto tablets = tableManager.markTabletsMigration(sourceId, tableId, 0, 199);
 
@@ -461,7 +461,7 @@ TEST_F(MigrationTest, partitionTabletsBasic)
         tableManager.testAddTablet(
             {tableId, i * 10, i * 10 + 9, sourceId, Tablet::NORMAL, {}});
     }
-    migration.construct(&context, taskQueue, &tableManager, &tracker, own,
+    migration.construct(&context, taskQueue, 1, &tableManager, &tracker, own,
                         sourceId, targetId, tableId, 0, 2499, recoveryInfo);
     auto tablets = tableManager.markTabletsMigration(sourceId, tableId, 0,
                                                      2499);
@@ -498,7 +498,7 @@ TEST_F(MigrationTest, partitionTabletsAllPartitionsOpen)
         tableManager.testAddTablet(
             {tableId, i * 10, i * 10 + 9, sourceId, Tablet::NORMAL, {}});
     }
-    migration.construct(&context, taskQueue, &tableManager, &tracker, own,
+    migration.construct(&context, taskQueue, 1, &tableManager, &tracker, own,
                         sourceId, targetId, tableId, 0, 199, recoveryInfo);
     auto tablets = tableManager.markTabletsMigration(sourceId, tableId, 0, 199);
 
@@ -549,7 +549,7 @@ TEST_F(MigrationTest, partitionTabletsMixed)
             {tableId, i * 10 + 3600, i * 10 + 3609,
              sourceId, Tablet::NORMAL, {}});
     }
-    migration.construct(&context, taskQueue, &tableManager, &tracker, own,
+    migration.construct(&context, taskQueue, 1, &tableManager, &tracker, own,
                         sourceId, targetId, tableId, 0, 5399, recoveryInfo);
     vector<Tablet> tablets =
         tableManager.markTabletsMigration(sourceId, tableId, 0, 5399);
@@ -617,7 +617,7 @@ TEST_F(MigrationTest, startBackups)
 
     tableManager.testCreateTable("t", tableId);
     tableManager.testAddTablet({tableId, 10, 19, sourceId, Tablet::NORMAL, {}});
-    Migration recovery(&context, taskQueue, &tableManager, &tracker, NULL,
+    Migration recovery(&context, taskQueue, 1, &tableManager, &tracker, NULL,
                        sourceId, targetId, tableId, 10, 19, recoveryInfo);
     recovery.testingBackupStartTaskSendCallback = &callback;
     recovery.startBackups();
@@ -630,7 +630,7 @@ TEST_F(MigrationTest, startBackups)
 
 TEST_F(MigrationTest, startBackupsFailureContactingSomeBackup)
 {
-    Migration recovery(&context, taskQueue, &tableManager, &tracker, NULL,
+    Migration recovery(&context, taskQueue, 1, &tableManager, &tracker, NULL,
                        ServerId(99), ServerId(100), 123, 0, 9, recoveryInfo);
     BackupStartTask task(&recovery, {2, 0});
     EXPECT_NO_THROW(task.send());
@@ -668,7 +668,7 @@ TEST_F(MigrationTest, startBackupsSecondariesEarlyInSomeList)
     addServersToTracker(3, {WireFormat::BACKUP_SERVICE});
     tableManager.testCreateTable("t", 123);
     tableManager.testAddTablet({123, 10, 19, {99, 0}, Tablet::RECOVERING, {}});
-    Migration migration(&context, taskQueue, &tableManager, &tracker, NULL,
+    Migration migration(&context, taskQueue, 1, &tableManager, &tracker, NULL,
                         ServerId(99), ServerId(100), 123, 10, 19, recoveryInfo);
     migration.testingBackupStartTaskSendCallback = &callback;
     migration.startBackups();
@@ -684,7 +684,7 @@ TEST_F(MigrationTest, startBackups_noLogDigestFound)
     addServersToTracker(3, {WireFormat::BACKUP_SERVICE});
     tableManager.testCreateTable("t", 123);
     tableManager.testAddTablet({123, 10, 19, {99, 0}, Tablet::RECOVERING, {}});
-    Migration migration(&context, taskQueue, &tableManager, &tracker, NULL,
+    Migration migration(&context, taskQueue, 1, &tableManager, &tracker, NULL,
                         ServerId(99), ServerId(100), 123, 10, 19, recoveryInfo);
     migration.testingBackupStartTaskSendCallback = &callback;
     TestLog::Enable _("startBackups");
@@ -709,7 +709,7 @@ TEST_F(MigrationTest, startBackups_someReplicasMissing)
     addServersToTracker(3, {WireFormat::BACKUP_SERVICE});
     tableManager.testCreateTable("t", 123);
     tableManager.testAddTablet({123, 10, 19, {99, 0}, Tablet::RECOVERING, {}});
-    Migration migration(&context, taskQueue, &tableManager, &tracker, NULL,
+    Migration migration(&context, taskQueue, 1, &tableManager, &tracker, NULL,
                         ServerId(99), ServerId(100), 123, 10, 19, recoveryInfo);
     migration.testingBackupStartTaskSendCallback = &callback;
     TestLog::Enable _("startBackups");
@@ -726,7 +726,7 @@ TEST_F(MigrationTest, BackupStartTask_filterOutInvalidReplicas)
 {
     recoveryInfo.set_min_open_segment_id(10);
     recoveryInfo.set_min_open_segment_epoch(1);
-    Migration migration(&context, taskQueue, &tableManager, &tracker, NULL,
+    Migration migration(&context, taskQueue, 1, &tableManager, &tracker, NULL,
                         ServerId(99), ServerId(100), 123, 10, 19, recoveryInfo);
     BackupStartTask task(&migration, {2, 0});
     auto &segments = task.result.replicas;
@@ -771,7 +771,7 @@ TEST_F(MigrationTest, verifyLogComplete)
 
 
     Tub<BackupStartTask> tasks[1];
-    Migration migration(&context, taskQueue, &tableManager, &tracker, NULL,
+    Migration migration(&context, taskQueue, 1, &tableManager, &tracker, NULL,
                         ServerId(99), ServerId(100), 123, 10, 19, recoveryInfo);
     tasks[0].construct(&migration, ServerId(2, 0));
     auto &segments = tasks[0]->result.replicas;
@@ -796,7 +796,7 @@ TEST_F(MigrationTest, findLogDigest)
     recoveryInfo.set_min_open_segment_id(10);
     recoveryInfo.set_min_open_segment_epoch(1);
     Tub<BackupStartTask> tasks[2];
-    Migration migration(&context, taskQueue, &tableManager, &tracker, NULL,
+    Migration migration(&context, taskQueue, 1, &tableManager, &tracker, NULL,
                         ServerId(99), ServerId(100), 123, 10, 19, recoveryInfo);
     tasks[0].construct(&migration, ServerId(2, 0));
     tasks[1].construct(&migration, ServerId(3, 0));
@@ -846,7 +846,7 @@ TEST_F(MigrationTest, findLogDigest)
 TEST_F(MigrationTest, buildReplicaMap)
 {
     Tub<BackupStartTask> tasks[2];
-    Migration migration(&context, taskQueue, &tableManager, &tracker, NULL,
+    Migration migration(&context, taskQueue, 1, &tableManager, &tracker, NULL,
                         ServerId(99), ServerId(100), 123, 10, 19, recoveryInfo);
     tasks[0].construct(&migration, ServerId(2, 0));
     auto *result = &tasks[0]->result;
@@ -887,7 +887,7 @@ TEST_F(MigrationTest, buildReplicaMap)
 TEST_F(MigrationTest, buildReplicaMap_badReplicas)
 {
     Tub<BackupStartTask> tasks[1];
-    Migration migration(&context, taskQueue, &tableManager, &tracker, NULL,
+    Migration migration(&context, taskQueue, 1, &tableManager, &tracker, NULL,
                         ServerId(99), ServerId(100), 123, 10, 19, recoveryInfo);
     tasks[0].construct(&migration, ServerId(2, 0));
     auto *result = &tasks[0]->result;
@@ -932,7 +932,7 @@ TEST_F(MigrationTest, startMaster)
     tableManager.testAddTablet({123, 0, 9, {99, 0}, Tablet::NORMAL, {}});
     tableManager.testAddTablet({123, 20, 29, {99, 0}, Tablet::NORMAL, {}});
     tableManager.testAddTablet({123, 10, 19, {99, 0}, Tablet::NORMAL, {}});
-    Migration migration(&context, taskQueue, &tableManager, &tracker, NULL,
+    Migration migration(&context, taskQueue, 1, &tableManager, &tracker, NULL,
                         ServerId(1, 0), ServerId(2, 0), 123, 10, 19,
                         recoveryInfo);
     migration.partitionTablets(
@@ -974,7 +974,7 @@ TEST_F(MigrationTest, startRecoveryMasters_tooFewIdleMasters)
     tableManager.testAddTablet({123, 0, 9, {99, 0}, Tablet::NORMAL, {}});
     tableManager.testAddTablet({123, 20, 29, {99, 0}, Tablet::NORMAL, {}});
     tableManager.testAddTablet({123, 10, 19, {99, 0}, Tablet::NORMAL, {}});
-    Migration migration(&context, taskQueue, &tableManager, &tracker, NULL,
+    Migration migration(&context, taskQueue, 1, &tableManager, &tracker, NULL,
                         ServerId(1, 0), ServerId(2, 0), 123, 10, 19,
                         recoveryInfo);
     // Hack 'tablets' to get the first two tablets on the same server.
@@ -1001,11 +1001,11 @@ TEST_F(MigrationTest, broadcastRecoveryComplete)
             ++callCount;
         }
     } callback;
-    Migration recovery(&context, taskQueue, &tableManager, &tracker, NULL,
-                       ServerId(1, 0), ServerId(2, 0), 123, 10, 19,
-                       recoveryInfo);
-    recovery.testingBackupEndTaskSendCallback = &callback;
-    recovery.broadcastMigrationComplete();
+    Migration migration(&context, taskQueue, 1, &tableManager, &tracker, NULL,
+                        ServerId(1, 0), ServerId(2, 0), 123, 10, 19,
+                        recoveryInfo);
+    migration.testingBackupEndTaskSendCallback = &callback;
+    migration.broadcastMigrationComplete();
     EXPECT_EQ(3, callback.callCount);
 }
 }

@@ -23,6 +23,7 @@
 namespace RAMCloud {
 
 Migration::Migration(Context *context, TaskQueue &taskQueue,
+                     uint64_t migrationId,
                      TableManager *tableManager, MigrationTracker *tracker,
                      Owner *owner, ServerId sourceServerId,
                      ServerId targetServerId, uint64_t tableId,
@@ -40,7 +41,7 @@ Migration::Migration(Context *context, TaskQueue &taskQueue,
       tableManager(tableManager),
       tracker(tracker),
       owner(owner),
-      migrationId(generateRandom()),
+      migrationId(migrationId),
       status(START_RECOVERY_ON_BACKUPS),
       migrateSuccessful(0),
       replicaMap(),

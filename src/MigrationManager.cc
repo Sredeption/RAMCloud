@@ -67,11 +67,13 @@ class EnqueueMigrationTask : public Task {
   PUBLIC:
 
     EnqueueMigrationTask(MigrationManager &migrationManager,
+                         uint64_t migrationId,
                          ServerId sourceServerId, ServerId targetServerId,
                          uint64_t tableId, uint64_t firstKeyHash,
                          uint64_t lastKeyHash,
                          const ProtoBuf::MasterRecoveryInfo &masterRecoveryInfo)
-        : Task(migrationManager.taskQueue), mgr(migrationManager),
+        : Task(migrationManager.taskQueue),
+          mgr(migrationManager), migrationId(migrationId),
           sourceServerId(sourceServerId), targetServerId(targetServerId),
           tableId(tableId), firstKeyHash(firstKeyHash),
           lastKeyHash(lastKeyHash),
@@ -81,6 +83,7 @@ class EnqueueMigrationTask : public Task {
     void performTask()
     {
         mgr.waitingMigrations.push(new Migration(mgr.context, mgr.taskQueue,
+                                                 migrationId,
                                                  &mgr.tableManager,
                                                  &mgr.tracker,
                                                  &mgr, sourceServerId,
@@ -93,6 +96,7 @@ class EnqueueMigrationTask : public Task {
 
   PRIVATE:
     MigrationManager &mgr;
+    uint64_t migrationId;
     ServerId sourceServerId;
     ServerId targetServerId;
     uint64_t tableId;
@@ -201,7 +205,8 @@ MigrationManager::MigrationManager(Context *context, TableManager &tableManager,
       runtimeOptions(runtimeOptions), thread(), waitingMigrations(),
       activeMigrations(), maxActiveMigrations(1u), taskQueue(),
       tracker(context, this), doNotStartMigrations(false),
-      startMigrationsEvenIfNoThread(false), skipRescheduleDelay(false)
+      startMigrationsEvenIfNoThread(false), skipRescheduleDelay(false),
+      mutex(), migrationNumber(0)
 {
 
 }
@@ -223,19 +228,22 @@ try
     throw;
 }
 
-void MigrationManager::startMigration(ServerId sourceServerId,
-                                      ServerId targetServerId,
-                                      uint64_t tableId, uint64_t firstKeyHash,
-                                      uint64_t lastKeyHash,
-                                      const ProtoBuf::MasterRecoveryInfo &masterRecoveryInfo)
+uint64_t MigrationManager::startMigration(
+    ServerId sourceServerId,
+    ServerId targetServerId,
+    uint64_t tableId,
+    uint64_t firstKeyHash,
+    uint64_t lastKeyHash,
+    const ProtoBuf::MasterRecoveryInfo &masterRecoveryInfo)
 {
+    uint64_t migrationId;
     if (!thread && !startMigrationsEvenIfNoThread) {
         // Recovery has not yet been officially enabled, so don't do
         // anything (when the start method is invoked, it will
         // automatically start recovery of all servers in the crashed state).
         TEST_LOG("Migration requested for %s",
                  targetServerId.toString().c_str());
-        return;
+        return 0;
     }
     RAMCLOUD_LOG(NOTICE, "Scheduling migration from %s to %s for "
                          "tablet(id:%lu, first:%lx, last:%lx)",
@@ -245,11 +253,17 @@ void MigrationManager::startMigration(ServerId sourceServerId,
     if (doNotStartMigrations) {
         TEST_LOG("migration targetServerId: %s",
                  targetServerId.toString().c_str());
-        return;
+        return 0;
     }
-    (new MigrationManagerInternal::EnqueueMigrationTask(
-        *this, sourceServerId, targetServerId, tableId, firstKeyHash,
-        lastKeyHash, masterRecoveryInfo))->schedule();
+    {
+        std::unique_lock<std::mutex> _(mutex);
+        migrationNumber++;
+        migrationId = migrationNumber;
+        (new MigrationManagerInternal::EnqueueMigrationTask(
+            *this, migrationId, sourceServerId, targetServerId, tableId,
+            firstKeyHash, lastKeyHash, masterRecoveryInfo))->schedule();
+    }
+    return migrationId;
 }
 
 
@@ -262,9 +276,9 @@ bool MigrationManager::migrationMasterFinished(uint64_t recoveryId,
     task.schedule();
     bool shouldAbort = task.wait();
     if (shouldAbort)
-        LOG(NOTICE, "Asking recovery master to abort its recovery");
+        RAMCLOUD_LOG (NOTICE, "Asking recovery master to abort its recovery");
     else
-        LOG(NOTICE, "Notifying recovery master ok to serve tablets");
+        RAMCLOUD_LOG (NOTICE, "Notifying recovery master ok to serve tablets");
     return shouldAbort;
 }
 

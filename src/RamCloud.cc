@@ -1870,12 +1870,12 @@ RamCloud::migrateTablet(uint64_t tableId, uint64_t firstKeyHash,
     rpc.wait();
 }
 
-void RamCloud::backupMigrate(uint64_t tableId, uint64_t firstKeyHash,
+uint64_t RamCloud::backupMigrate(uint64_t tableId, uint64_t firstKeyHash,
                              uint64_t lastKeyHash, ServerId newOwnerMasterId)
 {
     BackupMigrationRpc rpc(this, newOwnerMasterId, tableId, firstKeyHash,
                            lastKeyHash);
-    rpc.wait();
+    return rpc.wait();
 }
 
 
@@ -1930,6 +1930,14 @@ BackupMigrationRpc::BackupMigrationRpc(RamCloud *ramcloud, ServerId targetId,
     reqHdr->lastKeyHash = lastKeyHash;
 
     send();
+}
+
+uint64_t BackupMigrationRpc::wait()
+{
+    simpleWait(context);
+    const WireFormat::MigrationInit::Response *respHdr(
+        getResponseHeader<WireFormat::MigrationInit>());
+    return respHdr->migrationId;
 }
 
 MigrationQueryRpc::MigrationQueryRpc(RamCloud *ramcloud, uint64_t migrationId)

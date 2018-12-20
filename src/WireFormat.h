@@ -1048,6 +1048,7 @@ struct MigrationInit {
     } __attribute__((packed));
     struct Response {
         ResponseCommon common;
+        uint64_t migrationId;
     } __attribute__((packed));
 };
 

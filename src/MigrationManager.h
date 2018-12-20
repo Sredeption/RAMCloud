@@ -29,10 +29,11 @@ class MigrationManager
 
     ~MigrationManager();
 
-    void startMigration(ServerId sourceServerId, ServerId targetServerId,
-                        uint64_t tableId, uint64_t firstKeyHash,
-                        uint64_t lastKeyHash,
-                        const ProtoBuf::MasterRecoveryInfo &masterRecoveryInfo);
+    uint64_t startMigration(
+        ServerId sourceServerId, ServerId targetServerId,
+        uint64_t tableId, uint64_t firstKeyHash,
+        uint64_t lastKeyHash,
+        const ProtoBuf::MasterRecoveryInfo &masterRecoveryInfo);
 
     bool migrationMasterFinished(uint64_t recoveryId,
                                  ServerId recoveryMasterId,
@@ -78,6 +79,9 @@ class MigrationManager
     bool startMigrationsEvenIfNoThread;
 
     bool skipRescheduleDelay;
+
+    std::mutex mutex;
+    uint64_t migrationNumber;
 
     friend class MigrationManagerInternal::ApplyTrackerChangesTask;
 
