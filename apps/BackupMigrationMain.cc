@@ -60,7 +60,7 @@ try
          "First key of the tablet range to migrate")
         ("lastKey,z",
          ProgramOptions::value<uint64_t>(&lastKey)->
-             default_value((~0ul) / 2),
+             default_value(~0ul),
          "Last key of the tablet range to migrate")
         ("recipient,r",
          ProgramOptions::value<uint32_t>(&newOwnerMasterId)->

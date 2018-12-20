@@ -583,7 +583,6 @@ void CoordinatorService::migrationQuery(
     const WireFormat::MigrationQuery::Request *reqHdr,
     WireFormat::MigrationQuery::Response *respHdr, Service::Rpc *rpc)
 {
-    reqHdr->migrationId;
     respHdr->finish= migrationManager.testFinish();
 }
 /**

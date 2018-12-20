@@ -581,6 +581,14 @@ void BackupService::migrationStartReading(
     WireFormat::MigrationStartReading::Response *respHdr,
     Rpc *rpc)
 {
+    if (!gcThread && !testingDoNotStartGcThread) {
+        RAMCLOUD_LOG(NOTICE,
+                     "Starting backup replica garbage collector thread");
+//        Lock _(mutex);
+//        if (!gcThread) {
+            gcThread.construct(&BackupService::gcMain, this);
+//        }
+    }
     ServerId sourceServerId(reqHdr->sourceId);
     ServerId targetServerId(reqHdr->targetId);
     bool mustCreateMigration = false;
@@ -808,7 +816,10 @@ BackupService::trackerChangesEnqueued()
         return;
     if (!gcThread && !testingDoNotStartGcThread) {
         LOG(NOTICE, "Starting backup replica garbage collector thread");
-        gcThread.construct(&BackupService::gcMain, this);
+//        Lock _(mutex);
+//        if (!gcThread) {
+            gcThread.construct(&BackupService::gcMain, this);
+//        }
     }
     ServerDetails server;
     ServerChangeEvent event;

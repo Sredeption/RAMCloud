@@ -331,7 +331,7 @@ BackupMasterMigration::Replica::Replica(const BackupStorage::FrameRef &frame)
 BackupMasterMigration::CyclicReplicaBuffer::CyclicReplicaBuffer(
     uint32_t maxReplicasInMemory, uint32_t segmentSize,
     uint32_t readSpeed, BackupMasterMigration *migration)
-    : mutex("cyclicReplicaBuffeMutex"),
+    : mutex("cyclicReplicaBufferMutex"),
       maxReplicasInMemory(maxReplicasInMemory),
       inMemoryReplicas(),
       oldestReplicaIdx(0),
@@ -387,8 +387,9 @@ void BackupMasterMigration::CyclicReplicaBuffer::enqueue(
                      replica->metadata->segmentId);
         return;
     } else if (priority == NORMAL) {
-        RAMCLOUD_LOG(NOTICE, "Adding replica for segment %lu to normal priority "
-                            "recovery queue", replica->metadata->segmentId);
+        RAMCLOUD_LOG(DEBUG,
+                     "Adding replica for segment %lu to normal priority "
+                     "recovery queue", replica->metadata->segmentId);
         normalPriorityQueuedReplicas.push_back(replica);
     } else {
         // Don't schedule a replica as high priority more than once
@@ -431,7 +432,7 @@ bool BackupMasterMigration::CyclicReplicaBuffer::bufferNext()
         }
 
         // Only evict a replica if it's been inactive for half the time it takes
-        // to read the entire bufer from disk.
+        // to read the entire buffer from disk.
         double entryInactiveTime = Cycles::toSeconds(
             Cycles::rdtsc() - replicaToRemove->lastAccessTime);
         if (entryInactiveTime <= bufferReadTime / 2) {
@@ -513,7 +514,7 @@ bool BackupMasterMigration::CyclicReplicaBuffer::buildNext()
         return true;
     }
 
-    RAMCLOUD_LOG(NOTICE, "<%s,%lu> recovery segments took %lu ms to construct, "
+    RAMCLOUD_LOG(DEBUG, "<%s,%lu> recovery segments took %lu ms to construct, "
                         "notifying other threads",
                  migration->sourceServerId.toString().c_str(),
                  replicaToBuild->metadata->segmentId,
