@@ -217,6 +217,10 @@ CoordinatorService::dispatch(WireFormat::Opcode opcode,
             callHandler<WireFormat::MigrationQuery, CoordinatorService,
                 &CoordinatorService::migrationQuery>(rpc);
             break;
+        case WireFormat::MigrationMasterFinished::opcode:
+            callHandler<WireFormat::MigrationMasterFinished, CoordinatorService,
+                &CoordinatorService::migrationMasterFinished>(rpc);
+            break;
         case WireFormat::ReassignTabletOwnership::opcode:
             callHandler<WireFormat::ReassignTabletOwnership, CoordinatorService,
                         &CoordinatorService::reassignTabletOwnership>(rpc);
@@ -562,6 +566,16 @@ void CoordinatorService::migrationInit(
                                     ServerId(reqHdr->targetId),
                                     reqHdr->tableId, reqHdr->firstKeyHash,
                                     reqHdr->lastKeyHash, masterRecoveryInfo);
+}
+
+
+void CoordinatorService::migrationMasterFinished(
+    const WireFormat::MigrationMasterFinished::Request *reqHdr,
+    WireFormat::MigrationMasterFinished::Response *respHdr, Service::Rpc *rpc)
+{
+    respHdr->cancelRecovery =
+        migrationManager.migrationMasterFinished(
+            reqHdr->migrationId, serverId, reqHdr->successful);
 }
 
 void CoordinatorService::migrationQuery(

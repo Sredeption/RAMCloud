@@ -10,6 +10,8 @@
 namespace RAMCloud {
 namespace MigrationManagerInternal {
 
+class ApplyTrackerChangesTask;
+
 class MaybeStartMigrationTask;
 
 class EnqueueMigrationTask;
@@ -32,6 +34,10 @@ class MigrationManager
                         uint64_t lastKeyHash,
                         const ProtoBuf::MasterRecoveryInfo &masterRecoveryInfo);
 
+    bool migrationMasterFinished(uint64_t recoveryId,
+                                 ServerId recoveryMasterId,
+                                 bool successful);
+
     void start();
 
     void halt();
@@ -39,6 +45,7 @@ class MigrationManager
     virtual void trackerChangesEnqueued();
 
     virtual void migrationFinished(Migration *migration);
+
 
     bool testFinish();
 
@@ -71,6 +78,8 @@ class MigrationManager
     bool startMigrationsEvenIfNoThread;
 
     bool skipRescheduleDelay;
+
+    friend class MigrationManagerInternal::ApplyTrackerChangesTask;
 
     friend class MigrationManagerInternal::MaybeStartMigrationTask;
 

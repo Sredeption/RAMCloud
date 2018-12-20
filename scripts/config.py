@@ -103,7 +103,7 @@ default_disks = '-f /tmp/rc-backup'
 # common.getHosts() for more information on how to set this variable.
 hosts = []
 # ids = [1, 2, 3, 4, 12, 14, 15, 16, 18, 19, 20, 21]
-ids = [2, 3, 12, 14, 15, 16, 18, 19, 20, 21]
+ids = [2, 3, 12, 14, 15, 18, 19, 20, 21]
 for i in ids:
     hosts.append((
         'heming-rdma%d' % i,

@@ -58,6 +58,7 @@ callees = {
     "INSERT_INDEX_ENTRY":    ["BACKUP_WRITE"],
     "MIGRATE_TABLET":        ["RECEIVE_MIGRATION_DATA",
                               "REASSIGN_TABLET_OWNERSHIP"],
+    "MIGRATION_RECOVER":     ["MIGRATION_GETDATA", "BACKUP_WRITE"],
     "MULTI_OP":              ["BACKUP_WRITE", "INSERT_INDEX_ENTRY",
                               "REMOVE_INDEX_ENTRY"],
     "READ":                  ["BACKUP_WRITE"],

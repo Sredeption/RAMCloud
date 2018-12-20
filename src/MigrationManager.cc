@@ -108,14 +108,11 @@ class MigrationFinishedTask : public Task {
 
     MigrationFinishedTask(MigrationManager &migrationManager,
                           uint64_t migrationId,
-                          ServerId recoveryMasterId,
-                          const ProtoBuf::MigrationPartition &
-                          migrationPartition,
+                          ServerId targetId,
                           bool successful)
         : Task(migrationManager.taskQueue), mgr(migrationManager),
-          migrationId(migrationId), recoveryMasterId(recoveryMasterId),
-          recoveryPartition(migrationPartition), successful(successful),
-          mutex(),
+          migrationId(migrationId), recoveryMasterId(targetId),
+          successful(successful), mutex(),
           taskPerformed(false), performed(),
           cancelRecoveryOnRecoveryMaster(false)
     {}
@@ -123,7 +120,23 @@ class MigrationFinishedTask : public Task {
     void performTask()
     {
         Lock _(mutex);
-//        auto it = mgr.activeMigrations.find(migrationId);
+        auto it = mgr.activeMigrations.find(migrationId);
+        if (it == mgr.activeMigrations.end()) {
+            RAMCLOUD_LOG(ERROR, "Recovery master reported completing recovery "
+                                "%lu but there is no ongoing recovery with that id; "
+                                "this should only happen after coordinator rollover; "
+                                "asking recovery master to abort this recovery",
+                         migrationId);
+            taskPerformed = true;
+            cancelRecoveryOnRecoveryMaster = true;
+            performed.notify_all();
+            return;
+        }
+
+        Migration *migration = it->second;
+        migration->migrationFinished(successful);
+        taskPerformed = true;
+        performed.notify_all();
     }
 
     bool wait()
@@ -139,7 +152,6 @@ class MigrationFinishedTask : public Task {
     MigrationManager &mgr;
     uint64_t migrationId;
     ServerId recoveryMasterId;
-    ProtoBuf::MigrationPartition recoveryPartition;
     bool successful;
 
     std::mutex mutex;
@@ -151,7 +163,37 @@ class MigrationFinishedTask : public Task {
     bool cancelRecoveryOnRecoveryMaster;
 };
 
+class ApplyTrackerChangesTask : public Task {
+  PUBLIC:
+
+    /**
+     * Create a task which when run will apply all enqueued changes to
+     * #tracker and notifies any recoveries which have lost recovery masters.
+     * This brings #mgr.tracker into sync with #mgr.serverList. Because this
+     * task is run by #mgr.taskQueue is it serialized with other tasks.
+     */
+    explicit ApplyTrackerChangesTask(MigrationManager &mgr)
+        : Task(mgr.taskQueue), mgr(mgr)
+    {
+    }
+
+    void performTask()
+    {
+        ServerDetails server;
+        ServerChangeEvent event;
+        while (mgr.tracker.getChange(server, event)) {
+            if (event == SERVER_CRASHED || event == SERVER_REMOVED) {
+                mgr.tracker[server.serverId] = NULL;
+            }
+        }
+        delete this;
+    }
+
+    MigrationManager &mgr;
+};
 }
+
+using namespace MigrationManagerInternal; // NOLINT
 
 MigrationManager::MigrationManager(Context *context, TableManager &tableManager,
                                    RuntimeOptions *runtimeOptions)
@@ -210,6 +252,22 @@ void MigrationManager::startMigration(ServerId sourceServerId,
         lastKeyHash, masterRecoveryInfo))->schedule();
 }
 
+
+bool MigrationManager::migrationMasterFinished(uint64_t recoveryId,
+                                               ServerId recoveryMasterId,
+                                               bool successful)
+{
+    TEST_LOG("Recovered tablets");
+    MigrationFinishedTask task(*this, recoveryId, recoveryMasterId, successful);
+    task.schedule();
+    bool shouldAbort = task.wait();
+    if (shouldAbort)
+        LOG(NOTICE, "Asking recovery master to abort its recovery");
+    else
+        LOG(NOTICE, "Notifying recovery master ok to serve tablets");
+    return shouldAbort;
+}
+
 void MigrationManager::start()
 {
     if (!thread)
@@ -226,7 +284,7 @@ void MigrationManager::halt()
 
 void MigrationManager::trackerChangesEnqueued()
 {
-
+    (new MigrationManagerInternal::ApplyTrackerChangesTask(*this))->schedule();
 }
 
 void MigrationManager::migrationFinished(Migration *migration)
@@ -263,10 +321,10 @@ void MigrationManager::migrationFinished(Migration *migration)
         }
 
         // Enqueue will schedule a MaybeStartRecoveryTask.
-        (new MigrationManagerInternal::EnqueueMigrationTask(
-            *this, migration->sourceServerId, migration->targetServerId,
-            migration->tableId, migration->firstKeyHash,
-            migration->lastKeyHash, migration->masterRecoveryInfo))->schedule();
+//        (new MigrationManagerInternal::EnqueueMigrationTask(
+//            *this, migration->sourceServerId, migration->targetServerId,
+//            migration->tableId, migration->firstKeyHash,
+//            migration->lastKeyHash, migration->masterRecoveryInfo))->schedule();
     }
 
     activeMigrations.erase(migration->getMigrationId());

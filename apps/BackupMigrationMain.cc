@@ -97,6 +97,7 @@ try
     RamCloud client(&context, coordinatorLocator.c_str());
 
     uint64_t tableId = client.createTable(tableName.c_str());
+//    client.splitTablet(tableName.c_str(), lastKey + 1);
     client.testingFill(tableId, "", 0, objectCount, objectSize);
     const uint64_t totalBytes = objectCount * objectSize;
 

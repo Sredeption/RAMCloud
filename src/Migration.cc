@@ -544,17 +544,17 @@ using namespace MigrationInternal; // NOLINT
 
 void Migration::startBackups()
 {
-    auto tablets = tableManager->markTabletsMigration(
-        sourceServerId, tableId, firstKeyHash, lastKeyHash);
-    if (tablets.size() == 0) {
-        RAMCLOUD_LOG(NOTICE, "Server %s migration, but it had no tablets",
-                     sourceServerId.toString().c_str());
-        status = DONE;
-        if (owner) {
-            owner->migrationFinished(this);
-        }
-        return;
-    }
+//    auto tablets = tableManager->markTabletsMigration(
+//        sourceServerId, tableId, firstKeyHash, lastKeyHash);
+//    if (tablets.size() == 0) {
+//        RAMCLOUD_LOG(NOTICE, "Server %s migration, but it had no tablets",
+//                     sourceServerId.toString().c_str());
+//        status = DONE;
+//        if (owner) {
+//            owner->migrationFinished(this);
+//        }
+//        return;
+//    }
 
     RAMCLOUD_LOG(DEBUG, "Getting segment lists from backups and preparing "
                         "them for recovery");
@@ -611,7 +611,7 @@ void Migration::startBackups()
     }
 
     TableStats::Estimator estimator(tableStats);
-    partitionTablets(tablets, &estimator);
+//    partitionTablets(tablets, &estimator);
     RAMCLOUD_LOG(NOTICE, "Partition Scheme for Migration:\n%s",
                  dataToMigration.DebugString().c_str());
 
@@ -769,7 +769,6 @@ struct MigrationPartition {
 
 }
 
-
 void Migration::partitionTablets(vector<Tablet> tablets,
                                  TableStats::Estimator *estimator)
 {
@@ -829,6 +828,5 @@ void Migration::partitionTablets(vector<Tablet> tablets,
         }
     }
 }
-
 
 }

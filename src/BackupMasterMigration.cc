@@ -27,7 +27,7 @@ RAMCloud::BackupMasterMigration::BackupMasterMigration(
       logDigestSegmentId(~0lu),
       logDigestSegmentEpoch(),
       tableStatsDigest(),
-      startCompleted(),
+      startCompleted(false),
       recoveryTicks(),
       readingDataTicks(),
       buildingStartTicks(),
@@ -383,11 +383,11 @@ void BackupMasterMigration::CyclicReplicaBuffer::enqueue(
         != normalPriorityQueuedReplicas.end()) {
         // This replica was scheduled normally and we just haven't gotten to
         // it yet.
-        RAMCLOUD_LOG(DEBUG, "A master is ahead, requesting segment %lu",
+        RAMCLOUD_LOG(NOTICE, "A master is ahead, requesting segment %lu",
                      replica->metadata->segmentId);
         return;
     } else if (priority == NORMAL) {
-        RAMCLOUD_LOG(DEBUG, "Adding replica for segment %lu to normal priority "
+        RAMCLOUD_LOG(NOTICE, "Adding replica for segment %lu to normal priority "
                             "recovery queue", replica->metadata->segmentId);
         normalPriorityQueuedReplicas.push_back(replica);
     } else {
@@ -513,7 +513,7 @@ bool BackupMasterMigration::CyclicReplicaBuffer::buildNext()
         return true;
     }
 
-    RAMCLOUD_LOG(DEBUG, "<%s,%lu> recovery segments took %lu ms to construct, "
+    RAMCLOUD_LOG(NOTICE, "<%s,%lu> recovery segments took %lu ms to construct, "
                         "notifying other threads",
                  migration->sourceServerId.toString().c_str(),
                  replicaToBuild->metadata->segmentId,
