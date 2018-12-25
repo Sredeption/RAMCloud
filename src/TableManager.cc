@@ -609,7 +609,8 @@ TableManager::markAllTabletsRecovering(ServerId serverId)
 }
 
 vector<Tablet>
-TableManager::markTabletsMigration(ServerId sourceId, uint64_t tableId,
+TableManager::markTabletsMigration(ServerId sourceId, ServerId targetId,
+                                   uint64_t tableId,
                                    uint64_t firstKeyHash,
                                    uint64_t lastKeyHash)
 {
@@ -623,6 +624,7 @@ TableManager::markTabletsMigration(ServerId sourceId, uint64_t tableId,
                 firstKeyHash <= tablet->startKeyHash &&
                 tablet->endKeyHash <= lastKeyHash) {
                 tablet->status = Tablet::MIGRATING;
+                tablet->serverId = targetId;
                 results.push_back(*tablet);
             }
         }

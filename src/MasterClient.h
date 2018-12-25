@@ -199,9 +199,9 @@ class PrepForIndexletMigrationRpc : public ServerIdRpcWrapper {
     DISALLOW_COPY_AND_ASSIGN(PrepForIndexletMigrationRpc);
 };
 
-class MigrationRecoverRpc : public ServerIdRpcWrapper {
+class MigrationMasterStartRpc : public ServerIdRpcWrapper {
   public:
-    MigrationRecoverRpc(
+    MigrationMasterStartRpc(
         Context *context, ServerId serverId,
         uint64_t migrationId,
         ServerId sourceServerId,
@@ -209,10 +209,10 @@ class MigrationRecoverRpc : public ServerIdRpcWrapper {
         uint64_t tableId,
         uint64_t firstKeyHash,
         uint64_t lastKeyHash,
-        const WireFormat::MigrationRecover::Replica *replicas,
+        const WireFormat::MigrationMasterStart::Replica *replicas,
         uint32_t numReplicas);
 
-    ~MigrationRecoverRpc()
+    ~MigrationMasterStartRpc()
     {}
 
     /// \copydoc ServerIdRpcWrapper::waitAndCheckErrors
@@ -220,7 +220,7 @@ class MigrationRecoverRpc : public ServerIdRpcWrapper {
     { waitAndCheckErrors(); }
 
   PRIVATE:
-    DISALLOW_COPY_AND_ASSIGN(MigrationRecoverRpc);
+    DISALLOW_COPY_AND_ASSIGN(MigrationMasterStartRpc);
 };
 
 /**

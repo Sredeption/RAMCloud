@@ -547,18 +547,19 @@ void BackupService::migrationGetData(
     const WireFormat::MigrationGetData::Request *reqHdr,
     WireFormat::MigrationGetData::Response *respHdr, Service::Rpc *rpc)
 {
+//    uint64_t start = Cycles::rdtsc();
     ServerId sourceServerId(reqHdr->sourceId);
-        LOG(DEBUG,
-            "migrationGetData sourceId %s, segmentId %lu, partitionId %lu",
-            sourceServerId.toString().c_str(),
-            reqHdr->segmentId, reqHdr->partitionId);
+    RAMCLOUD_LOG(DEBUG,
+                 "migrationGetData sourceId %s, segmentId %lu, partitionId %lu",
+                 sourceServerId.toString().c_str(),
+                 reqHdr->segmentId, reqHdr->partitionId);
 
     auto migrationIt = migrations.find(reqHdr->migrationId);
     if (migrationIt == migrations.end()) {
-            LOG(WARNING,
-                "Asked for recovery segment for <%s,%lu> but the master "
-                "wasn't under recovery on the backup",
-                sourceServerId.toString().c_str(), reqHdr->segmentId);
+        RAMCLOUD_LOG(WARNING,
+                     "Asked for recovery segment for <%s,%lu> but the master "
+                     "wasn't under recovery on the backup",
+                     sourceServerId.toString().c_str(), reqHdr->segmentId);
         throw BackupBadSegmentIdException(HERE);
     }
 
@@ -571,9 +572,18 @@ void BackupService::migrationGetData(
         respHdr->common.status = status;
         return;
     }
+    uint64_t readBytes = metrics->backup.storageReadBytes;
+    uint64_t readTicks = metrics->backup.storageReadTicks;
+    RAMCLOUD_LOG(NOTICE,
+                 "migrationGetData sourceId %s, segmentId %lu, total:"
+                 "load %lf MB, takes %lu us",
+                 sourceServerId.toString().c_str(),
+                 reqHdr->segmentId,
+                 (double)readBytes/1024/1024,
+                 Cycles::toMicroseconds(readTicks));
 
     ++metrics->backup.readCompletionCount;
-        LOG(DEBUG, "getRecoveryData complete");
+    RAMCLOUD_LOG(DEBUG, "getRecoveryData complete");
 }
 
 void BackupService::migrationStartReading(

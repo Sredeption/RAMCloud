@@ -491,8 +491,8 @@ class MasterService : public Service {
 ///////////////////////////////////////////////////////////////////////////////
 /////////////////////////End of Recovery related code./////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
-    void migrateRecover(const WireFormat::MigrationRecover::Request *reqHdr,
-                        WireFormat::MigrationRecover::Response *respHdr,
+    void migrationStart(const WireFormat::MigrationMasterStart::Request *reqHdr,
+                        WireFormat::MigrationMasterStart::Response *respHdr,
                         Rpc *rpc);
     void migrateRecover(uint64_t migrationId,
                         ServerId sourceId,

@@ -109,8 +109,9 @@ TEST_F(MigrationTest, splitTabletsNoEstimator)
                         sourceId, targetId, tableId, firstKeyHash, lastKeyHash,
                         recoveryInfo);
 
-    auto tablets = tableManager.markTabletsMigration(sourceId, tableId,
-                                                     firstKeyHash, lastKeyHash);
+    auto tablets = tableManager.markTabletsMigration(
+        sourceId, targetId, tableId,
+        firstKeyHash, lastKeyHash);
 
     EXPECT_EQ(1u, tablets.size());
 
@@ -147,8 +148,9 @@ TEST_F(MigrationTest, splitTabletsBadEstimator)
     recovery.construct(&context, taskQueue, 1, &tableManager, &tracker, own,
                        sourceId, targetId, tableId, firstKeyHash, lastKeyHash,
                        recoveryInfo);
-    auto tablets = tableManager.markTabletsMigration(sourceId, tableId,
-                                                     firstKeyHash, lastKeyHash);
+    auto tablets = tableManager.markTabletsMigration(
+        sourceId, targetId, tableId,
+        firstKeyHash, lastKeyHash);
 
 
     TableStats::Estimator e(NULL);
@@ -188,7 +190,8 @@ TEST_F(MigrationTest, splitTabletsMultiTablet)
     tableManager.testAddTablet({tableId, 30, 49, sourceId, Tablet::NORMAL, {}});
     migration.construct(&context, taskQueue, 1, &tableManager, &tracker, own,
                         sourceId, targetId, tableId, 0, 29, recoveryInfo);
-    auto tablets = tableManager.markTabletsMigration(sourceId, tableId, 0, 29);
+    auto tablets = tableManager.markTabletsMigration(sourceId, targetId,
+                                                     tableId, 0, 29);
 
     char buffer[sizeof(TableStats::DigestHeader) +
                 3 * sizeof(TableStats::DigestEntry)];
@@ -239,8 +242,8 @@ TEST_F(MigrationTest, splitTabletsBasic)
                         sourceId, targetId, tableId, 1, keyHashCount,
                         recoveryInfo);
 
-    auto tablets = tableManager.markTabletsMigration(sourceId, tableId, 1,
-                                                     keyHashCount);
+    auto tablets = tableManager.markTabletsMigration(sourceId, targetId,
+                                                     tableId, 1, keyHashCount);
 
     char buffer[sizeof(TableStats::DigestHeader)];
     TableStats::Digest *digest = reinterpret_cast<TableStats::Digest *>(buffer);
@@ -306,8 +309,8 @@ TEST_F(MigrationTest, splitTabletsByteDominated)
     recovery.construct(&context, taskQueue, 1, &tableManager, &tracker, own,
                        sourceId, targetId, tableId, 1, keyHashCount,
                        recoveryInfo);
-    auto tablets = tableManager.markTabletsMigration(sourceId, tableId, 1,
-                                                     keyHashCount);
+    auto tablets = tableManager.markTabletsMigration(sourceId, targetId,
+                                                     tableId, 1, keyHashCount);
 
     char buffer[sizeof(TableStats::DigestHeader)];
     TableStats::Digest *digest = reinterpret_cast<TableStats::Digest *>(buffer);
@@ -344,8 +347,8 @@ TEST_F(MigrationTest, splitTabletsRecordDominated)
     recovery.construct(&context, taskQueue, 1, &tableManager, &tracker, own,
                        sourceId, targetId, tableId, 1, keyHashCount,
                        recoveryInfo);
-    auto tablets = tableManager.markTabletsMigration(sourceId, tableId, 1,
-                                                     keyHashCount);
+    auto tablets = tableManager.markTabletsMigration(sourceId, targetId,
+                                                     tableId, 1, keyHashCount);
 
     char buffer[sizeof(TableStats::DigestHeader)];
     TableStats::Digest *digest = reinterpret_cast<TableStats::Digest *>(buffer);
@@ -377,7 +380,8 @@ TEST_F(MigrationTest, partitionTabletsNoEstimator)
 
     migration.construct(&context, taskQueue, 1, &tableManager, &tracker, own,
                         sourceId, targetId, tableId, 0, 30, recoveryInfo);
-    auto tablets = tableManager.markTabletsMigration(sourceId, tableId, 0, 30);
+    auto tablets = tableManager.markTabletsMigration(sourceId, targetId,
+                                                     tableId, 0, 30);
     migration->partitionTablets(tablets, NULL);
     EXPECT_EQ(0lu, migration->numPartitions);
 
@@ -418,7 +422,8 @@ TEST_F(MigrationTest, partitionTabletsSplits)
 
     migration.construct(&context, taskQueue, 1, &tableManager, &tracker, own,
                         sourceId, targetId, tableId, 0, 199, recoveryInfo);
-    auto tablets = tableManager.markTabletsMigration(sourceId, tableId, 0, 199);
+    auto tablets = tableManager.markTabletsMigration(sourceId, targetId,
+                                                     tableId, 0, 199);
 
     char buffer[sizeof(TableStats::DigestHeader) +
                 2 * sizeof(TableStats::DigestEntry)];
@@ -463,8 +468,8 @@ TEST_F(MigrationTest, partitionTabletsBasic)
     }
     migration.construct(&context, taskQueue, 1, &tableManager, &tracker, own,
                         sourceId, targetId, tableId, 0, 2499, recoveryInfo);
-    auto tablets = tableManager.markTabletsMigration(sourceId, tableId, 0,
-                                                     2499);
+    auto tablets = tableManager.markTabletsMigration(sourceId, targetId,
+                                                     tableId, 0, 2499);
 
     char buffer[sizeof(TableStats::DigestHeader) +
                 0 * sizeof(TableStats::DigestEntry)];
@@ -500,7 +505,8 @@ TEST_F(MigrationTest, partitionTabletsAllPartitionsOpen)
     }
     migration.construct(&context, taskQueue, 1, &tableManager, &tracker, own,
                         sourceId, targetId, tableId, 0, 199, recoveryInfo);
-    auto tablets = tableManager.markTabletsMigration(sourceId, tableId, 0, 199);
+    auto tablets = tableManager.markTabletsMigration(sourceId, targetId,
+                                                     tableId, 0, 199);
 
     char buffer[sizeof(TableStats::DigestHeader) +
                 0 * sizeof(TableStats::DigestEntry)];
@@ -552,7 +558,7 @@ TEST_F(MigrationTest, partitionTabletsMixed)
     migration.construct(&context, taskQueue, 1, &tableManager, &tracker, own,
                         sourceId, targetId, tableId, 0, 5399, recoveryInfo);
     vector<Tablet> tablets =
-        tableManager.markTabletsMigration(sourceId, tableId, 0, 5399);
+        tableManager.markTabletsMigration(sourceId, targetId, tableId, 0, 5399);
 
     char buffer[sizeof(TableStats::DigestHeader) +
                 0 * sizeof(TableStats::DigestEntry)];
@@ -621,7 +627,7 @@ TEST_F(MigrationTest, startBackups)
                        sourceId, targetId, tableId, 10, 19, recoveryInfo);
     recovery.testingBackupStartTaskSendCallback = &callback;
     recovery.startBackups();
-    EXPECT_EQ((vector<WireFormat::MigrationRecover::Replica>{
+    EXPECT_EQ((vector<WireFormat::MigrationMasterStart::Replica>{
         {1, 88},
         {2, 88},
         {1, 89},
@@ -864,7 +870,7 @@ TEST_F(MigrationTest, buildReplicaMap)
     addServersToTracker(3, {WireFormat::BACKUP_SERVICE});
 
     auto replicaMap = buildReplicaMap(tasks, 2, &tracker, 91);
-    EXPECT_EQ((vector<WireFormat::MigrationRecover::Replica>{
+    EXPECT_EQ((vector<WireFormat::MigrationMasterStart::Replica>{
         {2, 88},
         {3, 88},
         {2, 89},
@@ -875,7 +881,7 @@ TEST_F(MigrationTest, buildReplicaMap)
     tracker.getServerDetails({3, 0})->expectedReadMBytesPerSec = 101;
     TestLog::Enable _;
     replicaMap = buildReplicaMap(tasks, 2, &tracker, 91);
-    EXPECT_EQ((vector<WireFormat::MigrationRecover::Replica>{
+    EXPECT_EQ((vector<WireFormat::MigrationMasterStart::Replica>{
         {3, 88},
         {2, 88},
         {2, 89},
@@ -897,7 +903,8 @@ TEST_F(MigrationTest, buildReplicaMap_badReplicas)
     addServersToTracker(2, {WireFormat::BACKUP_SERVICE});
 
     auto replicaMap = buildReplicaMap(tasks, 1, &tracker, 91);
-    EXPECT_EQ((vector<WireFormat::MigrationRecover::Replica>()), replicaMap);
+    EXPECT_EQ((vector<WireFormat::MigrationMasterStart::Replica>()),
+              replicaMap);
 }
 
 TEST_F(MigrationTest, startMaster)
@@ -911,12 +918,12 @@ TEST_F(MigrationTest, startMaster)
 
         void masterStartTaskSend(
             uint64_t migrationId, ServerId targetServerId,
-            const WireFormat::MigrationRecover::Replica replicaMap[],
+            const WireFormat::MigrationMasterStart::Replica replicaMap[],
             size_t replicaMapSize)
         {
             if (callCount == 0) {
                 EXPECT_EQ(1lu, migrationId);
-                EXPECT_EQ(ServerId(2, 0), targetServerId);
+                EXPECT_EQ(ServerId(1, 0), targetServerId);
             } else if (callCount == 1) {
                 EXPECT_EQ(1lu, migrationId);
                 EXPECT_EQ(ServerId(2, 0), targetServerId);
@@ -936,10 +943,10 @@ TEST_F(MigrationTest, startMaster)
                         ServerId(1, 0), ServerId(2, 0), 123, 10, 19,
                         recoveryInfo);
     migration.partitionTablets(
-        tableManager.markTabletsMigration({1, 0}, 123, 10, 19), NULL);
+        tableManager.markTabletsMigration({1, 0}, {2, 0}, 123, 10, 19), NULL);
     // Hack 'tablets' to get the first two tablets on the same server.
     migration.testingMasterStartTaskSendCallback = &callback;
-    migration.startMaster();
+    migration.startMasters();
 
     EXPECT_EQ(0, migration.migrateSuccessful);
 }
@@ -955,14 +962,15 @@ TEST_F(MigrationTest, startRecoveryMasters_tooFewIdleMasters)
 
         void masterStartTaskSend(
             uint64_t migrationId, ServerId targetServerId,
-            const WireFormat::MigrationRecover::Replica replicaMap[],
+            const WireFormat::MigrationMasterStart::Replica replicaMap[],
             size_t replicaMapSize)
         {
             if (callCount == 0) {
                 EXPECT_EQ(1lu, migrationId);
-                EXPECT_EQ(ServerId(2, 0), targetServerId);
+                EXPECT_EQ(ServerId(1, 0), targetServerId);
             } else {
-                FAIL();
+                EXPECT_EQ(1lu, migrationId);
+                EXPECT_EQ(ServerId(2, 0), targetServerId);
             }
             ++callCount;
         }
@@ -979,7 +987,7 @@ TEST_F(MigrationTest, startRecoveryMasters_tooFewIdleMasters)
                         recoveryInfo);
     // Hack 'tablets' to get the first two tablets on the same server.
     migration.testingMasterStartTaskSendCallback = &callback;
-    migration.startMaster();
+    migration.startMasters();
 
     migration.migrationFinished(true);
 

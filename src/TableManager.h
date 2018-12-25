@@ -86,7 +86,8 @@ class TableManager {
     bool isIndexletTable(uint64_t tableId);
     vector<Tablet> markAllTabletsRecovering(ServerId serverId);
 
-    vector<Tablet> markTabletsMigration(ServerId sourceId, uint64_t tableId,
+    vector<Tablet> markTabletsMigration(ServerId sourceId, ServerId targetId,
+                                        uint64_t tableId,
                                         uint64_t firstKeyHash,
                                         uint64_t lastKeyHash);
     void reassignTabletOwnership(ServerId newOwner, uint64_t tableId,

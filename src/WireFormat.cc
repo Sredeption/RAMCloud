@@ -212,22 +212,22 @@ operator<<(std::ostream& stream, const Recover::Replica& replica) {
 }
 
 bool
-operator==(const MigrationRecover::Replica &a,
-           const MigrationRecover::Replica &b)
+operator==(const MigrationMasterStart::Replica &a,
+           const MigrationMasterStart::Replica &b)
 {
     return (a.backupId == b.backupId &&
             a.segmentId == b.segmentId);
 }
 
 bool
-operator!=(const MigrationRecover::Replica &a,
-           const MigrationRecover::Replica &b)
+operator!=(const MigrationMasterStart::Replica &a,
+           const MigrationMasterStart::Replica &b)
 {
     return !(a == b);
 }
 
 std::ostream &
-operator<<(std::ostream &stream, const MigrationRecover::Replica &replica)
+operator<<(std::ostream &stream, const MigrationMasterStart::Replica &replica)
 {
     stream << "Replica(backupId=" << replica.backupId
            << ", segmentId=" << replica.segmentId

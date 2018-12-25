@@ -1052,7 +1052,7 @@ struct MigrationInit {
     } __attribute__((packed));
 };
 
-struct MigrationRecover {
+struct MigrationMasterStart {
     static const Opcode opcode = MIGRATION_RECOVER;
     static const ServiceType service = MASTER_SERVICE;
     struct Request {

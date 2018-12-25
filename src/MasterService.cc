@@ -194,9 +194,9 @@ MasterService::dispatch(WireFormat::Opcode opcode, Rpc* rpc)
             callHandler<WireFormat::MultiOp, MasterService,
                         &MasterService::multiOp>(rpc);
             break;
-        case WireFormat::MigrationRecover::opcode:
-            callHandler<WireFormat::MigrationRecover, MasterService,
-                &MasterService::migrateRecover>(rpc);
+        case WireFormat::MigrationMasterStart::opcode:
+            callHandler<WireFormat::MigrationMasterStart, MasterService,
+                &MasterService::migrationStart>(rpc);
             break;
         case WireFormat::PrepForIndexletMigration::opcode:
             callHandler<WireFormat::PrepForIndexletMigration, MasterService,
@@ -4023,6 +4023,7 @@ class MigrationTask {
         , response()
         , startTime(Cycles::rdtsc())
         , rpc()
+        , waits(0)
     {
         rpc.construct(context, replica.backupId, migrationId, sourceId,
                 replica.segmentId, &response);
@@ -4048,15 +4049,23 @@ class MigrationTask {
     Buffer response;
     const uint64_t startTime;
     Tub<MigrationGetDataRpc> rpc;
+    int waits;
     DISALLOW_COPY_AND_ASSIGN(MigrationTask);
 };
 }
 
-void MasterService::migrateRecover(
-    const WireFormat::MigrationRecover::Request *reqHdr,
-    WireFormat::MigrationRecover::Response *respHdr,
+void MasterService::migrationStart(
+    const WireFormat::MigrationMasterStart::Request *reqHdr,
+    WireFormat::MigrationMasterStart::Response *respHdr,
     Service::Rpc *rpc)
 {
+    if (serverId.getId() == reqHdr->sourceServerId) {
+        tabletManager.changeState(reqHdr->tableId, reqHdr->firstKeyHash,
+                                  reqHdr->lastKeyHash, TabletManager::NORMAL,
+                                  TabletManager::MIGRATING);
+        return;
+    }
+
     ReplicatedSegment::recoveryStart = Cycles::rdtsc();
     CycleCounter<RawMetric> recoveryTicks(&metrics->master.recoveryTicks);
     metrics->master.recoveryCount++;
@@ -4069,10 +4078,10 @@ void MasterService::migrateRecover(
     vector<Replica> replicas;
     replicas.reserve(reqHdr->numReplicas);
     for (uint32_t i = 0; i < reqHdr->numReplicas; ++i) {
-        const WireFormat::MigrationRecover::Replica *replicaLocation =
+        const WireFormat::MigrationMasterStart::Replica *replicaLocation =
             rpc->requestPayload->
-                getOffset<WireFormat::MigrationRecover::Replica>(offset);
-        offset += sizeof32(WireFormat::MigrationRecover::Replica);
+                getOffset<WireFormat::MigrationMasterStart::Replica>(offset);
+        offset += sizeof32(WireFormat::MigrationMasterStart::Replica);
         Replica replica(replicaLocation->backupId, replicaLocation->segmentId);
         replicas.push_back(replica);
     }
@@ -4085,7 +4094,7 @@ void MasterService::migrateRecover(
     bool added = tabletManager.addTablet(reqHdr->tableId,
                                          reqHdr->firstKeyHash,
                                          reqHdr->lastKeyHash,
-                                         TabletManager::NOT_READY);
+                                         TabletManager::MIGRATING);
     if (!added) {
         throw Exception(HERE,
                         format("Cannot recover tablet that overlaps "
@@ -4165,7 +4174,8 @@ void MasterService::migrateRecover(uint64_t migrationId, ServerId sourceId,
 
     auto notStarted = replicas.begin();
     auto replicasEnd = replicas.end();
-
+    uint64_t readTicks = 0;
+    uint64_t readBytes = 0;
     // The SideLog we'll append recovered entries to. It will be committed after
     // replay completes on all segments, making all of the recovered data
     // durable.
@@ -4217,8 +4227,10 @@ void MasterService::migrateRecover(uint64_t migrationId, ServerId sourceId,
         for (auto &task: tasks) {
             if (!task)
                 continue;
-            if (!task->rpc->isReady())
+            if (!task->rpc->isReady()){
+                task->waits++;
                 continue;
+            }
             readStallTicks.destroy();
             RAMCLOUD_LOG(DEBUG,
                          "Waiting on recovery data for segment %lu from %s",
@@ -4230,6 +4242,7 @@ void MasterService::migrateRecover(uint64_t migrationId, ServerId sourceId,
                 task->rpc.destroy();
                 uint64_t grdTime = Cycles::rdtsc() - task->startTime;
                 metrics->master.segmentReadTicks += grdTime;
+                readTicks += grdTime;
 
                 if (!gotFirstGRD) {
                     metrics->master.replicationBytes = 0 -
@@ -4265,37 +4278,40 @@ void MasterService::migrateRecover(uint64_t migrationId, ServerId sourceId,
                         metrics->master.liveObjectBytes);
                     gotFirstGRD = true;
                 }
+                bool LOG_RECOVERY_REPLICATION_RPC_TIMING= true;
                 if (LOG_RECOVERY_REPLICATION_RPC_TIMING) {
-                    RAMCLOUD_LOG(DEBUG,
+                    RAMCLOUD_LOG(NOTICE,
                                  "@%7lu: Got getRecoveryData response from %s, "
-                                 "took %.1f us on channel %ld",
+                                 "took %.1f us, retry %d times, on channel %ld",
                                  Cycles::toMicroseconds(Cycles::rdtsc() -
                                                         ReplicatedSegment::recoveryStart),
                                  context->serverList->toString(
                                      task->replica.backupId).c_str(),
                                  Cycles::toSeconds(grdTime) * 1e06,
+                                 task->waits,
                                  &task - &tasks[0]);
                 }
 
                 uint32_t responseLen = task->response.size();
                 metrics->master.segmentReadByteCount += responseLen;
+                readBytes += responseLen;
                 uint64_t startUseful = Cycles::rdtsc();
                 SegmentIterator it(task->response.getRange(0, responseLen),
                                    responseLen, certificate);
                 it.checkMetadataIntegrity();
                 if (LOG_RECOVERY_REPLICATION_RPC_TIMING) {
-                    RAMCLOUD_LOG(DEBUG,
+                    RAMCLOUD_LOG(NOTICE,
                                  "@%7lu: Replaying segment %lu with length %u",
                                  Cycles::toMicroseconds(Cycles::rdtsc() -
                                                         ReplicatedSegment::recoveryStart),
                                  task->replica.segmentId, responseLen);
                 }
-                objectManager.replaySegment(&sideLog, it);
+                objectManager.concurrentReplay(&sideLog, it);
                 usefulTime += Cycles::rdtsc() - startUseful;
                 TEST_LOG("Segment %lu replay complete",
                          task->replica.segmentId);
                 if (LOG_RECOVERY_REPLICATION_RPC_TIMING) {
-                    RAMCLOUD_LOG(DEBUG, "@%7lu: Replaying segment %lu done",
+                    RAMCLOUD_LOG(NOTICE, "@%7lu: Replaying segment %lu done",
                                  Cycles::toMicroseconds(Cycles::rdtsc() -
                                                         ReplicatedSegment::recoveryStart),
                                  task->replica.segmentId);
@@ -4429,7 +4445,12 @@ void MasterService::migrateRecover(uint64_t migrationId, ServerId sourceId,
 
     double totalSecs = Cycles::toSeconds(Cycles::rdtsc() - start);
     double usefulSecs = Cycles::toSeconds(usefulTime);
-    LOG(NOTICE, "Recovery complete, took %.1f ms, useful replaying "
+
+    double readSecs = Cycles::toSeconds(readTicks);
+    double readM = (double)readBytes / 1024 / 1024;
+    RAMCLOUD_LOG(NOTICE, "read time: %.1f, read bytes: %.1fMB",
+                 readSecs, readM);
+    LOG(NOTICE, "Migration complete, took %.1f ms, useful replaying "
             "time %.1f ms (%.1f%% effective)",
             totalSecs * 1e03, usefulSecs * 1e03, 100 * usefulSecs / totalSecs);
 }

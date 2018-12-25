@@ -41,7 +41,7 @@ def backup_migrate(num_servers,
                    verbose=False,
                    debug=False):
     server_binary = '%s/server' % obj_path
-    client_binary = '%s/apps/backupMigration' % obj_path
+    client_binary = '%s/apps/migrationBenchmark' % obj_path
     ensure_servers_bin = '%s/ensureServers' % obj_path
 
     args = {}
@@ -147,7 +147,7 @@ if __name__ == '__main__':
     parser.add_option('-r', '--replicas', type=int, default=3,
                       metavar='N',
                       help='Number of disk backup copies for each segment')
-    parser.add_option('--servers', type=int, default=5,
+    parser.add_option('--servers', type=int, default=7,
                       metavar='N', dest='num_servers',
                       help='Number of hosts on which to run servers for use '
                            "as recovery masters; doesn't include crashed server")

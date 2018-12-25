@@ -105,7 +105,7 @@ bool verifyLogComplete(Tub<BackupStartTask> tasks[],
 Tub<std::tuple<uint64_t, LogDigest, TableStats::Digest *>>
 findLogDigest(Tub<BackupStartTask> tasks[], size_t taskCount);
 
-vector<WireFormat::MigrationRecover::Replica> buildReplicaMap(
+vector<WireFormat::MigrationMasterStart::Replica> buildReplicaMap(
     Tub<BackupStartTask> tasks[], size_t taskCount,
     MigrationTracker *tracker, uint64_t headId);
 
@@ -115,7 +115,7 @@ struct MasterStartTaskTestingCallback {
     virtual void masterStartTaskSend(
         uint64_t migrationId,
         ServerId targetServerId,
-        const WireFormat::MigrationRecover::Replica replicaMap[],
+        const WireFormat::MigrationMasterStart::Replica replicaMap[],
         size_t replicaMapSize)
     {}
 
@@ -217,11 +217,11 @@ class Migration : public Task {
 
     void startBackups();
 
-    void startMaster();
+    void startMasters();
 
     void broadcastMigrationComplete();
 
-    vector<WireFormat::MigrationRecover::Replica> replicaMap;
+    vector<WireFormat::MigrationMasterStart::Replica> replicaMap;
     uint32_t numPartitions;
 
   PUBLIC:
