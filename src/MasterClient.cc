@@ -699,7 +699,48 @@ RecoverRpc::RecoverRpc(Context* context, ServerId serverId,
     send();
 }
 
-MigrationMasterStartRpc::MigrationMasterStartRpc(
+MigrationSourceStartRpc::MigrationSourceStartRpc(
+    Context *context, ServerId serverId,
+    uint64_t migrationId,
+    ServerId sourceServerId,
+    ServerId targetServerId,
+    uint64_t tableId,
+    uint64_t firstKeyHash,
+    uint64_t lastKeyHash)
+    : ServerIdRpcWrapper(context, serverId,
+                         sizeof(WireFormat::MigrationSourceStart::Response))
+{
+    WireFormat::MigrationSourceStart::Request *reqHdr(
+        allocHeader<WireFormat::MigrationSourceStart>(serverId));
+    reqHdr->migrationId = migrationId;
+    reqHdr->sourceServerId = sourceServerId.getId();
+    reqHdr->targetServerId = targetServerId.getId();
+    reqHdr->tableId = tableId;
+    reqHdr->firstKeyHash = firstKeyHash;
+    reqHdr->lastKeyHash = lastKeyHash;
+    send();
+}
+
+
+void MasterClient::migrationTargetStart(
+    Context *context,
+    ServerId serverId,
+    uint64_t migrationId,
+    ServerId sourceServerId,
+    ServerId targetServerId,
+    uint64_t tableId,
+    uint64_t firstKeyHash,
+    uint64_t lastKeyHash,
+    const WireFormat::MigrationTargetStart::Replica *replicas,
+    uint32_t numReplicas)
+{
+    MigrationTargetStartRpc rpc(context, serverId, migrationId, sourceServerId,
+                                targetServerId, tableId, firstKeyHash,
+                                lastKeyHash, replicas, numReplicas);
+    rpc.wait();
+}
+
+MigrationTargetStartRpc::MigrationTargetStartRpc(
     Context *context, ServerId serverId,
     uint64_t migrationId,
     ServerId sourceServerId,
@@ -707,13 +748,13 @@ MigrationMasterStartRpc::MigrationMasterStartRpc(
     uint64_t tableId,
     uint64_t firstKeyHash,
     uint64_t lastKeyHash,
-    const WireFormat::MigrationMasterStart::Replica *replicas,
+    const WireFormat::MigrationTargetStart::Replica *replicas,
     uint32_t numReplicas)
     : ServerIdRpcWrapper(context, serverId,
-                         sizeof(WireFormat::MigrationMasterStart::Response))
+                         sizeof(WireFormat::MigrationTargetStart::Response))
 {
-    WireFormat::MigrationMasterStart::Request *reqHdr(
-        allocHeader<WireFormat::MigrationMasterStart>(serverId));
+    WireFormat::MigrationTargetStart::Request *reqHdr(
+        allocHeader<WireFormat::MigrationTargetStart>(serverId));
     reqHdr->migrationId = migrationId;
     reqHdr->sourceServerId = sourceServerId.getId();
     reqHdr->targetServerId = targetServerId.getId();

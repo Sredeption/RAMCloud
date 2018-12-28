@@ -204,6 +204,8 @@ class BackupStorage {
 
         virtual void unload() = 0;
 
+        virtual void *copyIfOpen()
+        { return NULL; }
         /**
          * Returns true if this frame is currently open, false otherwise.
          */

@@ -627,7 +627,7 @@ TEST_F(MigrationTest, startBackups)
                        sourceId, targetId, tableId, 10, 19, recoveryInfo);
     recovery.testingBackupStartTaskSendCallback = &callback;
     recovery.startBackups();
-    EXPECT_EQ((vector<WireFormat::MigrationMasterStart::Replica>{
+    EXPECT_EQ((vector<WireFormat::MigrationSourceStart::Replica>{
         {1, 88},
         {2, 88},
         {1, 89},
@@ -870,7 +870,7 @@ TEST_F(MigrationTest, buildReplicaMap)
     addServersToTracker(3, {WireFormat::BACKUP_SERVICE});
 
     auto replicaMap = buildReplicaMap(tasks, 2, &tracker, 91);
-    EXPECT_EQ((vector<WireFormat::MigrationMasterStart::Replica>{
+    EXPECT_EQ((vector<WireFormat::MigrationSourceStart::Replica>{
         {2, 88},
         {3, 88},
         {2, 89},
@@ -881,7 +881,7 @@ TEST_F(MigrationTest, buildReplicaMap)
     tracker.getServerDetails({3, 0})->expectedReadMBytesPerSec = 101;
     TestLog::Enable _;
     replicaMap = buildReplicaMap(tasks, 2, &tracker, 91);
-    EXPECT_EQ((vector<WireFormat::MigrationMasterStart::Replica>{
+    EXPECT_EQ((vector<WireFormat::MigrationSourceStart::Replica>{
         {3, 88},
         {2, 88},
         {2, 89},
@@ -903,7 +903,7 @@ TEST_F(MigrationTest, buildReplicaMap_badReplicas)
     addServersToTracker(2, {WireFormat::BACKUP_SERVICE});
 
     auto replicaMap = buildReplicaMap(tasks, 1, &tracker, 91);
-    EXPECT_EQ((vector<WireFormat::MigrationMasterStart::Replica>()),
+    EXPECT_EQ((vector<WireFormat::MigrationSourceStart::Replica>()),
               replicaMap);
 }
 
@@ -918,7 +918,7 @@ TEST_F(MigrationTest, startMaster)
 
         void masterStartTaskSend(
             uint64_t migrationId, ServerId targetServerId,
-            const WireFormat::MigrationMasterStart::Replica replicaMap[],
+            const WireFormat::MigrationSourceStart::Replica replicaMap[],
             size_t replicaMapSize)
         {
             if (callCount == 0) {
@@ -962,7 +962,7 @@ TEST_F(MigrationTest, startRecoveryMasters_tooFewIdleMasters)
 
         void masterStartTaskSend(
             uint64_t migrationId, ServerId targetServerId,
-            const WireFormat::MigrationMasterStart::Replica replicaMap[],
+            const WireFormat::MigrationSourceStart::Replica replicaMap[],
             size_t replicaMapSize)
         {
             if (callCount == 0) {

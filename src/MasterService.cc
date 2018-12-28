@@ -194,9 +194,13 @@ MasterService::dispatch(WireFormat::Opcode opcode, Rpc* rpc)
             callHandler<WireFormat::MultiOp, MasterService,
                         &MasterService::multiOp>(rpc);
             break;
-        case WireFormat::MigrationMasterStart::opcode:
-            callHandler<WireFormat::MigrationMasterStart, MasterService,
-                &MasterService::migrationStart>(rpc);
+        case WireFormat::MigrationSourceStart::opcode:
+            callHandler<WireFormat::MigrationSourceStart, MasterService,
+                &MasterService::migrationSourceStart>(rpc);
+            break;
+         case WireFormat::MigrationTargetStart::opcode:
+            callHandler<WireFormat::MigrationTargetStart, MasterService,
+                &MasterService::migrationTargetStart>(rpc);
             break;
         case WireFormat::PrepForIndexletMigration::opcode:
             callHandler<WireFormat::PrepForIndexletMigration, MasterService,
@@ -4054,18 +4058,30 @@ class MigrationTask {
 };
 }
 
-void MasterService::migrationStart(
-    const WireFormat::MigrationMasterStart::Request *reqHdr,
-    WireFormat::MigrationMasterStart::Response *respHdr,
+void MasterService::migrationSourceStart(
+    const WireFormat::MigrationSourceStart::Request *reqHdr,
+    WireFormat::MigrationSourceStart::Response *respHdr,
     Service::Rpc *rpc)
 {
-    if (serverId.getId() == reqHdr->sourceServerId) {
-        tabletManager.changeState(reqHdr->tableId, reqHdr->firstKeyHash,
-                                  reqHdr->lastKeyHash, TabletManager::NORMAL,
-                                  TabletManager::MIGRATING);
-        return;
-    }
+    tabletManager.changeState(reqHdr->tableId, reqHdr->firstKeyHash,
+                              reqHdr->lastKeyHash, TabletManager::NORMAL,
+                              TabletManager::MIGRATING);
 
+    auto replicas = objectManager.getReplicas();
+    ServerId sourceServerId(reqHdr->sourceServerId);
+    ServerId targetServerId(reqHdr->targetServerId);
+
+    MasterClient::migrationTargetStart(
+        context, targetServerId, reqHdr->migrationId, sourceServerId,
+        targetServerId, reqHdr->tableId, reqHdr->firstKeyHash,
+        reqHdr->lastKeyHash, replicas.data(),
+        downCast<uint32_t>(replicas.size()));
+}
+
+void MasterService::migrationTargetStart(
+    const WireFormat::MigrationTargetStart::Request *reqHdr,
+    WireFormat::MigrationTargetStart::Response *respHdr, Service::Rpc *rpc)
+{
     ReplicatedSegment::recoveryStart = Cycles::rdtsc();
     CycleCounter<RawMetric> recoveryTicks(&metrics->master.recoveryTicks);
     metrics->master.recoveryCount++;
@@ -4078,10 +4094,10 @@ void MasterService::migrationStart(
     vector<Replica> replicas;
     replicas.reserve(reqHdr->numReplicas);
     for (uint32_t i = 0; i < reqHdr->numReplicas; ++i) {
-        const WireFormat::MigrationMasterStart::Replica *replicaLocation =
+        const WireFormat::MigrationTargetStart::Replica *replicaLocation =
             rpc->requestPayload->
-                getOffset<WireFormat::MigrationMasterStart::Replica>(offset);
-        offset += sizeof32(WireFormat::MigrationMasterStart::Replica);
+                getOffset<WireFormat::MigrationTargetStart::Replica>(offset);
+        offset += sizeof32(WireFormat::MigrationTargetStart::Replica);
         Replica replica(replicaLocation->backupId, replicaLocation->segmentId);
         replicas.push_back(replica);
     }
@@ -4137,7 +4153,7 @@ void MasterService::migrationStart(
         bool changed = tabletManager.changeState(
             reqHdr->tableId,
             reqHdr->firstKeyHash, reqHdr->lastKeyHash,
-            TabletManager::NOT_READY, TabletManager::NORMAL);
+            TabletManager::MIGRATING, TabletManager::NORMAL);
         if (!changed) {
             throw FatalError(
                 HERE, format("Could not change recovering "
@@ -4145,7 +4161,7 @@ void MasterService::migrationStart(
                              reqHdr->tableId,
                              reqHdr->firstKeyHash,
                              reqHdr->lastKeyHash));
-         }
+        }
     } else {
         bool removed = tabletManager.deleteTablet(
             reqHdr->tableId, reqHdr->firstKeyHash, reqHdr->lastKeyHash);

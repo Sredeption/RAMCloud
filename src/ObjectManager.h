@@ -104,6 +104,7 @@ class ObjectManager : public LogEntryHandlers,
                         Buffer* removedObjBuffer = NULL);
     Status commitWrite(PreparedOp& op, Log::Reference& refToPreparedOp,
                         Buffer* removedObjBuffer = NULL);
+    std::vector<WireFormat::MigrationTargetStart::Replica> getReplicas();
 
     /**
      * The following three methods are used when multiple log entries

@@ -134,11 +134,12 @@ enum Opcode {
     MIGRATION_STARTPARTITION    = 82,
     MIGRATION_GETDATA           = 83,
     MIGRATION_INIT              = 84,
-    MIGRATION_RECOVER           = 85,
-    MIGRATION_BACKUPCOMPLETE    = 86,
-    MIGRATION_MASTERFINISH      = 87,
-    MIGRATION_QUERY             = 88,
-    ILLEGAL_RPC_TYPE            = 89, // 1 + the highest legitimate Opcode
+    MIGRATION_SOURCESTART       = 85,
+    MIGRATION_TARGETSTART       = 86,
+    MIGRATION_BACKUPCOMPLETE    = 87,
+    MIGRATION_MASTERFINISH      = 88,
+    MIGRATION_QUERY             = 89,
+    ILLEGAL_RPC_TYPE            = 90, // 1 + the highest legitimate Opcode
 };
 
 /**
@@ -1052,8 +1053,25 @@ struct MigrationInit {
     } __attribute__((packed));
 };
 
-struct MigrationMasterStart {
-    static const Opcode opcode = MIGRATION_RECOVER;
+struct MigrationSourceStart {
+    static const Opcode opcode = MIGRATION_SOURCESTART;
+    static const ServiceType service = MASTER_SERVICE;
+    struct Request {
+        RequestCommonWithId common;
+        uint64_t migrationId;
+        uint64_t sourceServerId;
+        uint64_t targetServerId;
+        uint64_t tableId;           // TabletId of the tablet to migrate.
+        uint64_t firstKeyHash;      // First key of the tablet to migrate.
+        uint64_t lastKeyHash;       // Last key of the tablet to migrate.
+    } __attribute__((packed));
+    struct Response {
+        ResponseCommon common;
+    } __attribute__((packed));
+};
+
+struct MigrationTargetStart {
+    static const Opcode opcode = MIGRATION_TARGETSTART;
     static const ServiceType service = MASTER_SERVICE;
     struct Request {
         RequestCommonWithId common;

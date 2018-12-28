@@ -3821,4 +3821,10 @@ ObjectManager::replace(HashTableBucketLock& lock, Key& key,
     return false;
 }
 
+std::vector<WireFormat::MigrationTargetStart::Replica>
+ObjectManager::getReplicas()
+{
+    return segmentManager.getReplicas();
+}
+
 } //enamespace RAMCloud

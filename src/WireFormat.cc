@@ -125,7 +125,7 @@ opcodeSymbol(uint32_t opcode)
         case MIGRATION_STARTREADING:       return "MIGRATION_START_READING";
         case MIGRATION_GETDATA:            return "MIGRATION_GET_DATA";
         case MIGRATION_INIT:               return "MIGRATION_INIT";
-        case MIGRATION_RECOVER:            return "MIGRATION_RECOVER";
+        case MIGRATION_SOURCESTART:            return "MIGRATION_RECOVER";
         case MIGRATION_BACKUPCOMPLETE:     return "MIGRATION_BACKUP_COMPLETE";
         case MIGRATION_MASTERFINISH:       return "MIGRATION_MASTER_FINISH";
         case MIGRATION_QUERY:              return "MIGRATION_QUERY";
@@ -211,28 +211,27 @@ operator<<(std::ostream& stream, const Recover::Replica& replica) {
     return stream;
 }
 
-bool
-operator==(const MigrationMasterStart::Replica &a,
-           const MigrationMasterStart::Replica &b)
+bool operator==(const MigrationTargetStart::Replica &a,
+                const MigrationTargetStart::Replica &b)
 {
     return (a.backupId == b.backupId &&
             a.segmentId == b.segmentId);
 }
 
-bool
-operator!=(const MigrationMasterStart::Replica &a,
-           const MigrationMasterStart::Replica &b)
+bool operator!=(const MigrationTargetStart::Replica &a,
+                const MigrationTargetStart::Replica &b)
 {
     return !(a == b);
 }
 
 std::ostream &
-operator<<(std::ostream &stream, const MigrationMasterStart::Replica &replica)
+operator<<(std::ostream &stream, const MigrationTargetStart::Replica &replica)
 {
     stream << "Replica(backupId=" << replica.backupId
            << ", segmentId=" << replica.segmentId
            << ")";
     return stream;
 }
+
 }  // namespace WireFormat
 }  // namespace RAMCloud

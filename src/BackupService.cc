@@ -23,6 +23,7 @@
 #include "ShortMacros.h"
 #include "MultiFileStorage.h"
 #include "Status.h"
+#include "WorkerManager.h"
 
 namespace RAMCloud {
 
@@ -548,6 +549,7 @@ void BackupService::migrationGetData(
     WireFormat::MigrationGetData::Response *respHdr, Service::Rpc *rpc)
 {
 //    uint64_t start = Cycles::rdtsc();
+    rpc->worker->rpc->activities = Transport::ServerRpc::READ_ACTIVITY;
     ServerId sourceServerId(reqHdr->sourceId);
     RAMCLOUD_LOG(DEBUG,
                  "migrationGetData sourceId %s, segmentId %lu, partitionId %lu",
@@ -562,6 +564,7 @@ void BackupService::migrationGetData(
                      sourceServerId.toString().c_str(), reqHdr->segmentId);
         throw BackupBadSegmentIdException(HERE);
     }
+
 
     Status status =
         migrationIt->second->getRecoverySegment(reqHdr->migrationId,

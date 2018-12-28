@@ -278,6 +278,20 @@ MultiFileStorage::Frame::unload()
     loadRequested = false;
 }
 
+void *MultiFileStorage::Frame::copyIfOpen()
+{
+    Lock lock(storage->mutex);
+    if (isOpen) {
+
+        void *block = Memory::xmemalign(HERE, BUFFER_ALIGNMENT,
+                                        storage->segmentSize + METADATA_SIZE);
+        BufferPtr bufferCopy = storage->allocateBuffer();
+        storage->copyBuffer(bufferCopy.get(), block);
+        return block;
+    } else
+        return NULL;
+}
+
 /**
  * Append data to frame and update metadata.
  * Data will be written to storage using the policy selected on open():
@@ -1055,6 +1069,12 @@ MultiFileStorage::allocateBuffer()
     void* buffer = buffers.top();
     buffers.pop();
     return BufferPtr{buffer, bufferDeleter};
+}
+
+void
+MultiFileStorage::copyBuffer(void* dest, void* src)
+{
+    std::memcpy(dest, src, segmentSize + METADATA_SIZE);
 }
 
 /**

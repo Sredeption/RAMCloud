@@ -340,7 +340,7 @@ findLogDigest(Tub<BackupStartTask> *tasks, size_t taskCount)
 
 /// Used in buildReplicaMap().
 struct ReplicaAndLoadTime {
-    WireFormat::MigrationMasterStart::Replica replica;
+    WireFormat::MigrationTargetStart::Replica replica;
     uint64_t expectedLoadTimeMs;
 
     bool operator<(const ReplicaAndLoadTime &r) const
@@ -349,9 +349,9 @@ struct ReplicaAndLoadTime {
     }
 };
 
-vector<WireFormat::MigrationMasterStart::Replica>
+vector<WireFormat::MigrationTargetStart::Replica>
 buildReplicaMap(Tub<BackupStartTask> *tasks, size_t taskCount,
-                MigrationTracker *tracker, uint64_t headId)
+                MigrationTracker *tracker)
 {
     vector<ReplicaAndLoadTime> replicasToSort;
     for (uint32_t taskIndex = 0; taskIndex < taskCount; taskIndex++) {
@@ -381,25 +381,15 @@ buildReplicaMap(Tub<BackupStartTask> *tasks, size_t taskCount,
             }
 
             const auto &replica = task->result.replicas[i];
-            if (replica.segmentId <= headId) {
-                ReplicaAndLoadTime r{{backupId.getId(), replica.segmentId},
-                                     expectedLoadTimeMs};
-                replicasToSort.push_back(r);
-            } else {
-                // Getting here is not necessarily a sign of a problem.
-                // Any replicas with higher ids will either
-                // be empty or only contain data written async which is ok
-                // to lose.
-                    LOG(DEBUG,
-                        "Ignoring replica for segment id %lu from backup %s "
-                        "because it's past the head segment (%lu)",
-                        replica.segmentId, backupId.toString().c_str(), headId);
-            }
+            ReplicaAndLoadTime r{{backupId.getId(), replica.segmentId},
+                                 expectedLoadTimeMs};
+            replicasToSort.push_back(r);
+
         }
     }
 
     std::sort(replicasToSort.begin(), replicasToSort.end());
-    vector<WireFormat::MigrationMasterStart::Replica> replicaMap;
+    vector<WireFormat::MigrationTargetStart::Replica> replicaMap;
     for (const auto &sortedReplica: replicasToSort) {
         RAMCLOUD_LOG(DEBUG, "Load segment %lu replica from backup %s "
                             "with expected load time of %lu ms",
@@ -449,9 +439,7 @@ struct MasterStartTask {
                           migration.targetServerId,
                           migration.tableId,
                           migration.firstKeyHash,
-                          migration.lastKeyHash,
-                          replicaMapData,
-                          replicaMapSize);
+                          migration.lastKeyHash);
             if (migration.testingFailRecoveryMasters > 0) {
                     LOG(NOTICE, "Told recovery master %s to kill itself",
                         serverId.toString().c_str());
@@ -489,7 +477,7 @@ struct MasterStartTask {
     /// Id of master server to kick off this partition's recovery on.
     ServerId serverId;
 
-    Tub<MigrationMasterStartRpc> rpc;
+    Tub<MigrationSourceStartRpc> rpc;
     bool done;
     MasterStartTaskTestingCallback *testingCallback;
     DISALLOW_COPY_AND_ASSIGN(MasterStartTask);
@@ -575,47 +563,11 @@ void Migration::startBackups()
 
     /* Broadcast 1: start reading replicas from disk and verify log integrity */
     parallelRun(backupStartTasks.get(), backups.size(), maxActiveBackupHosts);
-    auto digestInfo = findLogDigest(backupStartTasks.get(), backups.size());
-    if (!digestInfo) {
-        RAMCLOUD_LOG(NOTICE,
-                     "No log digest among replicas on available backups. "
-                     "Will retry recovery later.");
-        status = ALL_RECOVERY_MASTERS_FINISHED;
-        schedule();
-        return;
-    }
-
-    uint64_t headId = std::get<0>(*digestInfo.get());
-    LogDigest digest = std::get<1>(*digestInfo.get());
-    // This tableStats digest is a pointer into an object inside
-    // backupStartTasks.  Thus it is only valid as long as backupStartTasks
-    // is live.  backupStartTasks is on this methods stack and is live for
-    // the scope for this method.
-    TableStats::Digest *tableStats = std::get<2>(*digestInfo.get());
-
-    RAMCLOUD_LOG(NOTICE, "Segment %lu is the head of the log", headId);
-
-    bool logIsComplete = verifyLogComplete(backupStartTasks.get(),
-                                           backups.size(), digest);
-
-    if (!logIsComplete) {
-        RAMCLOUD_LOG(NOTICE,
-                     "Some replicas from log digest not on available backups. "
-                     "Will retry recovery later.");
-        status = ALL_RECOVERY_MASTERS_FINISHED;
-        schedule();
-        return;
-    }
-
-    TableStats::Estimator estimator(tableStats);
-//    partitionTablets(tablets, &estimator);
-    RAMCLOUD_LOG(NOTICE, "Partition Scheme for Migration:\n%s",
-                 dataToMigration.DebugString().c_str());
 
     parallelRun(backupPartitionTasks.get(), backups.size(),
                 maxActiveBackupHosts);
     replicaMap = buildReplicaMap(backupStartTasks.get(), backups.size(),
-                                 tracker, headId);
+                                 tracker);
 
     status = START_RECOVERY_MASTERS;
     schedule();
@@ -636,9 +588,8 @@ void Migration::startMasters()
         std::unique_ptr<Tub<MasterStartTask>[]>(
             new Tub<MasterStartTask>[2]);
     migrationTasks[0].construct(*this, sourceServerId);
-    migrationTasks[1].construct(*this, targetServerId);
 
-    parallelRun(migrationTasks.get(), 2, 2);
+    parallelRun(migrationTasks.get(), 1, 1);
 
     if (status > WAIT_FOR_RECOVERY_MASTERS)
         return;

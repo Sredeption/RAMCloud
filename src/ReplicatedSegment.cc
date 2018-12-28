@@ -1006,4 +1006,9 @@ ReplicatedSegment::dumpProgress()
     LOG(NOTICE, "\n%s", info.c_str());
 }
 
+WireFormat::MigrationTargetStart::Replica ReplicatedSegment::toPrimary()
+{
+    return {replicas[0].backupId.getId(), segmentId};
+}
+
 } // namespace RAMCloud

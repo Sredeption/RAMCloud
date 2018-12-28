@@ -116,6 +116,7 @@ class SegmentManager {
                    MasterTableMetadata* masterTableMetadata);
     ~SegmentManager();
     void getMetrics(ProtoBuf::LogMetrics_SegmentMetrics& m);
+    std::vector<WireFormat::MigrationTargetStart::Replica> getReplicas();
     uint32_t getSegmentsOnDisk();
     SegletAllocator& getAllocator() const;
     LogSegment* allocHeadSegment(uint32_t flags = EMPTY);

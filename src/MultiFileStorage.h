@@ -72,6 +72,7 @@ class MultiFileStorage : public BackupStorage {
         bool currentlyOpen() { return isOpen;}
         void* load();
         void unload();
+        void *copyIfOpen();
 
         void append(Buffer& source,
                     size_t sourceOffset,
@@ -243,6 +244,7 @@ class MultiFileStorage : public BackupStorage {
     void fry();
 
     BufferPtr allocateBuffer();
+    void copyBuffer(void* dest, void* src);
 
     /**
      * Internal use only; block size of storage. Needed to deal

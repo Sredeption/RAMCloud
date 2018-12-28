@@ -94,6 +94,17 @@ class MasterClient {
     static void txHintFailed(Context* context, uint64_t tableId,
             uint64_t keyHash, uint64_t leaseId, uint64_t clientTransactionId,
             uint32_t participantCount, WireFormat::TxParticipant *participants);
+    static void migrationTargetStart(
+        Context *context,
+        ServerId serverId,
+        uint64_t migrationId,
+        ServerId sourceServerId,
+        ServerId targetServerId,
+        uint64_t tableId,
+        uint64_t firstKeyHash,
+        uint64_t lastKeyHash,
+        const WireFormat::MigrationTargetStart::Replica *replicas,
+        uint32_t numReplicas);
 
   private:
     MasterClient();
@@ -199,20 +210,18 @@ class PrepForIndexletMigrationRpc : public ServerIdRpcWrapper {
     DISALLOW_COPY_AND_ASSIGN(PrepForIndexletMigrationRpc);
 };
 
-class MigrationMasterStartRpc : public ServerIdRpcWrapper {
+class MigrationSourceStartRpc : public ServerIdRpcWrapper {
   public:
-    MigrationMasterStartRpc(
+    MigrationSourceStartRpc(
         Context *context, ServerId serverId,
         uint64_t migrationId,
         ServerId sourceServerId,
         ServerId targetServerId,
         uint64_t tableId,
         uint64_t firstKeyHash,
-        uint64_t lastKeyHash,
-        const WireFormat::MigrationMasterStart::Replica *replicas,
-        uint32_t numReplicas);
+        uint64_t lastKeyHash);
 
-    ~MigrationMasterStartRpc()
+    ~MigrationSourceStartRpc()
     {}
 
     /// \copydoc ServerIdRpcWrapper::waitAndCheckErrors
@@ -220,7 +229,31 @@ class MigrationMasterStartRpc : public ServerIdRpcWrapper {
     { waitAndCheckErrors(); }
 
   PRIVATE:
-    DISALLOW_COPY_AND_ASSIGN(MigrationMasterStartRpc);
+    DISALLOW_COPY_AND_ASSIGN(MigrationSourceStartRpc);
+};
+
+class MigrationTargetStartRpc : public ServerIdRpcWrapper {
+  public:
+    MigrationTargetStartRpc(
+        Context *context, ServerId serverId,
+        uint64_t migrationId,
+        ServerId sourceServerId,
+        ServerId targetServerId,
+        uint64_t tableId,
+        uint64_t firstKeyHash,
+        uint64_t lastKeyHash,
+        const WireFormat::MigrationTargetStart::Replica *replicas,
+        uint32_t numReplicas);
+
+    ~MigrationTargetStartRpc()
+    {}
+
+    /// \copydoc ServerIdRpcWrapper::waitAndCheckErrors
+    void wait()
+    { waitAndCheckErrors(); }
+
+  PRIVATE:
+    DISALLOW_COPY_AND_ASSIGN(MigrationTargetStartRpc);
 };
 
 /**

@@ -323,9 +323,15 @@ BackupMasterMigration::Replica::Replica(const BackupStorage::FrameRef &frame)
       built(),
       lastAccessTime(0),
       refCount(0),
-      fetchCount(0)
+      fetchCount(0),
+      head(NULL)
 {
 
+}
+
+BackupMasterMigration::Replica::~Replica()
+{
+    std::free(head);
 }
 
 BackupMasterMigration::CyclicReplicaBuffer::CyclicReplicaBuffer(
@@ -450,7 +456,14 @@ bool BackupMasterMigration::CyclicReplicaBuffer::bufferNext()
         oldestReplicaIdx = (oldestReplicaIdx + 1) % maxReplicasInMemory;
     }
     // Read the next replica from disk.
-    nextReplica->frame->startLoading();
+    void *tryHead = NULL;
+    if (!nextReplica->head)
+        tryHead = nextReplica->frame->copyIfOpen();
+    if (tryHead)
+        nextReplica->head = tryHead;
+    else
+        nextReplica->frame->startLoading();
+
     replicaDeque->pop_front();
 
     RAMCLOUD_LOG(DEBUG, "Added replica <%s,%lu> to the recovery buffer",
@@ -468,10 +481,11 @@ bool BackupMasterMigration::CyclicReplicaBuffer::buildNext()
         for (size_t i = 0; i < inMemoryReplicas.size(); i++) {
             size_t idx = (i + oldestReplicaIdx) % inMemoryReplicas.size();
             Replica *candidate = inMemoryReplicas[idx];
-            if (candidate->frame->isLoaded() && !candidate->built) {
-                replicaToBuild = candidate;
-                break;
-            }
+            if (!candidate->built)
+                if (candidate->head || candidate->frame->isLoaded()) {
+                    replicaToBuild = candidate;
+                    break;
+                }
         }
     }
 
@@ -482,7 +496,12 @@ bool BackupMasterMigration::CyclicReplicaBuffer::buildNext()
     replicaToBuild->recoveryException.reset();
     replicaToBuild->migrationSegment.reset();
 
-    void *replicaData = replicaToBuild->frame->load();
+    void *replicaData = NULL;
+    if (replicaToBuild->head)
+        replicaData = replicaToBuild->head;
+    else
+        replicaData = replicaToBuild->frame->load();
+
     CycleCounter<RawMetric> _(&metrics->backup.filterTicks);
 
     // Recovery segments for this replica data are constructed by splitting data

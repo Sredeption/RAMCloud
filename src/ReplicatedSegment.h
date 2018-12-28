@@ -28,6 +28,7 @@
 #include "Transport.h"
 #include "TaskQueue.h"
 #include "VarLenArray.h"
+#include "WireFormat.h"
 
 namespace RAMCloud {
 
@@ -344,6 +345,7 @@ class ReplicatedSegment : public Task {
     void handleBackupFailure(ServerId failedId, bool useMinCopysets);
     void sync(uint32_t offset = ~0u, SegmentCertificate* certificate = NULL);
     const Segment* swapSegment(const Segment* newSegment);
+    WireFormat::MigrationTargetStart::Replica toPrimary();
 
     /**
      * Unsafe, but handy global used to generate time-since-start-of-recovery

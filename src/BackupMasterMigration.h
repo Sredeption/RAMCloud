@@ -79,6 +79,8 @@ class BackupMasterMigration : public Task {
     struct Replica {
         explicit Replica(const BackupStorage::FrameRef &frame);
 
+        ~Replica();
+
         BackupStorage::FrameRef frame;
 
         const BackupReplicaMetadata *metadata;
@@ -94,6 +96,8 @@ class BackupMasterMigration : public Task {
         Atomic<int> refCount;
 
         Atomic<int> fetchCount;
+
+        void *head;
 
         DISALLOW_COPY_AND_ASSIGN(Replica);
     };

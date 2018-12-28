@@ -161,6 +161,18 @@ SegmentManager::getMetrics(ProtoBuf::LogMetrics_SegmentMetrics& m)
     }
 }
 
+std::vector<WireFormat::MigrationTargetStart::Replica>
+SegmentManager::getReplicas()
+{
+    SpinLock::Guard _(lock);
+
+    std::vector<WireFormat::MigrationTargetStart::Replica> replicas;
+    foreach (LogSegment &s, allSegments) {
+        replicas.emplace_back(s.replicatedSegment->toPrimary());
+    }
+    return replicas;
+}
+
 /**
  * Returns the number of segments currently on backup disks. May be used for
  * calculating backup space usage.
