@@ -1717,10 +1717,11 @@ ObjectManager::writeObject(Object& newObject, RejectRules* rejectRules,
     if (!tabletManager->getTablet(key, &tablet)) {
         return STATUS_UNKNOWN_TABLET;
     }
-    if (tablet.state != TabletManager::NORMAL) {
+    if (tablet.state != TabletManager::NORMAL &&
+        tablet.state != TabletManager::MIGRATION_TARGET) {
         if (tablet.state == TabletManager::LOCKED_FOR_MIGRATION)
             throw RetryException(HERE, 1000, 2000,
-                    "Tablet is currently locked for migration!");
+                                 "Tablet is currently locked for migration!");
         return STATUS_UNKNOWN_TABLET;
     }
 

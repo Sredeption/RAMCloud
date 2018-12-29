@@ -105,7 +105,7 @@ try
     RAMCLOUD_LOG(NOTICE, "Issuing migration request:");
     RAMCLOUD_LOG(NOTICE, "  table \"%s\" (%lu)", tableName.c_str(), tableId);
     RAMCLOUD_LOG(NOTICE, "  first key %lu", firstKey);
-    RAMCLOUD_LOG(NOTICE, "  last key  %lu", lastKey);
+    RAMCLOUD_LOG(NOTICE, "  last key  %lx", lastKey);
     RAMCLOUD_LOG(NOTICE, "  recipient master id %u", newOwnerMasterId);
 
     {
@@ -114,9 +114,9 @@ try
                              ServerId(newOwnerMasterId, 0));
         usleep(100000);
         while (!client.migrationQuery(1)) {
-            for (uint32_t key = 0; key < 10; key++) {
-                client.write(tableId, &key, 4, &key, 4);
-            }
+//            for (uint32_t key = 0; key < 10; key++) {
+//                client.write(tableId, &key, 4, &key, 4);
+//            }
             usleep(100000);
         }
         double seconds = Cycles::toSeconds(counter.stop());

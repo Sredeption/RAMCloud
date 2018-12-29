@@ -285,8 +285,7 @@ void *MultiFileStorage::Frame::copyIfOpen()
 
         void *block = Memory::xmemalign(HERE, BUFFER_ALIGNMENT,
                                         storage->segmentSize + METADATA_SIZE);
-        BufferPtr bufferCopy = storage->allocateBuffer();
-        storage->copyBuffer(bufferCopy.get(), block);
+        storage->copyBuffer(block, buffer.get());
         return block;
     } else
         return NULL;

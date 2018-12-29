@@ -59,7 +59,8 @@ class TabletManager {
         NOT_READY = 1,
         /// Migration of tablet is requested. Cannot take new writes.
         LOCKED_FOR_MIGRATION = 2,
-        MIGRATING = 3
+        MIGRATION_SOURCE = 3,
+        MIGRATION_TARGET = 4
     };
 
     /**

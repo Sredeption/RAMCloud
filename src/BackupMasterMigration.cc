@@ -106,47 +106,7 @@ BackupMasterMigration::start(const std::vector<BackupStorage::FrameRef> &frames,
         segmentIdToReplica[replica.metadata->segmentId] = &replica;
     }
 
-    // Obtain the LogDigest from the lowest segment id of any open replica
-    // that has the highest epoch number. The epoch part shouldn't matter
-    // since backups don't accept multiple replicas for the same segment, but
-    // better to put this in in case things change in the future.
-
-    for (auto &replica: replicas) {
-        if (replica.metadata->closed)
-            continue;
-        if (logDigestSegmentId < replica.metadata->segmentId)
-            continue;
-        if (logDigestSegmentId == replica.metadata->segmentId &&
-            logDigestSegmentEpoch > replica.metadata->segmentEpoch) {
-            continue;
-        }
-        // This shouldn't block since the backup keeps all open segments
-        // in memory (it even reloads them into memory upon restarts).
-        void *replicaData = replica.frame->load();
-        bool foundDigest;
-        if (testingExtractDigest) {
-            foundDigest = (*testingExtractDigest)(
-                replica.metadata->segmentId,
-                &logDigest, &tableStatsDigest);
-        } else {
-            foundDigest = MigrationSegmentBuilder::extractDigest(
-                replicaData, segmentSize,
-                replica.metadata->certificate,
-                &logDigest,
-                &tableStatsDigest);
-        }
-        if (foundDigest) {
-            logDigestSegmentId = replica.metadata->segmentId;
-            logDigestSegmentEpoch = replica.metadata->segmentEpoch;
-        }
-    }
-    if (logDigestSegmentId != ~0lu) {
-        RAMCLOUD_LOG(NOTICE, "Found log digest in replica for segment %lu",
-                     logDigestSegmentId);
-    }
-
     startCompleted = true;
-    populateStartResponse(buffer, response);
 }
 
 void BackupMasterMigration::setPartitionsAndSchedule()
@@ -331,7 +291,6 @@ BackupMasterMigration::Replica::Replica(const BackupStorage::FrameRef &frame)
 
 BackupMasterMigration::Replica::~Replica()
 {
-    std::free(head);
 }
 
 BackupMasterMigration::CyclicReplicaBuffer::CyclicReplicaBuffer(
@@ -533,16 +492,19 @@ bool BackupMasterMigration::CyclicReplicaBuffer::buildNext()
         return true;
     }
 
-    RAMCLOUD_LOG(DEBUG, "<%s,%lu> recovery segments took %lu ms to construct, "
-                        "notifying other threads",
+    RAMCLOUD_LOG(NOTICE, "<%s,%lu> recovery segments took %lu us to construct, "
+                         "notifying other threads",
                  migration->sourceServerId.toString().c_str(),
                  replicaToBuild->metadata->segmentId,
-                 Cycles::toNanoseconds(Cycles::rdtsc() - start) / 1000 / 1000);
+                 Cycles::toNanoseconds(Cycles::rdtsc() - start) / 1000);
     replicaToBuild->migrationSegment = std::move(migrationSegment);
     Fence::sfence();
     replicaToBuild->built = true;
     replicaToBuild->lastAccessTime = Cycles::rdtsc();
-    replicaToBuild->frame->unload();
+    if (replicaToBuild->head)
+        std::free(replicaToBuild->head);
+    else
+        replicaToBuild->frame->unload();
     return true;
 }
 

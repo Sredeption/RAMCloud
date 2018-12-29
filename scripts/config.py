@@ -106,7 +106,7 @@ hosts = []
 ids = [2, 3, 12, 14, 15, 18, 19, 20, 21]
 for i in ids:
     hosts.append((
-        'heming-rdma%d' % i,
+        '10.22.1.%d' % i,
         '10.22.1.%d' % i,
         i
     ))

@@ -4065,7 +4065,7 @@ void MasterService::migrationSourceStart(
 {
     tabletManager.changeState(reqHdr->tableId, reqHdr->firstKeyHash,
                               reqHdr->lastKeyHash, TabletManager::NORMAL,
-                              TabletManager::MIGRATING);
+                              TabletManager::MIGRATION_SOURCE);
 
     auto replicas = objectManager.getReplicas();
     ServerId sourceServerId(reqHdr->sourceServerId);
@@ -4082,7 +4082,12 @@ void MasterService::migrationTargetStart(
     const WireFormat::MigrationTargetStart::Request *reqHdr,
     WireFormat::MigrationTargetStart::Response *respHdr, Service::Rpc *rpc)
 {
+    tabletManager.changeState(reqHdr->tableId, reqHdr->firstKeyHash,
+                              reqHdr->lastKeyHash, TabletManager::NORMAL,
+                              TabletManager::MIGRATION_TARGET);
+
     ReplicatedSegment::recoveryStart = Cycles::rdtsc();
+
     CycleCounter<RawMetric> recoveryTicks(&metrics->master.recoveryTicks);
     metrics->master.recoveryCount++;
     metrics->master.replicas = objectManager.getReplicaManager()->numReplicas;
@@ -4110,7 +4115,7 @@ void MasterService::migrationTargetStart(
     bool added = tabletManager.addTablet(reqHdr->tableId,
                                          reqHdr->firstKeyHash,
                                          reqHdr->lastKeyHash,
-                                         TabletManager::MIGRATING);
+                                         TabletManager::MIGRATION_SOURCE);
     if (!added) {
         throw Exception(HERE,
                         format("Cannot recover tablet that overlaps "
@@ -4153,7 +4158,7 @@ void MasterService::migrationTargetStart(
         bool changed = tabletManager.changeState(
             reqHdr->tableId,
             reqHdr->firstKeyHash, reqHdr->lastKeyHash,
-            TabletManager::MIGRATING, TabletManager::NORMAL);
+            TabletManager::MIGRATION_SOURCE, TabletManager::NORMAL);
         if (!changed) {
             throw FatalError(
                 HERE, format("Could not change recovering "

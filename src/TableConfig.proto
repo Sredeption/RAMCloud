@@ -29,6 +29,8 @@ message TableConfig {
 
       /// The tablet is being recovered, so it's not available.
       RECOVERING = 1;
+
+      MIGRATING = 2;
     }
 
     /// The id of the containing table.
