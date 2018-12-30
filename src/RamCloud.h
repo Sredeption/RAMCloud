@@ -23,6 +23,7 @@
 #include "ObjectRpcWrapper.h"
 #include "OptionParser.h"
 #include "ServerMetrics.h"
+#include "MigrationClient.h"
 
 #include "LogMetrics.pb.h"
 #include "ServerConfig.pb.h"
@@ -185,6 +186,8 @@ class RamCloud {
      * memory, and must be freed (NULL means not allocated yet).
      */
     Context* realClientContext;
+
+    MigrationClient migrationClient;
 
   public:
     /**

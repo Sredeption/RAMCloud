@@ -60,7 +60,7 @@ try
          "First key of the tablet range to migrate")
         ("lastKey,z",
          ProgramOptions::value<uint64_t>(&lastKey)->
-             default_value((~0ul) / 2),
+             default_value(~0ul),
          "Last key of the tablet range to migrate")
         ("recipient,r",
          ProgramOptions::value<uint32_t>(&newOwnerMasterId)->
@@ -114,9 +114,9 @@ try
                              ServerId(newOwnerMasterId, 0));
         usleep(100000);
         while (!client.migrationQuery(1)) {
-//            for (uint32_t key = 0; key < 10; key++) {
-//                client.write(tableId, &key, 4, &key, 4);
-//            }
+            for (uint32_t key = 0; key < 10; key++) {
+                client.write(tableId, &key, 4, &key, 4);
+            }
             usleep(100000);
         }
         double seconds = Cycles::toSeconds(counter.stop());

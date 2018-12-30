@@ -81,13 +81,14 @@ TabletManager::addTablet(uint64_t tableId,
  *      True if a tablet was found, otherwise false.
  */
 bool
-TabletManager::checkAndIncrementReadCount(Key& key) {
+TabletManager::checkAndIncrementReadCount(Key& key, Tablet* outTablet) {
     SpinLock::Guard guard(lock);
     TabletMap::iterator it = lookup(key.getTableId(), key.getHash(), guard);
 
     if (it == tabletMap.end())
         return false;
-    if (it->second.state != NORMAL) {
+    if (it->second.state != NORMAL || it->second.state != MIGRATION_SOURCE ||
+        it->second.state != MIGRATION_TARGET) {
         if (it->second.state == TabletManager::LOCKED_FOR_MIGRATION)
             throw RetryException(HERE, 1000, 2000,
                     "Tablet is currently locked for migration!");
@@ -95,6 +96,9 @@ TabletManager::checkAndIncrementReadCount(Key& key) {
     }
 
     it->second.readCount++;
+
+    if (outTablet != NULL)
+        *outTablet = it->second;
     return true;
 }
 
@@ -357,6 +361,27 @@ TabletManager::changeState(uint64_t tableId,
     } else if (oldState == TabletState::NOT_READY) {
         numLoadingTablets--;
     }
+
+    return true;
+}
+
+
+bool TabletManager::migrateTablet(uint64_t tableId, uint64_t startKeyHash,
+                                  uint64_t endKeyHash, uint64_t sourceId,
+                                  uint64_t targetId, TabletState state)
+{
+    SpinLock::Guard guard(lock);
+    TabletMap::iterator it = lookup(tableId, startKeyHash, guard);
+    if (it == tabletMap.end())
+        return false;
+
+    Tablet *t = &it->second;
+    if (t->startKeyHash != startKeyHash || t->endKeyHash != endKeyHash)
+        return false;
+
+    t->state=state;
+    t->sourceId = sourceId;
+    t->targetId = targetId;
 
     return true;
 }

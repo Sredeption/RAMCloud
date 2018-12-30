@@ -657,6 +657,9 @@ ObjectFinder::tryLookupTablet(uint64_t tableId, KeyHash keyHash)
     if (tabletWithLocator != NULL) {
         if (tabletWithLocator->tablet.status == Tablet::Status::NORMAL) {
             return tabletWithLocator;
+        } else if (tabletWithLocator->tablet.status ==
+                   Tablet::Status::MIGRATING) {
+            return tabletWithLocator;
         }
 
         if (Cycles::rdtsc() < tabletWithLocator->nextFetchTime) {

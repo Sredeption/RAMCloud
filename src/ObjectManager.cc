@@ -326,9 +326,10 @@ ObjectManager::readObject(Key& key, Buffer* outBuffer,
 {
     objectMap.prefetchBucket(key.getHash());
     HashTableBucketLock lock(*this, key);
+    TabletManager::Tablet tablet;
 
     // If the tablet doesn't exist in the NORMAL state, we must plead ignorance.
-    if (!tabletManager->checkAndIncrementReadCount(key))
+    if (!tabletManager->checkAndIncrementReadCount(key), &tablet)
         return STATUS_UNKNOWN_TABLET;
 
     Buffer buffer;
@@ -362,6 +363,18 @@ ObjectManager::readObject(Key& key, Buffer* outBuffer,
     PerfStats::threadStats.readObjectBytes += valueLength;
     PerfStats::threadStats.readKeyBytes +=
             object.getKeysAndValueLength() - valueLength;
+
+    uint8_t migrating = 0;
+
+    if (tablet.state == TabletManager::MIGRATION_SOURCE ||
+        tablet.state == TabletManager::MIGRATION_TARGET) {
+        migrating = 1;
+        outBuffer->appendCopy(&migrating, 1);
+        outBuffer->appendCopy(&tablet.sourceId, 4);
+        outBuffer->appendCopy(&tablet.targetId, 4);
+    } else {
+        outBuffer->appendCopy(&migrating, 1);
+    }
 
     return STATUS_OK;
 }

@@ -106,6 +106,7 @@ SHARED_SRCFILES := \
 		   src/MasterTableMetadata.cc \
 		   src/Memory.cc \
 		   src/MemoryMonitor.cc \
+		   src/MigrationClient.cc \
 		   src/MinCopysetsBackupSelector.cc \
 		   src/MultiOp.cc \
 		   src/MultiIncrement.cc \

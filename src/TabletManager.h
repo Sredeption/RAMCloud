@@ -81,6 +81,8 @@ class TabletManager {
             , state(NOT_READY)
             , readCount(-1)
             , writeCount(-1)
+            , sourceId(0)
+            , targetId(0)
         {
         }
 
@@ -94,6 +96,8 @@ class TabletManager {
             , state(state)
             , readCount(0)
             , writeCount(0)
+            , sourceId(0)
+            , targetId(0)
         {
         }
 
@@ -114,6 +118,10 @@ class TabletManager {
 
         /// The number of write operations performed on objects in this tablet.
         uint64_t writeCount;
+
+        uint64_t sourceId;
+
+        uint64_t targetId;
     };
 
     /**
@@ -153,7 +161,7 @@ class TabletManager {
                    uint64_t startKeyHash,
                    uint64_t endKeyHash,
                    TabletState state);
-    bool checkAndIncrementReadCount(Key& key);
+    bool checkAndIncrementReadCount(Key &key, Tablet *outTablet = NULL);
     bool getTablet(Key& key,
                    Tablet* outTablet = NULL);
     bool getTablet(uint64_t tableId,
@@ -174,6 +182,12 @@ class TabletManager {
                      uint64_t endKeyHash,
                      TabletState oldState,
                      TabletState newState);
+    bool migrateTablet(uint64_t tableId,
+                     uint64_t startKeyHash,
+                     uint64_t endKeyHash,
+                     uint64_t sourceId,
+                     uint64_t targetId,
+                     TabletState state);
     void incrementReadCount(Key& key);
     void incrementReadCount(uint64_t tableId,
                             KeyHash keyHash);

@@ -4063,9 +4063,10 @@ void MasterService::migrationSourceStart(
     WireFormat::MigrationSourceStart::Response *respHdr,
     Service::Rpc *rpc)
 {
-    tabletManager.changeState(reqHdr->tableId, reqHdr->firstKeyHash,
-                              reqHdr->lastKeyHash, TabletManager::NORMAL,
-                              TabletManager::MIGRATION_SOURCE);
+    tabletManager.migrateTablet(reqHdr->tableId, reqHdr->firstKeyHash,
+                                reqHdr->lastKeyHash, reqHdr->sourceServerId,
+                                reqHdr->targetServerId,
+                                TabletManager::MIGRATION_SOURCE);
 
     auto replicas = objectManager.getReplicas();
     ServerId sourceServerId(reqHdr->sourceServerId);
@@ -4082,9 +4083,10 @@ void MasterService::migrationTargetStart(
     const WireFormat::MigrationTargetStart::Request *reqHdr,
     WireFormat::MigrationTargetStart::Response *respHdr, Service::Rpc *rpc)
 {
-    tabletManager.changeState(reqHdr->tableId, reqHdr->firstKeyHash,
-                              reqHdr->lastKeyHash, TabletManager::NORMAL,
-                              TabletManager::MIGRATION_TARGET);
+    tabletManager.migrateTablet(reqHdr->tableId, reqHdr->firstKeyHash,
+                                reqHdr->lastKeyHash, reqHdr->sourceServerId,
+                                reqHdr->targetServerId,
+                                TabletManager::MIGRATION_TARGET);
 
     ReplicatedSegment::recoveryStart = Cycles::rdtsc();
 
@@ -4115,7 +4117,7 @@ void MasterService::migrationTargetStart(
     bool added = tabletManager.addTablet(reqHdr->tableId,
                                          reqHdr->firstKeyHash,
                                          reqHdr->lastKeyHash,
-                                         TabletManager::MIGRATION_SOURCE);
+                                         TabletManager::MIGRATION_TARGET);
     if (!added) {
         throw Exception(HERE,
                         format("Cannot recover tablet that overlaps "
