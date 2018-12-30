@@ -224,6 +224,8 @@ class BackupStorage {
          */
         virtual void* load() = 0;
 
+        virtual void* loadWithoutCheck() { return  NULL; };
+
         /**
          * Append data to frame and update metadata.
          * Data will be written to storage using the policy selected on

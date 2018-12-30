@@ -68,6 +68,7 @@ CLIENT_SRCFILES := \
 		   src/MacAddress.cc \
 		   src/MacIpAddress.cc \
 		   src/MasterClient.cc \
+		   src/MigrationClient.cc \
 		   src/Memory.cc \
 		   src/MultiOp.cc \
 		   src/MultiIncrement.cc \

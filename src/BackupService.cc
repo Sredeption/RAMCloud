@@ -548,14 +548,9 @@ void BackupService::migrationGetData(
     const WireFormat::MigrationGetData::Request *reqHdr,
     WireFormat::MigrationGetData::Response *respHdr, Service::Rpc *rpc)
 {
-//    uint64_t start = Cycles::rdtsc();
+    uint64_t start = Cycles::rdtsc();
     rpc->worker->rpc->activities = Transport::ServerRpc::READ_ACTIVITY;
     ServerId sourceServerId(reqHdr->sourceId);
-    RAMCLOUD_LOG(DEBUG,
-                 "migrationGetData sourceId %s, segmentId %lu, partitionId %lu",
-                 sourceServerId.toString().c_str(),
-                 reqHdr->segmentId, reqHdr->partitionId);
-
     auto migrationIt = migrations.find(reqHdr->migrationId);
     if (migrationIt == migrations.end()) {
         RAMCLOUD_LOG(WARNING,
@@ -564,7 +559,13 @@ void BackupService::migrationGetData(
                      sourceServerId.toString().c_str(), reqHdr->segmentId);
         throw BackupBadSegmentIdException(HERE);
     }
-
+    RAMCLOUD_LOG(DEBUG,
+                 "migrationGetData sourceId %s, segmentId %lu, partitionId %lu,"
+                 " %lu us from startTime",
+                 sourceServerId.toString().c_str(),
+                 reqHdr->segmentId, reqHdr->partitionId,
+                 Cycles::toMicroseconds(
+                     start - migrationIt->second->startTime));
 
     Status status =
         migrationIt->second->getRecoverySegment(reqHdr->migrationId,
@@ -579,11 +580,12 @@ void BackupService::migrationGetData(
     uint64_t readTicks = metrics->backup.storageReadTicks;
     RAMCLOUD_LOG(NOTICE,
                  "migrationGetData sourceId %s, segmentId %lu, total:"
-                 "load %lf MB, takes %lu us",
+                 "load %lf MB, takes %lu us, rpc serving time: %lu us",
                  sourceServerId.toString().c_str(),
                  reqHdr->segmentId,
-                 (double)readBytes/1024/1024,
-                 Cycles::toMicroseconds(readTicks));
+                 (double) readBytes / 1024 / 1024,
+                 Cycles::toMicroseconds(readTicks),
+                 Cycles::toMicroseconds(Cycles::rdtsc() - start));
 
     ++metrics->backup.readCompletionCount;
     RAMCLOUD_LOG(DEBUG, "getRecoveryData complete");

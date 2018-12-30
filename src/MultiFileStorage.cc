@@ -222,7 +222,7 @@ MultiFileStorage::Frame::startLoading()
     loadRequested = true;
     if (buffer)
         return;
-    schedule(lock, NORMAL);
+    schedule(lock, HIGH);
 }
 
 /**
@@ -264,6 +264,18 @@ MultiFileStorage::Frame::load()
     }
 }
 
+void *MultiFileStorage::Frame::loadWithoutCheck()
+{
+    startLoading();
+    while (true) {
+        Lock lock(storage->mutex);
+        if (!buffer) {
+            testingHadToWaitForBufferOnLoad = true;
+            continue;
+        }
+        return buffer.get();
+    }
+}
 /**
  * Release a replica from in-memory buffers so they can be reused for other
  * replicas. Called after filtering completes on a replica during recovery.
@@ -419,7 +431,7 @@ MultiFileStorage::Frame::close()
         // at low priority. Now that it's closed, raise the priority
         // so it gets to secondary storage quickly and we can free its
         // buffer in memory.
-        schedule(lock, HIGH);
+        schedule(lock, NORMAL);
     }
 }
 

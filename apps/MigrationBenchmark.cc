@@ -68,7 +68,7 @@ try
          "ServerId of the master to migrate to")
         ("objectCount",
          ProgramOptions::value<uint32_t>(&objectCount)->
-             default_value(1000000),
+             default_value(3000000),
          "Number of objects to pre-populate in the table to be migrated")
         ("objectSize",
          ProgramOptions::value<uint32_t>(&objectSize)->
@@ -114,9 +114,9 @@ try
                              ServerId(newOwnerMasterId, 0));
         usleep(100000);
         while (!client.migrationQuery(1)) {
-            for (uint32_t key = 0; key < 10; key++) {
-                client.write(tableId, &key, 4, &key, 4);
-            }
+//            for (uint32_t key = 0; key < 10; key++) {
+//                client.write(tableId, &key, 4, &key, 4);
+//            }
             usleep(100000);
         }
         double seconds = Cycles::toSeconds(counter.stop());

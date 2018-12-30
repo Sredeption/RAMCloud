@@ -205,6 +205,9 @@ class BackupMasterMigration : public Task {
     static SpinLock deletionMutex;
 
     DISALLOW_COPY_AND_ASSIGN(BackupMasterMigration);
+
+  PUBLIC:
+    uint64_t startTime;
 };
 
 }

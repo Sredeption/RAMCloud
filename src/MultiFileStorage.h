@@ -71,6 +71,7 @@ class MultiFileStorage : public BackupStorage {
         bool isLoaded();
         bool currentlyOpen() { return isOpen;}
         void* load();
+        virtual void* loadWithoutCheck();
         void unload();
         void *copyIfOpen();
 

@@ -34,7 +34,8 @@ RAMCloud::BackupMasterMigration::BackupMasterMigration(
       testingExtractDigest(),
       testingSkipBuild(),
       destroyer(taskQueue, this),
-      pendingDeletion(false)
+      pendingDeletion(false),
+      startTime(0)
 {
 
 }
@@ -57,8 +58,11 @@ BackupMasterMigration::start(const std::vector<BackupStorage::FrameRef> &frames,
         return;
     }
 
+    metrics->backup.storageReadBytes = 0;
+    metrics->backup.storageReadTicks = 0;
     recoveryTicks.construct(&metrics->backup.recoveryTicks);
     metrics->backup.recoveryCount++;
+    startTime = Cycles::rdtsc();
 
     vector<BackupStorage::FrameRef> primaries;
     vector<BackupStorage::FrameRef> secondaries;
