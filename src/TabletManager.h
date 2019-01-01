@@ -197,6 +197,8 @@ class TabletManager {
     void getStatistics(ProtoBuf::ServerStatistics* serverStatistics);
     size_t getNumTablets();
     string toString();
+    bool raiseSafeVersion(uint64_t minimum);
+    uint64_t  getSafeVersion();
 
   PRIVATE:
     /// Tablets are stored in a multimap that is indexed by table identifier.
@@ -221,6 +223,8 @@ class TabletManager {
     int numLoadingTablets;
 
     DISALLOW_COPY_AND_ASSIGN(TabletManager);
+
+    std::atomic_uint_fast64_t safeVersion;
 };
 
 } // namespace RAMCloud

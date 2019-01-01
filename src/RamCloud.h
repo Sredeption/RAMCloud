@@ -129,6 +129,10 @@ class RamCloud {
     void read(uint64_t tableId, const void* key, uint16_t keyLength,
             Buffer* value, const RejectRules* rejectRules = NULL,
             uint64_t* version = NULL, bool* objectExists = NULL);
+
+    void readMigrating(uint64_t tableId, const void *key, uint16_t keyLength,
+                       Buffer *value, const RejectRules *rejectRules = NULL,
+                       uint64_t *version = NULL, bool *objectExists = NULL);
     void readKeysAndValue(uint64_t tableId, const void* key, uint16_t keyLength,
             ObjectBuffer* value, const RejectRules* rejectRules = NULL,
             uint64_t* version = NULL, bool* objectExists = NULL);
@@ -164,7 +168,6 @@ class RamCloud {
     void write(uint64_t tableId, uint8_t numKeys, KeyInfo *keyInfo,
             const char* value, const RejectRules* rejectRules = NULL,
             uint64_t* version = NULL, bool async = false);
-
     void poll();
     explicit RamCloud(CommandLineOptions* options);
     explicit RamCloud(Context* context);
@@ -189,6 +192,10 @@ class RamCloud {
 
     MigrationClient migrationClient;
 
+    void readMigratingInternal(
+        ServerId sourceServerId, ServerId targetServerId, uint64_t tableId,
+        const void *key, uint16_t keyLength, Buffer *value,
+        const RejectRules *rejectRules, uint64_t *version, bool *objectExists);
   public:
     /**
      * This usually refers to realClientContext. For testing purposes and
@@ -995,10 +1002,27 @@ class ReadRpc : public ObjectRpcWrapper {
             uint16_t keyLength, Buffer* value,
             const RejectRules* rejectRules = NULL);
     ~ReadRpc() {}
-    void wait(uint64_t* version = NULL, bool* objectExists = NULL);
+    void wait(uint64_t* version = NULL, bool* objectExists = NULL,
+              bool *migrating = NULL, uint64_t *sourceId = NULL,
+              uint64_t *targetId = NULL);
 
   PRIVATE:
     DISALLOW_COPY_AND_ASSIGN(ReadRpc);
+};
+
+class MigrationReadRpc : public ServerIdRpcWrapper {
+  public:
+    MigrationReadRpc(RamCloud *ramcloud, ServerId serverId, uint64_t tableId,
+                     const void *key, uint16_t keyLength, Buffer *value,
+                     const RejectRules *rejectRules = NULL);
+    ~MigrationReadRpc() {}
+
+    void wait(uint64_t *version = NULL, bool *objectExists = NULL,
+              bool *migrating = NULL, uint64_t *sourceId = NULL,
+              uint64_t *targetId = NULL);
+
+  PRIVATE:
+    DISALLOW_COPY_AND_ASSIGN(MigrationReadRpc);
 };
 
 /**

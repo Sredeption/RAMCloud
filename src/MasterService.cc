@@ -1750,8 +1750,18 @@ MasterService::read(const WireFormat::Read::Request* reqHdr,
     RejectRules rejectRules = reqHdr->rejectRules;
     bool valueOnly = true;
     uint32_t initialLength = rpc->replyPayload->size();
+    TabletManager::Tablet tablet;
     respHdr->common.status = objectManager.readObject(
-            key, rpc->replyPayload, &rejectRules, &respHdr->version, valueOnly);
+        key, rpc->replyPayload, &rejectRules, &respHdr->version, valueOnly,
+        &tablet);
+    if (tablet.state == TabletManager::MIGRATION_SOURCE ||
+        tablet.state == TabletManager::MIGRATION_TARGET) {
+        respHdr->migrating = true;
+        respHdr->sourceId = tablet.sourceId;
+        respHdr->targetId = tablet.targetId;
+    } else {
+        respHdr->migrating = false;
+    }
 
     if (respHdr->common.status != STATUS_OK)
         return;
@@ -4069,13 +4079,14 @@ void MasterService::migrationSourceStart(
                                 TabletManager::MIGRATION_SOURCE);
 
     auto replicas = objectManager.getReplicas();
+
     ServerId sourceServerId(reqHdr->sourceServerId);
     ServerId targetServerId(reqHdr->targetServerId);
 
     MasterClient::migrationTargetStart(
         context, targetServerId, reqHdr->migrationId, sourceServerId,
         targetServerId, reqHdr->tableId, reqHdr->firstKeyHash,
-        reqHdr->lastKeyHash, replicas.data(),
+        reqHdr->lastKeyHash, tabletManager.getSafeVersion(), replicas.data(),
         downCast<uint32_t>(replicas.size()));
 }
 
@@ -4093,6 +4104,8 @@ void MasterService::migrationTargetStart(
     CycleCounter<RawMetric> recoveryTicks(&metrics->master.recoveryTicks);
     metrics->master.recoveryCount++;
     metrics->master.replicas = objectManager.getReplicaManager()->numReplicas;
+    tabletManager.raiseSafeVersion(reqHdr->safeVersion);
+    objectManager.raiseSafeVersion(reqHdr->safeVersion);
 
     uint64_t recoveryId = reqHdr->migrationId;
     ServerId targetServerId(reqHdr->targetServerId);

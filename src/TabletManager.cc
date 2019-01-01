@@ -25,6 +25,7 @@ TabletManager::TabletManager()
     : tabletMap()
     , lock("TabletManager::lock")
     , numLoadingTablets(0)
+    , safeVersion(1)
 {
 }
 
@@ -562,6 +563,20 @@ TabletManager::lookup(uint64_t tableId, uint64_t keyHash,
     }
 
     return tabletMap.end();
+}
+
+bool TabletManager::raiseSafeVersion(uint64_t minimum)
+{
+    if (minimum > safeVersion) {
+        safeVersion = minimum;
+        return true;
+    }
+    return false;
+}
+
+uint64_t TabletManager::getSafeVersion()
+{
+    return safeVersion;
 }
 
 /**

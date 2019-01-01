@@ -731,12 +731,14 @@ void MasterClient::migrationTargetStart(
     uint64_t tableId,
     uint64_t firstKeyHash,
     uint64_t lastKeyHash,
+    uint64_t safeVersion,
     const WireFormat::MigrationTargetStart::Replica *replicas,
     uint32_t numReplicas)
 {
     MigrationTargetStartRpc rpc(context, serverId, migrationId, sourceServerId,
                                 targetServerId, tableId, firstKeyHash,
-                                lastKeyHash, replicas, numReplicas);
+                                lastKeyHash, safeVersion, replicas,
+                                numReplicas);
     rpc.wait();
 }
 
@@ -748,6 +750,7 @@ MigrationTargetStartRpc::MigrationTargetStartRpc(
     uint64_t tableId,
     uint64_t firstKeyHash,
     uint64_t lastKeyHash,
+    uint64_t safeVersion,
     const WireFormat::MigrationTargetStart::Replica *replicas,
     uint32_t numReplicas)
     : ServerIdRpcWrapper(context, serverId,
@@ -761,6 +764,7 @@ MigrationTargetStartRpc::MigrationTargetStartRpc(
     reqHdr->tableId = tableId;
     reqHdr->firstKeyHash = firstKeyHash;
     reqHdr->lastKeyHash = lastKeyHash;
+    reqHdr->safeVersion = safeVersion;
     reqHdr->numReplicas = numReplicas;
     if (numReplicas > 0)
         request.append(replicas,

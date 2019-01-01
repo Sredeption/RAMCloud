@@ -103,6 +103,7 @@ class MasterClient {
         uint64_t tableId,
         uint64_t firstKeyHash,
         uint64_t lastKeyHash,
+        uint64_t safeVersion,
         const WireFormat::MigrationTargetStart::Replica *replicas,
         uint32_t numReplicas);
 
@@ -242,6 +243,7 @@ class MigrationTargetStartRpc : public ServerIdRpcWrapper {
         uint64_t tableId,
         uint64_t firstKeyHash,
         uint64_t lastKeyHash,
+        uint64_t safeVersion,
         const WireFormat::MigrationTargetStart::Replica *replicas,
         uint32_t numReplicas);
 

@@ -25,38 +25,38 @@ class MigrationClient {
         }
     };
 
-    struct TabletWithLocator {
-        /// Details about the tablet.
+  PUBLIC:
+
+    struct MigratingTablet {
         Tablet tablet;
 
-        /// Used to find the server that stores the tablet.
-        string sourceLocator;
-        string targetLocator;
+        ServerId sourceId;
+        ServerId targetId;
 
-        /// Session corresponding to serviceLocator. This is a cache to avoid
-        /// repeated calls to TransportManager; NULL means that we haven't
-        /// yet fetched the session from TransportManager.
-        Transport::SessionRef sourceSession;
-        Transport::SessionRef targetSession;
-
-
-        TabletWithLocator(Tablet tablet, string sourceLocator,
-                          string targetLocator)
-            : tablet(tablet), sourceLocator(sourceLocator),
-              targetLocator(targetLocator), sourceSession(NULL),
-              targetSession(NULL)
+        MigratingTablet(Tablet tablet, uint64_t sourceId,
+                        uint64_t targetId)
+            : tablet(tablet), sourceId(sourceId),
+              targetId(targetId)
         {}
     };
 
+  PRIVATE:
+
     RamCloud *ramcloud;
-    std::map<TabletKey, TabletWithLocator> tableMap;
+    std::map<TabletKey, MigratingTablet> tableMap;
 
     DISALLOW_COPY_AND_ASSIGN(MigrationClient);
   PUBLIC:
 
     MigrationClient(RamCloud *ramcloud);
 
-    void putTablet(Tablet &tablet, uint32_t sourceId, uint32_t targetId);
+    void putTablet(uint64_t tableId, const void *key, uint16_t keyLength,
+                   uint64_t sourceId, uint64_t targetId);
+
+    MigratingTablet *
+    getTablet(uint64_t tableId, const void *key, uint16_t keyLength);
+
+    void removeTablet(uint64_t tableId, const void *key, uint16_t keyLength);
 };
 
 }

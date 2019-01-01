@@ -1081,6 +1081,7 @@ struct MigrationTargetStart {
         uint64_t tableId;           // TabletId of the tablet to migrate.
         uint64_t firstKeyHash;      // First key of the tablet to migrate.
         uint64_t lastKeyHash;       // Last key of the tablet to migrate.
+        uint64_t safeVersion;
         uint32_t numReplicas;      // Number of Replica entries in the replica
         // list. The bytes of the replica list
         // follow after the bytes for the Tablets.
@@ -1469,6 +1470,9 @@ struct Read {
         uint32_t length;              // Length of the object's value in bytes.
                                       // The actual bytes of the object follow
                                       // immediately after this header.
+        bool migrating;
+        uint64_t sourceId;
+        uint64_t targetId;
     } __attribute__((packed));
 };
 

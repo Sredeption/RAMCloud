@@ -76,7 +76,7 @@ class ObjectManager : public LogEntryHandlers,
     void prefetchHashTableBucket(SegmentIterator* it);
     Status readObject(Key& key, Buffer* outBuffer,
                 RejectRules* rejectRules, uint64_t* outVersion,
-                bool valueOnly = false);
+                bool valueOnly = false, TabletManager::Tablet *tablet=NULL);
     Status removeObject(Key& key, RejectRules* rejectRules,
                 uint64_t* outVersion, Buffer* removedObjBuffer = NULL,
                 RpcResult* rpcResult = NULL, uint64_t* rpcResultPtr = NULL);
@@ -105,6 +105,7 @@ class ObjectManager : public LogEntryHandlers,
     Status commitWrite(PreparedOp& op, Log::Reference& refToPreparedOp,
                         Buffer* removedObjBuffer = NULL);
     std::vector<WireFormat::MigrationTargetStart::Replica> getReplicas();
+    bool raiseSafeVersion(uint64_t minimum);
 
     /**
      * The following three methods are used when multiple log entries

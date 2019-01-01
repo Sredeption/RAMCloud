@@ -322,14 +322,13 @@ ObjectManager::prefetchHashTableBucket(SegmentIterator* it)
 Status
 ObjectManager::readObject(Key& key, Buffer* outBuffer,
                 RejectRules* rejectRules, uint64_t* outVersion,
-                bool valueOnly)
+                bool valueOnly, TabletManager::Tablet *tablet)
 {
     objectMap.prefetchBucket(key.getHash());
     HashTableBucketLock lock(*this, key);
-    TabletManager::Tablet tablet;
 
     // If the tablet doesn't exist in the NORMAL state, we must plead ignorance.
-    if (!tabletManager->checkAndIncrementReadCount(key), &tablet)
+    if (!tabletManager->checkAndIncrementReadCount(key), tablet)
         return STATUS_UNKNOWN_TABLET;
 
     Buffer buffer;
@@ -363,18 +362,6 @@ ObjectManager::readObject(Key& key, Buffer* outBuffer,
     PerfStats::threadStats.readObjectBytes += valueLength;
     PerfStats::threadStats.readKeyBytes +=
             object.getKeysAndValueLength() - valueLength;
-
-    uint8_t migrating = 0;
-
-    if (tablet.state == TabletManager::MIGRATION_SOURCE ||
-        tablet.state == TabletManager::MIGRATION_TARGET) {
-        migrating = 1;
-        outBuffer->appendCopy(&migrating, 1);
-        outBuffer->appendCopy(&tablet.sourceId, 4);
-        outBuffer->appendCopy(&tablet.targetId, 4);
-    } else {
-        outBuffer->appendCopy(&migrating, 1);
-    }
 
     return STATUS_OK;
 }
@@ -423,10 +410,11 @@ ObjectManager::removeObject(Key& key, RejectRules* rejectRules,
     TabletManager::Tablet tablet;
     if (!tabletManager->getTablet(key, &tablet))
         return STATUS_UNKNOWN_TABLET;
-    if (tablet.state != TabletManager::NORMAL) {
+    if (tablet.state != TabletManager::NORMAL &&
+        tablet.state != TabletManager::MIGRATION_TARGET) {
         if (tablet.state == TabletManager::LOCKED_FOR_MIGRATION)
             throw RetryException(HERE, 1000, 2000,
-                    "Tablet is currently locked for migration!");
+                                 "Tablet is currently locked for migration!");
         return STATUS_UNKNOWN_TABLET;
     }
 
@@ -438,32 +426,50 @@ ObjectManager::removeObject(Key& key, RejectRules* rejectRules,
     LogEntryType type;
     Buffer buffer;
     Log::Reference reference;
+    bool migratingAndNotFound = false;
     if (!lookup(lock, key, type, buffer, NULL, &reference) ||
-            type != LOG_ENTRY_TYPE_OBJ) {
-        static RejectRules defaultRejectRules;
-        if (rejectRules == NULL)
-            rejectRules = &defaultRejectRules;
-        return rejectOperation(rejectRules, VERSION_NONEXISTENT);
+        type != LOG_ENTRY_TYPE_OBJ) {
+        if (tablet.state == TabletManager::MIGRATION_TARGET)
+            migratingAndNotFound = true;
+        else {
+            static RejectRules defaultRejectRules;
+            if (rejectRules == NULL)
+                rejectRules = &defaultRejectRules;
+            return rejectOperation(rejectRules, VERSION_NONEXISTENT);
+        }
     }
 
-    Object object(buffer);
-    if (outVersion != NULL)
-        *outVersion = object.getVersion();
+    Buffer emptyBuffer;
+    std::unique_ptr<Object> object;
+    if (migratingAndNotFound) {
+        object = std::unique_ptr<Object>(
+            new Object(key, "", 0, 0, 0, emptyBuffer));
+        object->setVersion(segmentManager.allocateVersion());
+    } else {
+        object = std::unique_ptr<Object>(new Object(buffer));
+        if (outVersion != NULL)
+            *outVersion = object->getVersion();
 
-    // Abort if we're trying to delete the wrong version.
-    if (rejectRules != NULL) {
-        Status status = rejectOperation(rejectRules, object.getVersion());
-        if (status != STATUS_OK)
-            return status;
+        // Abort if we're trying to delete the wrong version.
+        if (rejectRules != NULL) {
+            Status status = rejectOperation(rejectRules, object->getVersion());
+            if (status != STATUS_OK)
+                return status;
+        }
+
+        // Return a pointer to the buffer in log for the object being removed.
+        if (removedObjBuffer != NULL) {
+            removedObjBuffer->append(&buffer);
+        }
     }
 
-    // Return a pointer to the buffer in log for the object being removed.
-    if (removedObjBuffer != NULL) {
-        removedObjBuffer->append(&buffer);
-    }
 
-    ObjectTombstone tombstone(object,
-                              log.getSegmentId(reference),
+    uint64_t segmentId = 0;
+    if (!migratingAndNotFound)
+        segmentId = log.getSegmentId(reference);
+
+    ObjectTombstone tombstone(*object,
+                              segmentId,
                               WallTime::secondsTimestamp());
 
     // Create a vector of appends in case we need to write multiple log entries
@@ -495,9 +501,13 @@ ObjectManager::removeObject(Key& key, RejectRules* rejectRules,
                           tablet.tableId,
                           appends[0].buffer.size() + appends[1].buffer.size(),
                           rpcResult ? 2 : 1);
-    segmentManager.raiseSafeVersion(object.getVersion() + 1);
+    segmentManager.raiseSafeVersion(object->getVersion() + 1);
     log.free(reference);
-    remove(lock, key);
+
+    if (migratingAndNotFound)
+        replace(lock, key, appends[0].reference);
+    else
+        remove(lock, key);
     return STATUS_OK;
 }
 
@@ -1787,6 +1797,7 @@ ObjectManager::writeObject(Object& newObject, RejectRules* rejectRules,
     assert(currentVersion == VERSION_NONEXISTENT ||
            newObject.getVersion() > currentVersion);
 
+    tabletManager->raiseSafeVersion(newObjectVersion + 1);
     Tub<ObjectTombstone> tombstone;
     if (currentVersion != VERSION_NONEXISTENT &&
       currentType == LOG_ENTRY_TYPE_OBJ) {
@@ -3839,6 +3850,11 @@ std::vector<WireFormat::MigrationTargetStart::Replica>
 ObjectManager::getReplicas()
 {
     return segmentManager.getReplicas();
+}
+
+bool ObjectManager::raiseSafeVersion(uint64_t minimum)
+{
+    return segmentManager.raiseSafeVersion(minimum);
 }
 
 } //enamespace RAMCloud
