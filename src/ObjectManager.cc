@@ -411,6 +411,7 @@ ObjectManager::removeObject(Key& key, RejectRules* rejectRules,
     if (!tabletManager->getTablet(key, &tablet))
         return STATUS_UNKNOWN_TABLET;
     if (tablet.state != TabletManager::NORMAL &&
+        tablet.state != TabletManager::MIGRATION_SOURCE_PREP &&
         tablet.state != TabletManager::MIGRATION_TARGET) {
         if (tablet.state == TabletManager::LOCKED_FOR_MIGRATION)
             throw RetryException(HERE, 1000, 2000,
@@ -1741,6 +1742,7 @@ ObjectManager::writeObject(Object& newObject, RejectRules* rejectRules,
         return STATUS_UNKNOWN_TABLET;
     }
     if (tablet.state != TabletManager::NORMAL &&
+        tablet.state != TabletManager::MIGRATION_SOURCE_PREP &&
         tablet.state != TabletManager::MIGRATION_TARGET) {
         if (tablet.state == TabletManager::LOCKED_FOR_MIGRATION)
             throw RetryException(HERE, 1000, 2000,
@@ -2025,7 +2027,8 @@ ObjectManager::prepareOp(PreparedOp& newOp, RejectRules* rejectRules,
     TabletManager::Tablet tablet;
     if (!tabletManager->getTablet(key, &tablet))
         return STATUS_UNKNOWN_TABLET;
-    if (tablet.state != TabletManager::NORMAL)
+    if (tablet.state != TabletManager::NORMAL &&
+        tablet.state != TabletManager::MIGRATION_TARGET)
         return STATUS_UNKNOWN_TABLET;
 
     // If the key is already locked, abort.
@@ -2035,6 +2038,10 @@ ObjectManager::prepareOp(PreparedOp& newOp, RejectRules* rejectRules,
                 keyLength, reinterpret_cast<const char*>(keyString));
         writePrepareFail(rpcResult, rpcResultPtr);
         return STATUS_OK;
+    }
+
+    if (tablet.state == TabletManager::MIGRATION_TARGET) {
+
     }
 
     LogEntryType currentType = LOG_ENTRY_TYPE_INVALID;
@@ -2112,6 +2119,8 @@ ObjectManager::prepareOp(PreparedOp& newOp, RejectRules* rejectRules,
                      "While preparing transaction, lock already acquired "
                      "after checking lock was free. Key: %.*s",
                      keyLength, reinterpret_cast<const char*>(keyString));
+    } else if (tablet.state == TabletManager::MIGRATION_SOURCE) {
+
     }
 
     *newOpPtr = appends[0].reference.toInteger();

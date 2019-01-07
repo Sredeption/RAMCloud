@@ -105,6 +105,7 @@ MasterService::MasterService(Context* context, const ServerConfig* config)
     , masterTableMetadata()
     , maxResponseRpcLen(Transport::MAX_RPC_LEN)
     , migrationMonitor(this)
+    , migrationSourceManager(this)
 {
     context->services[WireFormat::MASTER_SERVICE] = this;
 }
@@ -4073,21 +4074,20 @@ void MasterService::migrationSourceStart(
     WireFormat::MigrationSourceStart::Response *respHdr,
     Service::Rpc *rpc)
 {
+
+    migrationSourceManager.startMigration(reqHdr->migrationId,
+                                          reqHdr->tableId,
+                                          reqHdr->firstKeyHash,
+                                          reqHdr->lastKeyHash,
+                                          reqHdr->sourceServerId,
+                                          reqHdr->targetServerId);
+
     tabletManager.migrateTablet(reqHdr->tableId, reqHdr->firstKeyHash,
-                                reqHdr->lastKeyHash, reqHdr->sourceServerId,
+                                reqHdr->lastKeyHash, reqHdr->migrationId,
+                                reqHdr->sourceServerId,
                                 reqHdr->targetServerId,
-                                TabletManager::MIGRATION_SOURCE);
+                                TabletManager::MIGRATION_SOURCE_PREP);
 
-    auto replicas = objectManager.getReplicas();
-
-    ServerId sourceServerId(reqHdr->sourceServerId);
-    ServerId targetServerId(reqHdr->targetServerId);
-
-    MasterClient::migrationTargetStart(
-        context, targetServerId, reqHdr->migrationId, sourceServerId,
-        targetServerId, reqHdr->tableId, reqHdr->firstKeyHash,
-        reqHdr->lastKeyHash, tabletManager.getSafeVersion(), replicas.data(),
-        downCast<uint32_t>(replicas.size()));
 }
 
 void MasterService::migrationTargetStart(
@@ -4095,8 +4095,8 @@ void MasterService::migrationTargetStart(
     WireFormat::MigrationTargetStart::Response *respHdr, Service::Rpc *rpc)
 {
     tabletManager.migrateTablet(reqHdr->tableId, reqHdr->firstKeyHash,
-                                reqHdr->lastKeyHash, reqHdr->sourceServerId,
-                                reqHdr->targetServerId,
+                                reqHdr->lastKeyHash, reqHdr->migrationId,
+                                reqHdr->sourceServerId, reqHdr->targetServerId,
                                 TabletManager::MIGRATION_TARGET);
 
     ReplicatedSegment::recoveryStart = Cycles::rdtsc();

@@ -75,6 +75,7 @@ class TransactionManager {
     bool isOpDeleted(uint64_t leaseId, uint64_t rpcId);
     void regrabLocksAfterRecovery(ObjectManager* objectManager);
     void removeOrphanedOps();
+    uint64_t getMinTimestamp();
 
     /**
      * This class is used to prevent the garbage collection of a (soon to be)
@@ -186,6 +187,8 @@ class TransactionManager {
         /// longer considered in progress.
         UnackedRpcResults::SingleClientProtector rpcResultsProtector;
 
+        uint64_t timestamp;
+
         bool inProgress(TransactionManager::Lock& lock,
                         TabletManager::Protector& protector);
         bool checkMasterParticipantion(TransactionManager::Lock& lock,
@@ -292,6 +295,9 @@ class TransactionManager {
      * Cleans complete transactions from the TransactionRegistry.
      */
     TransactionRegistryCleaner cleaner;
+
+    uint64_t
+    minTimestamp;
 
     TransactionRecord* getTransaction(TransactionId txId, Lock& lock);
     TransactionRecord* getOrAddTransaction(TransactionId txId, Lock& lock);

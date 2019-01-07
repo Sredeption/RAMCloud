@@ -89,6 +89,7 @@ TabletManager::checkAndIncrementReadCount(Key& key, Tablet* outTablet) {
     if (it == tabletMap.end())
         return false;
     if (it->second.state != NORMAL || it->second.state != MIGRATION_SOURCE ||
+        it->second.state != MIGRATION_SOURCE_PREP ||
         it->second.state != MIGRATION_TARGET) {
         if (it->second.state == TabletManager::LOCKED_FOR_MIGRATION)
             throw RetryException(HERE, 1000, 2000,
@@ -368,7 +369,8 @@ TabletManager::changeState(uint64_t tableId,
 
 
 bool TabletManager::migrateTablet(uint64_t tableId, uint64_t startKeyHash,
-                                  uint64_t endKeyHash, uint64_t sourceId,
+                                  uint64_t endKeyHash, uint64_t migrationId,
+                                  uint64_t sourceId,
                                   uint64_t targetId, TabletState state)
 {
     SpinLock::Guard guard(lock);
@@ -380,7 +382,8 @@ bool TabletManager::migrateTablet(uint64_t tableId, uint64_t startKeyHash,
     if (t->startKeyHash != startKeyHash || t->endKeyHash != endKeyHash)
         return false;
 
-    t->state=state;
+    t->state = state;
+    t->migrationId = migrationId;
     t->sourceId = sourceId;
     t->targetId = targetId;
 

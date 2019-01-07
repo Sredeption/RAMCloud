@@ -107,6 +107,7 @@ SHARED_SRCFILES := \
 		   src/Memory.cc \
 		   src/MemoryMonitor.cc \
 		   src/MigrationClient.cc \
+		   src/MigrationSourceManager.cc \
 		   src/MinCopysetsBackupSelector.cc \
 		   src/MultiOp.cc \
 		   src/MultiIncrement.cc \

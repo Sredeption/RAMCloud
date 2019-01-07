@@ -54,6 +54,7 @@ TransactionManager::TransactionManager(Context* context,
     , transactions()
     , transactionIds()
     , cleaner(this)
+    , minTimestamp(~0ul)
 {
 }
 
@@ -515,6 +516,7 @@ TransactionManager::TransactionRecord::TransactionRecord(
     , timeoutCycles(0)
     , rpcResultsProtector(transactionManager->unackedRpcResults,
                           txId.clientLeaseId)
+    ,timestamp(Cycles::rdtsc())
 {
 }
 
@@ -717,6 +719,8 @@ TransactionManager::TransactionRegistryCleaner::handleTimerEvent()
         it = transactionManager->transactionIds.begin();
     }
 
+    uint64_t minTimestamp= ~0ul;
+
     while (true) {
         TransactionManager::Lock lock(transactionManager->mutex);
         TabletManager::Protector protector(transactionManager->tabletManager);
@@ -737,18 +741,23 @@ TransactionManager::TransactionRegistryCleaner::handleTimerEvent()
                     transaction->txId.clientLeaseId,
                     transaction->txId.clientTransactionId);
             ++it;
+            if (minTimestamp > transaction->timestamp)
+                minTimestamp = transaction->timestamp;
         } else if (!transaction->inProgress(lock, protector)) {;
             transactionManager->transactions.erase(txId);
             delete transaction;
             it = transactionManager->transactionIds.erase(it);
         } else {
             ++it;
+            if (minTimestamp > transaction->timestamp)
+                minTimestamp = transaction->timestamp;
         }
     }
 
     {
         TransactionManager::Lock lock(transactionManager->mutex);
         // Keep cleaning if there are still incomplete transactions.
+        transactionManager->minTimestamp = minTimestamp;
         if (transactionManager->transactionIds.size() > 0) {
             transactionManager->cleaner.start(0);
         }
@@ -807,6 +816,11 @@ TransactionManager::getOrAddTransaction(TransactionId txId, Lock& lock)
     }
     assert(transaction != NULL);
     return transaction;
+}
+
+uint64_t TransactionManager::getMinTimestamp()
+{
+    return minTimestamp;
 }
 
 } // namespace RAMCloud

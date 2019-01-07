@@ -44,6 +44,7 @@
 #include "IndexletManager.h"
 #include "WireFormat.h"
 #include "UnackedRpcResults.h"
+#include "MigrationSourceManager.h"
 
 namespace RAMCloud {
 
@@ -439,6 +440,7 @@ class MasterService : public Service {
         DISALLOW_COPY_AND_ASSIGN(MigrationMonitor);
     };
     MigrationMonitor migrationMonitor;
+    MigrationSourceManager migrationSourceManager;
 
 ///////////////////////////////////////////////////////////////////////////////
 /////Recovery related code. This should eventually move into its own file./////

@@ -59,8 +59,9 @@ class TabletManager {
         NOT_READY = 1,
         /// Migration of tablet is requested. Cannot take new writes.
         LOCKED_FOR_MIGRATION = 2,
-        MIGRATION_SOURCE = 3,
-        MIGRATION_TARGET = 4
+        MIGRATION_SOURCE_PREP = 3,
+        MIGRATION_SOURCE = 4,
+        MIGRATION_TARGET = 5
     };
 
     /**
@@ -81,6 +82,7 @@ class TabletManager {
             , state(NOT_READY)
             , readCount(-1)
             , writeCount(-1)
+            , migrationId(0)
             , sourceId(0)
             , targetId(0)
         {
@@ -96,6 +98,7 @@ class TabletManager {
             , state(state)
             , readCount(0)
             , writeCount(0)
+            , migrationId(0)
             , sourceId(0)
             , targetId(0)
         {
@@ -118,6 +121,8 @@ class TabletManager {
 
         /// The number of write operations performed on objects in this tablet.
         uint64_t writeCount;
+
+        uint64_t migrationId;
 
         uint64_t sourceId;
 
@@ -185,6 +190,7 @@ class TabletManager {
     bool migrateTablet(uint64_t tableId,
                      uint64_t startKeyHash,
                      uint64_t endKeyHash,
+                     uint64_t migrationId,
                      uint64_t sourceId,
                      uint64_t targetId,
                      TabletState state);
