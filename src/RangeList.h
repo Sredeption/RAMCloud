@@ -29,6 +29,7 @@ class RangeList {
         std::vector<LockNode *> forward, backward;
         int level;
         bool max, min;
+        LockNode *unlockForward, *unlockBackward;
 
         LockNode(uint64_t start, uint64_t end, int level, bool max = false,
                  bool min = false);
@@ -38,14 +39,19 @@ class RangeList {
         bool operator>(uint64_t hash);
 
         std::string toString();
+
+      PRIVATE:
+        DISALLOW_COPY_AND_ASSIGN(LockNode)
     };
 
   PRIVATE:
 
     static const int MAX_LEVEL = 16;
 
+    bool startQuery;
+    SpinLock spinLock;
 
-    LockNode *head, *unlockHead;
+    LockNode *head, *unlockHead, *postHead;
     LockNode *BEGIN, *END;
 
     int randomLevel();
@@ -56,7 +62,13 @@ class RangeList {
 
     void remove(LockNode *node);
 
+    void unlockInsert(LockNode *node);
+
+    void unlockRemove(LockNode *node);
+
   PUBLIC:
+
+    RangeList();
 
     RangeList(uint64_t start, uint64_t end);
 
@@ -66,9 +78,16 @@ class RangeList {
 
     void unlock(uint64_t hash);
 
-    LockNode *getRanges();
+    LockNode *getRanges(vector<WireFormat::MigrationIsLocked::Range> &ranges,
+                        int num = 1000);
+
+    void push(WireFormat::MigrationIsLocked::Range &range);
+
+    bool isLocked(uint64_t hash);
 
     void print();
+
+    void printUnlock();
 
   PRIVATE:
     DISALLOW_COPY_AND_ASSIGN(RangeList)

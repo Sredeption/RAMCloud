@@ -4215,10 +4215,14 @@ void MasterService::migrationIsLocked(
     }
 
     Key key(reqHdr->tableId, stringKey, reqHdr->keyLength);
+    vector<WireFormat::MigrationIsLocked::Range> ranges;
 
     respHdr->common.status =
         migrationSourceManager.isLocked(reqHdr->migrationId, key,
-                                        &respHdr->isLocked);
+                                        &respHdr->isLocked, ranges);
+    respHdr->rangesLength = ranges.size();
+    rpc->replyPayload->append(ranges.data(),
+                              downCast<uint32_t>(ranges.size()));
 }
 
 void MasterService::migrateRecover(uint64_t migrationId, ServerId sourceId,

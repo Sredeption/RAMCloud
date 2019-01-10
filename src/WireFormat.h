@@ -1249,6 +1249,11 @@ struct MigrationIsLocked {
     struct Response {
         ResponseCommon common;
         bool isLocked;
+        uint64_t rangesLength;
+    } __attribute__((packed));
+    struct Range {
+        uint64_t start;
+        uint64_t end;
     } __attribute__((packed));
 };
 

@@ -11,7 +11,7 @@ MigrationSourceManager::MigrationSourceManager(
       masterService(masterService),
       transactionManager(&masterService->transactionManager),
       operatingBuffer(new std::queue<Item>[2]), operatingIndex(0),
-      bufferLock("migrationBufferLock"), treeLock(), migrations(), prepQueue(),
+      bufferLock("migrationBufferLock"), listLock(), migrations(), prepQueue(),
       activeQueue(), epoch(0)
 {
 }
@@ -29,7 +29,7 @@ void MigrationSourceManager::handleTimerEvent()
         operatingIndex = static_cast<uint8_t>(operatingIndex == 1 ? 0 : 1);
     }
 
-    std::lock_guard<std::mutex> guard(treeLock);
+    std::lock_guard<std::mutex> guard(listLock);
     while (!buffer->empty()) {
         Item &item = buffer->front();
 
@@ -70,7 +70,7 @@ void MigrationSourceManager::startMigration(
     uint64_t lastKeyHash, uint64_t sourceId, uint64_t targetId)
 {
     {
-        std::lock_guard<std::mutex> guard(treeLock);
+        std::lock_guard<std::mutex> guard(listLock);
         Migration *migration = new Migration(this, migrationId, tableId,
                                              firstKeyHash,
                                              lastKeyHash, sourceId,
@@ -97,12 +97,16 @@ void MigrationSourceManager::unlock(uint64_t migrationId, Key &key)
 }
 
 Status
-MigrationSourceManager::isLocked(uint64_t migrationId, Key &key, bool *isLocked)
+MigrationSourceManager::isLocked(uint64_t migrationId, Key &key, bool *isLocked,
+                    vector<WireFormat::MigrationIsLocked::Range> &ranges)
 {
-    if (migrations.find(migrationId) == migrations.end())
+    auto migration = migrations.find(migrationId);
+    if (migration == migrations.end())
         return STATUS_OBJECT_DOESNT_EXIST;
     if (isLocked)
         *isLocked = masterService->objectManager.isLocked(key);
+    migration->second->rangeList.getRanges(ranges);
+
     return STATUS_OK;
 }
 
@@ -124,12 +128,12 @@ MigrationSourceManager::Migration::Migration(
 
 void MigrationSourceManager::Migration::lock(uint64_t keyHash)
 {
-
+    rangeList.lock(keyHash);
 }
 
 void MigrationSourceManager::Migration::unlock(uint64_t keyHash)
 {
-
+    rangeList.unlock(keyHash);
 }
 
 void MigrationSourceManager::Migration::start()

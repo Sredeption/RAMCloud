@@ -66,7 +66,7 @@ class MigrationSourceManager : public WorkerTimer {
     std::unique_ptr<std::queue<Item>[]> operatingBuffer;
     uint8_t operatingIndex;
     SpinLock bufferLock;
-    std::mutex treeLock;
+    std::mutex listLock;
     std::unordered_map<uint64_t, Migration *> migrations;
     std::list<Migration *> prepQueue, activeQueue;
     uint64_t epoch;
@@ -88,7 +88,8 @@ class MigrationSourceManager : public WorkerTimer {
 
     void unlock(uint64_t migrationId, Key &key);
 
-    Status isLocked(uint64_t migrationId, Key &key, bool *isLocked);
+    Status isLocked(uint64_t migrationId, Key &key, bool *isLocked,
+                    vector<WireFormat::MigrationIsLocked::Range> &ranges);
 
   PRIVATE:
 
