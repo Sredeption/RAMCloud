@@ -501,6 +501,9 @@ class MasterService : public Service {
         const WireFormat::MigrationTargetStart::Request *reqHdr,
         WireFormat::MigrationTargetStart::Response *respHdr,
         Rpc *rpc);
+    void migrationIsLocked(const WireFormat::MigrationIsLocked::Request *reqHdr,
+                           WireFormat::MigrationIsLocked::Response *respHdr,
+                           Rpc *rpc);
     void migrateRecover(uint64_t migrationId,
                         ServerId sourceId,
                         vector<Replica> &replicas);

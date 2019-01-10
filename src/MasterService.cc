@@ -199,9 +199,13 @@ MasterService::dispatch(WireFormat::Opcode opcode, Rpc* rpc)
             callHandler<WireFormat::MigrationSourceStart, MasterService,
                 &MasterService::migrationSourceStart>(rpc);
             break;
-         case WireFormat::MigrationTargetStart::opcode:
+        case WireFormat::MigrationTargetStart::opcode:
             callHandler<WireFormat::MigrationTargetStart, MasterService,
                 &MasterService::migrationTargetStart>(rpc);
+            break;
+        case WireFormat::MigrationIsLocked::opcode:
+            callHandler<WireFormat::MigrationIsLocked, MasterService,
+                &MasterService::migrationIsLocked>(rpc);
             break;
         case WireFormat::PrepForIndexletMigration::opcode:
             callHandler<WireFormat::PrepForIndexletMigration, MasterService,
@@ -4195,6 +4199,28 @@ void MasterService::migrationTargetStart(
     }
 }
 
+void MasterService::migrationIsLocked(
+    const WireFormat::MigrationIsLocked::Request *reqHdr,
+    WireFormat::MigrationIsLocked::Response *respHdr,
+    Rpc *rpc)
+{
+    uint32_t reqOffset = sizeof32(*reqHdr);
+    const void *stringKey = rpc->requestPayload->getRange(
+        reqOffset, reqHdr->keyLength);
+
+    if (stringKey == NULL) {
+        respHdr->common.status = STATUS_REQUEST_FORMAT_ERROR;
+        rpc->sendReply();
+        return;
+    }
+
+    Key key(reqHdr->tableId, stringKey, reqHdr->keyLength);
+
+    respHdr->common.status =
+        migrationSourceManager.isLocked(reqHdr->migrationId, key,
+                                        &respHdr->isLocked);
+}
+
 void MasterService::migrateRecover(uint64_t migrationId, ServerId sourceId,
                                    vector<MasterService::Replica> &replicas)
 {
@@ -4490,5 +4516,6 @@ void MasterService::migrateRecover(uint64_t migrationId, ServerId sourceId,
             "time %.1f ms (%.1f%% effective)",
             totalSecs * 1e03, usefulSecs * 1e03, 100 * usefulSecs / totalSecs);
 }
+
 
 } // namespace RAMCloud

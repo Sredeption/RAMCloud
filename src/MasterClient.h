@@ -106,6 +106,9 @@ class MasterClient {
         uint64_t safeVersion,
         const WireFormat::MigrationTargetStart::Replica *replicas,
         uint32_t numReplicas);
+    static bool
+    migrationIsLocked(Context *context, ServerId sourceId, uint64_t migrationId,
+                      Key &key);
 
   private:
     MasterClient();
@@ -258,6 +261,22 @@ class MigrationTargetStartRpc : public ServerIdRpcWrapper {
     DISALLOW_COPY_AND_ASSIGN(MigrationTargetStartRpc);
 };
 
+class MigrationIsLockedRpc : public ServerIdRpcWrapper {
+  PUBLIC:
+
+    MigrationIsLockedRpc(Context *context, ServerId serverId,
+                         uint64_t migrationId, Key &key);
+
+    ~MigrationIsLockedRpc()
+    {
+
+    }
+
+    bool wait();
+
+  PRIVATE:
+    DISALLOW_COPY_AND_ASSIGN(MigrationIsLockedRpc);
+};
 /**
  * Encapsulates the state of a MasterClient::prepForMigration
  * request, allowing it to execute asynchronously.

@@ -96,6 +96,16 @@ void MigrationSourceManager::unlock(uint64_t migrationId, Key &key)
         Item{UNLOCK, migrationId, key.getHash()});
 }
 
+Status
+MigrationSourceManager::isLocked(uint64_t migrationId, Key &key, bool *isLocked)
+{
+    if (migrations.find(migrationId) == migrations.end())
+        return STATUS_OBJECT_DOESNT_EXIST;
+    if (isLocked)
+        *isLocked = masterService->objectManager.isLocked(key);
+    return STATUS_OK;
+}
+
 MigrationSourceManager::Migration::Migration(
     MigrationSourceManager *manager,
     uint64_t migrationId,
@@ -104,7 +114,8 @@ MigrationSourceManager::Migration::Migration(
     uint64_t lastKeyHash,
     uint64_t sourceId,
     uint64_t targetId)
-    : manager(manager), migrationId(migrationId), tableId(tableId),
+    : manager(manager), rangeList(firstKeyHash, lastKeyHash),
+      migrationId(migrationId), tableId(tableId),
       firstKeyHash(firstKeyHash), lastKeyHash(lastKeyHash), sourceId(sourceId),
       targetId(targetId), timestamp(Cycles::rdtsc()), startEpoch(0),
       active(false)

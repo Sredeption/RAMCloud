@@ -448,6 +448,7 @@ INSTALL_INCLUDES := \
     src/LogMetadata.h \
     src/MasterClient.h \
     src/Minimal.h \
+    src/MigrationClient.h \
     src/Object.h \
     src/ObjectBuffer.h \
     src/ObjectRpcWrapper.h \

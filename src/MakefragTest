@@ -35,7 +35,6 @@ TESTS_SRCFILES := \
 		  src/ArpCacheTest.cc \
 		  src/BackupFailureMonitorTest.cc \
 		  src/BackupMasterRecoveryTest.cc \
-		  src/BackupMasterMigrationTest.cc \
 		  src/BackupSelectorTest.cc \
 		  src/BackupServiceTest.cc \
 		  src/BackupStorageTest.cc \
@@ -132,6 +131,7 @@ TESTS_SRCFILES := \
 		  src/PriorityTaskQueueTest.cc \
 		  src/ProtoBufTest.cc \
 		  src/QueueEstimatorTest.cc \
+		  src/RangeListTest.cc \
 		  src/RawMetricsTest.cc \
 		  src/Recovery.cc \
 		  src/RecoverySegmentBuilderTest.cc \

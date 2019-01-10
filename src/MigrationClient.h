@@ -1,7 +1,6 @@
 #ifndef RAMCLOUD_MIGRATIONCLIENT_H
 #define RAMCLOUD_MIGRATIONCLIENT_H
 
-#include "Common.h"
 #include "Key.h"
 #include "Tablet.h"
 

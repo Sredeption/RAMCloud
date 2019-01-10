@@ -34,6 +34,7 @@
 #include "RpcTracker.h"
 #include "ShortMacros.h"
 #include "TimeTrace.h"
+#include "MigrationClient.h"
 
 namespace RAMCloud {
 
@@ -56,7 +57,7 @@ static RejectRules defaultRejectRules;
 RamCloud::RamCloud(CommandLineOptions* options)
     : coordinatorLocator()
     , realClientContext(new Context(false, options))
-    , migrationClient(this)
+    , migrationClient(new MigrationClient(this))
     , clientContext(realClientContext)
     , clientLeaseAgent(new ClientLeaseAgent(this))
     , rpcTracker(new RpcTracker())
@@ -79,7 +80,7 @@ RamCloud::RamCloud(CommandLineOptions* options)
 RamCloud::RamCloud(Context* context)
     : coordinatorLocator()
     , realClientContext(NULL)
-    , migrationClient(this)
+    , migrationClient(new MigrationClient(this))
     , clientContext(context)
     , clientLeaseAgent(new ClientLeaseAgent(this))
     , rpcTracker(new RpcTracker())
@@ -99,7 +100,7 @@ RamCloud::RamCloud(Context* context)
 RamCloud::RamCloud(const char* locator, const char* clusterName)
     : coordinatorLocator(locator)
     , realClientContext(new Context(false))
-    , migrationClient(this)
+    , migrationClient(new MigrationClient(this))
     , clientContext(realClientContext)
     , clientLeaseAgent(new ClientLeaseAgent(this))
     , rpcTracker(new RpcTracker())
@@ -111,7 +112,7 @@ RamCloud::RamCloud(Context* context, const char* locator,
         const char* clusterName)
     : coordinatorLocator(locator)
     , realClientContext(NULL)
-    , migrationClient(this)
+    , migrationClient(new MigrationClient(this))
     , clientContext(context)
     , clientLeaseAgent(new ClientLeaseAgent(this))
     , rpcTracker(new RpcTracker())
@@ -132,6 +133,8 @@ RamCloud::~RamCloud()
     delete realClientContext;
 
     delete transactionManager;
+
+    delete migrationClient;
 }
 
 /**
@@ -2206,7 +2209,7 @@ RamCloud::readMigrating(uint64_t tableId, const void* key, uint16_t keyLength,
 {
 
     MigrationClient::MigratingTablet *migratingTablet =
-        migrationClient.getTablet(tableId, key, keyLength);
+        migrationClient->getTablet(tableId, key, keyLength);
     bool migrating;
     uint64_t sourceId;
     uint64_t targetId;
@@ -2219,7 +2222,7 @@ RamCloud::readMigrating(uint64_t tableId, const void* key, uint16_t keyLength,
         ReadRpc rpc(this, tableId, key, keyLength, value, rejectRules);
         rpc.wait(version, objectExists, &migrating, &sourceId, &targetId);
         if (migrating) {
-            migrationClient.putTablet(tableId, key, keyLength, sourceId,
+            migrationClient->putTablet(tableId, key, keyLength, sourceId,
                                       targetId);
             readMigratingInternal(ServerId(sourceId),
                                   ServerId(targetId),
@@ -2254,7 +2257,7 @@ void RamCloud::readMigratingInternal(
                    &targetId);
     targetRpc.wait(&targetVersion, &targetObjectExists);
     if (!migrating) {
-        migrationClient.removeTablet(tableId, key, keyLength);
+        migrationClient->removeTablet(tableId, key, keyLength);
     }
     value->reset();
     if (sourceVersion > targetVersion) {

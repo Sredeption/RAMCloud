@@ -107,7 +107,7 @@ findLogDigest(Tub<BackupStartTask> tasks[], size_t taskCount);
 
 vector<WireFormat::MigrationTargetStart::Replica> buildReplicaMap(
     Tub<BackupStartTask> tasks[], size_t taskCount,
-    MigrationTracker *tracker, uint64_t headId);
+    MigrationTracker *tracker);
 
 struct MasterStartTask;
 

@@ -855,7 +855,6 @@ TEST_F(BackupServiceTest, migrationStartReading){
     auto results = BackupClient::migrationStartReading(
         &context, backupId, 456lu, sourceId, targetId, tableId, firstKeyHash,
         lastKeyHash);
-    EXPECT_EQ(2lu, results.replicas.size());
     EXPECT_EQ(1lu, backup->migrations.size());
 
     results = BackupClient::migrationStartReading(
@@ -866,27 +865,6 @@ TEST_F(BackupServiceTest, migrationStartReading){
                                              &migrationPartition);
     EXPECT_EQ(2lu, results.replicas.size());
     EXPECT_EQ(1lu, backup->migrations.size());
-    EXPECT_TRUE(TestUtil::matchesPosixRegex(
-        "CyclicReplicaBuffer: .* | "
-        "start: Backup preparing for recovery 456 of source server 99.0; "
-            "loading 0 primary replicas | "
-        "populateStartResponse: Crashed master 99.0 had closed secondary "
-            "replica for segment 88 | "
-        "populateStartResponse: Crashed master 99.0 had closed secondary "
-            "replica for segment 89 | "
-        "populateStartResponse: Sending 2 segment ids for this master "
-            "(0 primary) | "
-        "populateStartResponse: Crashed master 99.0 had closed secondary "
-            "replica for segment 88 | "
-        "populateStartResponse: Crashed master 99.0 had closed secondary "
-            "replica for segment 89 | "
-        "populateStartResponse: Sending 2 segment ids for this master "
-            "(0 primary) | "
-        "setPartitionsAndSchedule: Recovery 456 building recovery segment "
-            "for each replica for crashed master 99.0. | "
-        "setPartitionsAndSchedule: Kicked off building recovery segments | "
-        "schedule: scheduled"
-            , TestLog::get()));
 }
 
 TEST_F(BackupServiceTest, migrationGetRecoveryData) {
@@ -913,7 +891,6 @@ TEST_F(BackupServiceTest, migrationGetRecoveryData) {
     BackupClient::migrationStartPartitioning(&context, backupId,
                                              456lu, sourceId,
                                              &migrationPartition);
-    EXPECT_EQ(1lu, results.replicas.size());
     EXPECT_EQ(1lu, backup->migrations.size());
 
     std::thread taskQueueThread(&BackupService::gcMain, backup);

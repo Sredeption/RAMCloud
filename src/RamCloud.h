@@ -23,7 +23,7 @@
 #include "ObjectRpcWrapper.h"
 #include "OptionParser.h"
 #include "ServerMetrics.h"
-#include "MigrationClient.h"
+#include "ServerIdRpcWrapper.h"
 
 #include "LogMetrics.pb.h"
 #include "ServerConfig.pb.h"
@@ -38,6 +38,7 @@ class MultiRemoveObject;
 class MultiWriteObject;
 class ObjectFinder;
 class RpcTracker;
+class MigrationClient;
 
 /**
  * This structure describes a key (primary or secondary) and its length.
@@ -190,7 +191,7 @@ class RamCloud {
      */
     Context* realClientContext;
 
-    MigrationClient migrationClient;
+    MigrationClient *migrationClient;
 
     void readMigratingInternal(
         ServerId sourceServerId, ServerId targetServerId, uint64_t tableId,

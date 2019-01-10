@@ -136,6 +136,7 @@ class ObjectManager : public LogEntryHandlers,
     Log* getLog() { return &log; }
     ReplicaManager* getReplicaManager() { return &replicaManager; }
     HashTable* getObjectMap() { return &objectMap; }
+    bool isLocked(Key &key);
 
     /**
      * An object of this class must be held by any activity that places

@@ -8,6 +8,7 @@
 #include "SpinLock.h"
 #include "WorkerTimer.h"
 #include "TransactionManager.h"
+#include "RangeList.h"
 
 
 namespace RAMCloud {
@@ -45,6 +46,8 @@ class MigrationSourceManager : public WorkerTimer {
 
       PRIVATE:
         MigrationSourceManager *manager;
+        RangeList rangeList;
+
         uint64_t migrationId;
         uint64_t tableId;
         uint64_t firstKeyHash;
@@ -84,6 +87,8 @@ class MigrationSourceManager : public WorkerTimer {
     void lock(uint64_t migrationId, Key &key);
 
     void unlock(uint64_t migrationId, Key &key);
+
+    Status isLocked(uint64_t migrationId, Key &key, bool *isLocked);
 
   PRIVATE:
 

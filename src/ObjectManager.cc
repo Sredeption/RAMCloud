@@ -2028,6 +2028,7 @@ ObjectManager::prepareOp(PreparedOp& newOp, RejectRules* rejectRules,
     if (!tabletManager->getTablet(key, &tablet))
         return STATUS_UNKNOWN_TABLET;
     if (tablet.state != TabletManager::NORMAL &&
+        tablet.state != TabletManager::MIGRATION_SOURCE_PREP &&
         tablet.state != TabletManager::MIGRATION_TARGET)
         return STATUS_UNKNOWN_TABLET;
 
@@ -2039,9 +2040,14 @@ ObjectManager::prepareOp(PreparedOp& newOp, RejectRules* rejectRules,
         writePrepareFail(rpcResult, rpcResultPtr);
         return STATUS_OK;
     }
-
     if (tablet.state == TabletManager::MIGRATION_TARGET) {
-
+        ServerId sourceServerId(tablet.sourceId);
+        bool isLocked = MasterClient::migrationIsLocked(
+            context, sourceServerId, tablet.migrationId, key);
+        if (isLocked) {
+            writePrepareFail(rpcResult, rpcResultPtr);
+            return STATUS_OK;
+        }
     }
 
     LogEntryType currentType = LOG_ENTRY_TYPE_INVALID;
@@ -3864,6 +3870,11 @@ ObjectManager::getReplicas()
 bool ObjectManager::raiseSafeVersion(uint64_t minimum)
 {
     return segmentManager.raiseSafeVersion(minimum);
+}
+
+bool ObjectManager::isLocked(Key &key)
+{
+    return lockTable.isLockAcquired(key);
 }
 
 } //enamespace RAMCloud

@@ -139,7 +139,8 @@ enum Opcode {
     MIGRATION_BACKUPCOMPLETE    = 87,
     MIGRATION_MASTERFINISH      = 88,
     MIGRATION_QUERY             = 89,
-    ILLEGAL_RPC_TYPE            = 90, // 1 + the highest legitimate Opcode
+    MIGRATION_ISLOCKED          = 90,
+    ILLEGAL_RPC_TYPE            = 91, // 1 + the highest legitimate Opcode
 };
 
 /**
@@ -1233,6 +1234,21 @@ struct MigrationQuery {
         ResponseCommon common;
         bool finish;
         bool successful;
+    } __attribute__((packed));
+};
+
+struct MigrationIsLocked {
+    static const Opcode opcode = MIGRATION_ISLOCKED;
+    static const ServiceType service = MASTER_SERVICE;
+    struct Request {
+        RequestCommonWithId common;
+        uint64_t migrationId;
+        uint64_t tableId;
+        uint16_t keyLength;
+    } __attribute__((packed));
+    struct Response {
+        ResponseCommon common;
+        bool isLocked;
     } __attribute__((packed));
 };
 

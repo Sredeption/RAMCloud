@@ -772,6 +772,38 @@ MigrationTargetStartRpc::MigrationTargetStartRpc(
     send();
 }
 
+
+bool MasterClient::migrationIsLocked(Context *context, ServerId sourceId,
+                                     uint64_t migrationId, Key &key)
+{
+    MigrationIsLockedRpc rpc(context, sourceId, migrationId, key);
+    return rpc.wait();
+}
+
+MigrationIsLockedRpc::MigrationIsLockedRpc(Context *context, ServerId serverId,
+                                           uint64_t migrationId, Key &key)
+    : ServerIdRpcWrapper(context, serverId,
+                         sizeof(WireFormat::MigrationIsLocked::Response))
+{
+    WireFormat::MigrationIsLocked::Request *reqHdr(
+        allocHeader<WireFormat::MigrationIsLocked>(serverId));
+
+    reqHdr->migrationId = migrationId;
+    reqHdr->tableId = key.getTableId();
+    reqHdr->keyLength = key.getStringKeyLength();
+    request.append(key.getStringKey(), key.getStringKeyLength());
+
+    send();
+}
+
+bool MigrationIsLockedRpc::wait()
+{
+    waitAndCheckErrors();
+    const WireFormat::MigrationIsLocked::Response *respHdr(
+        getResponseHeader<WireFormat::MigrationIsLocked>());
+    return respHdr->isLocked;
+}
+
 /**
  * This RPC is sent to an index server to request that it remove an index
  * entry from an indexlet it holds.
