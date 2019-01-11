@@ -62,7 +62,8 @@ class TransactionManagerTest : public ::testing::Test {
                         &masterTableMetadata,
                         &unackedRpcResults,
                         &transactionManager,
-                        &txRecoveryManager)
+                        &txRecoveryManager,
+                        NULL)
         , unackedRpcResults(&context,
                             NULL,
                             &clientLeaseValidator,

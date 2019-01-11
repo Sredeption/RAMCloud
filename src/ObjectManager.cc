@@ -74,7 +74,8 @@ ObjectManager::ObjectManager(Context* context, ServerId* serverId,
                 MasterTableMetadata* masterTableMetadata,
                 UnackedRpcResults* unackedRpcResults,
                 TransactionManager* transactionManager,
-                TxRecoveryManager* txRecoveryManager)
+                TxRecoveryManager* txRecoveryManager,
+                MigrationTargetManager *migrationTargetManager)
     : context(context)
     , config(config)
     , tabletManager(tabletManager)
@@ -97,6 +98,7 @@ ObjectManager::ObjectManager(Context* context, ServerId* serverId,
     , mutex("ObjectManager::mutex")
     , tombstoneRemover(this, &objectMap)
     , tombstoneProtectorCount(0)
+    , migrationTargetManager(migrationTargetManager)
 {
     for (size_t i = 0; i < arrayLength(hashTableBucketLocks); i++)
         hashTableBucketLocks[i].setName("hashTableBucketLock");
@@ -328,7 +330,7 @@ ObjectManager::readObject(Key& key, Buffer* outBuffer,
     HashTableBucketLock lock(*this, key);
 
     // If the tablet doesn't exist in the NORMAL state, we must plead ignorance.
-    if (!tabletManager->checkAndIncrementReadCount(key), tablet)
+    if (!tabletManager->checkAndIncrementReadCount(key, tablet))
         return STATUS_UNKNOWN_TABLET;
 
     Buffer buffer;
@@ -2040,10 +2042,13 @@ ObjectManager::prepareOp(PreparedOp& newOp, RejectRules* rejectRules,
         writePrepareFail(rpcResult, rpcResultPtr);
         return STATUS_OK;
     }
-    if (tablet.state == TabletManager::MIGRATION_TARGET) {
+    if (tablet.state == TabletManager::MIGRATION_TARGET &&
+        migrationTargetManager->isLocked(tablet.migrationId, key)) {
         ServerId sourceServerId(tablet.sourceId);
+        vector<WireFormat::MigrationIsLocked::Range> ranges;
         bool isLocked = MasterClient::migrationIsLocked(
-            context, sourceServerId, tablet.migrationId, key);
+            context, sourceServerId, tablet.migrationId, key, ranges);
+        migrationTargetManager->update(tablet.migrationId, ranges);
         if (isLocked) {
             writePrepareFail(rpcResult, rpcResultPtr);
             return STATUS_OK;

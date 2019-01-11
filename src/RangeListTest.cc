@@ -130,6 +130,8 @@ TEST_F(RangeListTest, largeRebuild)
         rebuild.push(range);
     }
     EXPECT_FALSE(rebuild.isLocked(5));
+
+    EXPECT_THROW(rangeList.lock(20), FatalError);
 }
 
 }

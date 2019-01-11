@@ -774,10 +774,11 @@ MigrationTargetStartRpc::MigrationTargetStartRpc(
 
 
 bool MasterClient::migrationIsLocked(Context *context, ServerId sourceId,
-                                     uint64_t migrationId, Key &key)
+                                     uint64_t migrationId, Key &key,
+                                     vector<WireFormat::MigrationIsLocked::Range> &ranges)
 {
     MigrationIsLockedRpc rpc(context, sourceId, migrationId, key);
-    return rpc.wait();
+    return rpc.wait(ranges);
 }
 
 MigrationIsLockedRpc::MigrationIsLockedRpc(Context *context, ServerId serverId,
@@ -796,11 +797,20 @@ MigrationIsLockedRpc::MigrationIsLockedRpc(Context *context, ServerId serverId,
     send();
 }
 
-bool MigrationIsLockedRpc::wait()
+bool
+MigrationIsLockedRpc::wait(vector<WireFormat::MigrationIsLocked::Range> &ranges)
 {
     waitAndCheckErrors();
     const WireFormat::MigrationIsLocked::Response *respHdr(
         getResponseHeader<WireFormat::MigrationIsLocked>());
+
+    uint32_t offset = sizeof32(*respHdr);
+
+    const WireFormat::MigrationIsLocked::Range *rangesLocation =
+        response->getOffset<WireFormat::MigrationIsLocked::Range>(offset);
+    for (uint64_t i = 0; i < respHdr->rangesLength; i++) {
+        ranges.push_back(rangesLocation[i]);
+    }
     return respHdr->isLocked;
 }
 

@@ -108,7 +108,8 @@ class MasterClient {
         uint32_t numReplicas);
     static bool
     migrationIsLocked(Context *context, ServerId sourceId, uint64_t migrationId,
-                      Key &key);
+                      Key &key,
+                      vector<WireFormat::MigrationIsLocked::Range> &ranges);
 
   private:
     MasterClient();
@@ -272,7 +273,7 @@ class MigrationIsLockedRpc : public ServerIdRpcWrapper {
 
     }
 
-    bool wait();
+    bool wait(vector<WireFormat::MigrationIsLocked::Range> &ranges);
 
   PRIVATE:
     DISALLOW_COPY_AND_ASSIGN(MigrationIsLockedRpc);

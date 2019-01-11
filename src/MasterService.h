@@ -45,6 +45,7 @@
 #include "WireFormat.h"
 #include "UnackedRpcResults.h"
 #include "MigrationSourceManager.h"
+#include "MigrationTargetManager.h"
 
 namespace RAMCloud {
 
@@ -441,6 +442,7 @@ class MasterService : public Service {
     };
     MigrationMonitor migrationMonitor;
     MigrationSourceManager migrationSourceManager;
+    MigrationTargetManager migrationTargetManager;
 
 ///////////////////////////////////////////////////////////////////////////////
 /////Recovery related code. This should eventually move into its own file./////

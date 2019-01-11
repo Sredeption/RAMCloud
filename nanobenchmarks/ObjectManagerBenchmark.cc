@@ -75,7 +75,8 @@ class ObjectManagerBenchmark {
                                           &masterTableMetadata,
                                           &unackedRpcResults,
                                           &transactionManager,
-                                          &txRecoveryManager);
+                                          &txRecoveryManager,
+                                          NULL);
         unackedRpcResults.resetFreer(objectManager);
     }
 

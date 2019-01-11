@@ -72,7 +72,8 @@ class BtreeTest: public ::testing::Test {
                         &masterTableMetadata,
                         &unackedRpcResults,
                         &transactionManager,
-                        &txRecoveryManager)
+                        &txRecoveryManager,
+                        NULL)
         , tableId(1)
     {
         objectManager.initOnceEnlisted();

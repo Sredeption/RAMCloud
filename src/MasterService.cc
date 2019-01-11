@@ -85,7 +85,8 @@ MasterService::MasterService(Context* context, const ServerConfig* config)
                     &masterTableMetadata,
                     &unackedRpcResults,
                     &transactionManager,
-                    &txRecoveryManager)
+                    &txRecoveryManager,
+                    &migrationTargetManager)
     , tabletManager()
     , txRecoveryManager(context)
     , indexletManager(context, &objectManager)
@@ -106,6 +107,7 @@ MasterService::MasterService(Context* context, const ServerConfig* config)
     , maxResponseRpcLen(Transport::MAX_RPC_LEN)
     , migrationMonitor(this)
     , migrationSourceManager(this)
+    , migrationTargetManager()
 {
     context->services[WireFormat::MASTER_SERVICE] = this;
 }
@@ -4110,6 +4112,7 @@ void MasterService::migrationTargetStart(
     metrics->master.replicas = objectManager.getReplicaManager()->numReplicas;
     tabletManager.raiseSafeVersion(reqHdr->safeVersion);
     objectManager.raiseSafeVersion(reqHdr->safeVersion);
+    migrationTargetManager.init(reqHdr->migrationId);
 
     uint64_t recoveryId = reqHdr->migrationId;
     ServerId targetServerId(reqHdr->targetServerId);

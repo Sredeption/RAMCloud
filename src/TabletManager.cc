@@ -88,8 +88,8 @@ TabletManager::checkAndIncrementReadCount(Key& key, Tablet* outTablet) {
 
     if (it == tabletMap.end())
         return false;
-    if (it->second.state != NORMAL || it->second.state != MIGRATION_SOURCE ||
-        it->second.state != MIGRATION_SOURCE_PREP ||
+    if (it->second.state != NORMAL && it->second.state != MIGRATION_SOURCE &&
+        it->second.state != MIGRATION_SOURCE_PREP &&
         it->second.state != MIGRATION_TARGET) {
         if (it->second.state == TabletManager::LOCKED_FOR_MIGRATION)
             throw RetryException(HERE, 1000, 2000,
