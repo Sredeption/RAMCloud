@@ -73,6 +73,7 @@ class BtreeTest: public ::testing::Test {
                         &unackedRpcResults,
                         &transactionManager,
                         &txRecoveryManager,
+                        NULL,
                         NULL)
         , tableId(1)
     {

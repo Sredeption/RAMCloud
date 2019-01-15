@@ -47,7 +47,8 @@ void MigrationSourceManager::handleTimerEvent()
     epoch++;
 
     uint64_t minTimestamp = transactionManager->getMinTimestamp();
-    RAMCLOUD_LOG(NOTICE, "Current min timestamp: %lu", minTimestamp);
+    if (!prepQueue.empty())
+        start(0);
     std::list<Migration *>::iterator iterator = prepQueue.begin();
     while (iterator != prepQueue.end()) {
         Migration *migration = *iterator;
@@ -61,8 +62,6 @@ void MigrationSourceManager::handleTimerEvent()
         }
     }
 
-    if (!prepQueue.empty())
-        start(0);
 }
 
 void MigrationSourceManager::startMigration(
@@ -97,12 +96,16 @@ void MigrationSourceManager::unlock(uint64_t migrationId, Key &key)
 }
 
 Status
-MigrationSourceManager::isLocked(uint64_t migrationId, Key &key, bool *isLocked,
-                    vector<WireFormat::MigrationIsLocked::Range> &ranges)
+MigrationSourceManager::isLocked(
+    uint64_t migrationId, Key &key, bool *isLocked,
+    vector<WireFormat::MigrationIsLocked::Range> &ranges)
 {
     auto migration = migrations.find(migrationId);
     if (migration == migrations.end())
         return STATUS_OBJECT_DOESNT_EXIST;
+    if (migration->second->startEpoch >= epoch)
+        throw RetryException(HERE, 10, 100,
+                             "wait at least one epoch to clear buffer");
     if (isLocked)
         *isLocked = masterService->objectManager.isLocked(key);
     migration->second->rangeList.getRanges(ranges);

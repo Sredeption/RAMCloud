@@ -741,16 +741,20 @@ TransactionManager::TransactionRegistryCleaner::handleTimerEvent()
                     transaction->txId.clientLeaseId,
                     transaction->txId.clientTransactionId);
             ++it;
-            if (minTimestamp > transaction->timestamp)
+            if (transaction->preparedOpCount > 0 &&
+                minTimestamp > transaction->timestamp) {
                 minTimestamp = transaction->timestamp;
+            }
         } else if (!transaction->inProgress(lock, protector)) {;
             transactionManager->transactions.erase(txId);
             delete transaction;
             it = transactionManager->transactionIds.erase(it);
         } else {
             ++it;
-            if (minTimestamp > transaction->timestamp)
+            if (transaction->preparedOpCount > 0 &&
+                minTimestamp > transaction->timestamp) {
                 minTimestamp = transaction->timestamp;
+            }
         }
     }
 

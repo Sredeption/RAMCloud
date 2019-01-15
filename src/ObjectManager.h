@@ -38,6 +38,7 @@
 #include "MasterTableMetadata.h"
 #include "UnackedRpcResults.h"
 #include "LockTable.h"
+#include "MigrationSourceManager.h"
 #include "MigrationTargetManager.h"
 
 namespace RAMCloud {
@@ -66,6 +67,7 @@ class ObjectManager : public LogEntryHandlers,
                 UnackedRpcResults* unackedRpcResults,
                 TransactionManager* transactionManager,
                 TxRecoveryManager* txRecoveryManager,
+                MigrationSourceManager *migrationSourceManager,
                 MigrationTargetManager *migrationTargetManager);
     virtual ~ObjectManager();
     virtual void freeLogEntry(Log::Reference ref);
@@ -422,6 +424,7 @@ class ObjectManager : public LogEntryHandlers,
      */
     int tombstoneProtectorCount;
 
+    MigrationSourceManager *migrationSourceManager;
     MigrationTargetManager *migrationTargetManager;
 
     friend class CleanerCompactionBenchmark;

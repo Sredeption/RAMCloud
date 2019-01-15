@@ -102,6 +102,7 @@ TESTS_SRCFILES := \
 		  src/MigrationTest.cc \
 		  src/MigrationManagerTest.cc \
 		  src/MigrationSegmentBuilderTest.cc \
+		  src/MigrationSourceManagerTest.cc \
 		  src/MockCluster.cc \
 		  src/MockClusterTest.cc \
 		  src/MockDriver.cc \

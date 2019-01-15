@@ -63,6 +63,7 @@ class TransactionManagerTest : public ::testing::Test {
                         &unackedRpcResults,
                         &transactionManager,
                         &txRecoveryManager,
+                        NULL,
                         NULL)
         , unackedRpcResults(&context,
                             NULL,

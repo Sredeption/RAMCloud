@@ -3,7 +3,7 @@
 namespace RAMCloud {
 
 MigrationTargetManager::MigrationTargetManager() :
-    migrations(), lock("MigrationTargetManager")
+    migrations(), lock("MigrationTargetManager"), disableMigrationRecover(false)
 {
 
 }

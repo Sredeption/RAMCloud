@@ -75,6 +75,7 @@ ObjectManager::ObjectManager(Context* context, ServerId* serverId,
                 UnackedRpcResults* unackedRpcResults,
                 TransactionManager* transactionManager,
                 TxRecoveryManager* txRecoveryManager,
+                MigrationSourceManager *migrationSourceManager,
                 MigrationTargetManager *migrationTargetManager)
     : context(context)
     , config(config)
@@ -98,6 +99,7 @@ ObjectManager::ObjectManager(Context* context, ServerId* serverId,
     , mutex("ObjectManager::mutex")
     , tombstoneRemover(this, &objectMap)
     , tombstoneProtectorCount(0)
+    , migrationSourceManager(migrationSourceManager)
     , migrationTargetManager(migrationTargetManager)
 {
     for (size_t i = 0; i < arrayLength(hashTableBucketLocks); i++)
@@ -2131,7 +2133,7 @@ ObjectManager::prepareOp(PreparedOp& newOp, RejectRules* rejectRules,
                      "after checking lock was free. Key: %.*s",
                      keyLength, reinterpret_cast<const char*>(keyString));
     } else if (tablet.state == TabletManager::MIGRATION_SOURCE) {
-
+        migrationSourceManager->lock(tablet.migrationId, key);
     }
 
     *newOpPtr = appends[0].reference.toInteger();
@@ -2366,7 +2368,10 @@ ObjectManager::commitRead(PreparedOp& op, Log::Reference& refToPreparedOp)
     TabletManager::Tablet tablet;
     if (!tabletManager->getTablet(key, &tablet))
         return STATUS_UNKNOWN_TABLET;
-    if (tablet.state != TabletManager::NORMAL)
+    if (tablet.state != TabletManager::NORMAL &&
+        tablet.state != TabletManager::MIGRATION_SOURCE &&
+        tablet.state != TabletManager::MIGRATION_SOURCE_PREP &&
+        tablet.state != TabletManager::MIGRATION_TARGET)
         return STATUS_UNKNOWN_TABLET;
 
     PreparedOpTombstone prepOpTombstone(op, log.getSegmentId(refToPreparedOp));
@@ -2389,6 +2394,8 @@ ObjectManager::commitRead(PreparedOp& op, Log::Reference& refToPreparedOp)
                      "when it should not be. Key: %.*s PrepareRef: %lu",
                      keyLength, reinterpret_cast<const char*>(keyString),
                      refToPreparedOp.toInteger());
+    } else if (tablet.state == TabletManager::MIGRATION_SOURCE) {
+        migrationSourceManager->unlock(tablet.migrationId, key);
     }
 
     TableStats::increment(masterTableMetadata,
@@ -2437,7 +2444,10 @@ ObjectManager::commitRemove(PreparedOp& op,
     TabletManager::Tablet tablet;
     if (!tabletManager->getTablet(key, &tablet))
         return STATUS_UNKNOWN_TABLET;
-    if (tablet.state != TabletManager::NORMAL)
+    if (tablet.state != TabletManager::NORMAL &&
+        tablet.state != TabletManager::MIGRATION_SOURCE &&
+        tablet.state != TabletManager::MIGRATION_SOURCE_PREP &&
+        tablet.state != TabletManager::MIGRATION_TARGET)
         return STATUS_UNKNOWN_TABLET;
 
     LogEntryType type;
@@ -2485,6 +2495,8 @@ ObjectManager::commitRemove(PreparedOp& op,
                      "when it should not be. Key: %.*s PrepareRef: %lu",
                      keyLength, reinterpret_cast<const char*>(keyString),
                      refToPreparedOp.toInteger());
+    } else if (tablet.state == TabletManager::MIGRATION_SOURCE) {
+        migrationSourceManager->unlock(tablet.migrationId, key);
     }
 
     {
@@ -2545,7 +2557,10 @@ ObjectManager::commitWrite(PreparedOp& op,
     TabletManager::Tablet tablet;
     if (!tabletManager->getTablet(key, &tablet))
         return STATUS_UNKNOWN_TABLET;
-    if (tablet.state != TabletManager::NORMAL)
+    if (tablet.state != TabletManager::NORMAL &&
+        tablet.state != TabletManager::MIGRATION_SOURCE &&
+        tablet.state != TabletManager::MIGRATION_SOURCE_PREP &&
+        tablet.state != TabletManager::MIGRATION_TARGET)
         return STATUS_UNKNOWN_TABLET;
 
     LogEntryType type;
@@ -2617,6 +2632,8 @@ ObjectManager::commitWrite(PreparedOp& op,
                      "when it should not be. Key: %.*s PrepareRef: %lu",
                      keyLength, reinterpret_cast<const char*>(keyString),
                      refToPreparedOp.toInteger());
+    } else if (tablet.state == TabletManager::MIGRATION_SOURCE) {
+        migrationSourceManager->unlock(tablet.migrationId, key);
     }
 
     TableStats::increment(masterTableMetadata,

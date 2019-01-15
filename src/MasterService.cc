@@ -86,6 +86,7 @@ MasterService::MasterService(Context* context, const ServerConfig* config)
                     &unackedRpcResults,
                     &transactionManager,
                     &txRecoveryManager,
+                    &migrationSourceManager,
                     &migrationTargetManager)
     , tabletManager()
     , txRecoveryManager(context)
@@ -2607,7 +2608,10 @@ MasterService::txDecision(const WireFormat::TxDecision::Request* reqHdr,
             if (!tabletManager.getTablet(participants[i].tableId,
                                          participants[i].keyHash,
                                          &tablet)
-                 || tablet.state != TabletManager::NORMAL) {
+                || (tablet.state != TabletManager::NORMAL &&
+                    tablet.state != TabletManager::MIGRATION_SOURCE &&
+                    tablet.state != TabletManager::MIGRATION_SOURCE_PREP &&
+                    tablet.state != TabletManager::MIGRATION_TARGET)) {
                 respHdr->common.status = STATUS_UNKNOWN_TABLET;
                 rpc->sendReply();
                 return;
@@ -4159,7 +4163,9 @@ void MasterService::migrationTargetStart(
 
     bool successful = false;
     try {
-        migrateRecover(recoveryId, ServerId(reqHdr->sourceServerId), replicas);
+        if (!migrationTargetManager.disableMigrationRecover)
+            migrateRecover(recoveryId, ServerId(reqHdr->sourceServerId),
+                           replicas);
         successful = true;
     } catch (const SegmentRecoveryFailedException &e) {
         // Recovery wasn't successful.
@@ -4172,15 +4178,18 @@ void MasterService::migrationTargetStart(
             LOG(ERROR, "Unexpected ClientException during recovery: %s",
                 statusToString(e.status));
     }
-    bool cancelRecovery = CoordinatorClient::migrationMasterFinished(
-        context, recoveryId, serverId, successful);
+    bool cancelRecovery= false;
+
+    if (!migrationTargetManager.disableMigrationRecover)
+        cancelRecovery = CoordinatorClient::migrationMasterFinished(
+            context, recoveryId, serverId, successful);
     if (!cancelRecovery) {
         // Re-grab all transaction locks.
-        transactionManager.regrabLocksAfterRecovery(&objectManager);
+//        transactionManager.regrabLocksAfterRecovery(&objectManager);
         bool changed = tabletManager.changeState(
             reqHdr->tableId,
             reqHdr->firstKeyHash, reqHdr->lastKeyHash,
-            TabletManager::MIGRATION_SOURCE, TabletManager::NORMAL);
+            TabletManager::MIGRATION_TARGET, TabletManager::NORMAL);
         if (!changed) {
             throw FatalError(
                 HERE, format("Could not change recovering "

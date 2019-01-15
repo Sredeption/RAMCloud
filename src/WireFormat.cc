@@ -125,10 +125,12 @@ opcodeSymbol(uint32_t opcode)
         case MIGRATION_STARTREADING:       return "MIGRATION_START_READING";
         case MIGRATION_GETDATA:            return "MIGRATION_GET_DATA";
         case MIGRATION_INIT:               return "MIGRATION_INIT";
-        case MIGRATION_SOURCESTART:            return "MIGRATION_RECOVER";
+        case MIGRATION_SOURCESTART:        return "MIGRATION_SOURCE_START";
+        case MIGRATION_TARGETSTART:        return "MIGRATION_TARGET_START";
         case MIGRATION_BACKUPCOMPLETE:     return "MIGRATION_BACKUP_COMPLETE";
         case MIGRATION_MASTERFINISH:       return "MIGRATION_MASTER_FINISH";
         case MIGRATION_QUERY:              return "MIGRATION_QUERY";
+        case MIGRATION_ISLOCKED:           return "MIGRATION_ISLOCKED";
         case ILLEGAL_RPC_TYPE:             return "ILLEGAL_RPC_TYPE";
     }
 

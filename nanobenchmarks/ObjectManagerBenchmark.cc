@@ -76,6 +76,7 @@ class ObjectManagerBenchmark {
                                           &unackedRpcResults,
                                           &transactionManager,
                                           &txRecoveryManager,
+                                          NULL,
                                           NULL);
         unackedRpcResults.resetFreer(objectManager);
     }

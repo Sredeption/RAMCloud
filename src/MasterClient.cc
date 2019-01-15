@@ -739,7 +739,6 @@ void MasterClient::migrationTargetStart(
                                 targetServerId, tableId, firstKeyHash,
                                 lastKeyHash, safeVersion, replicas,
                                 numReplicas);
-    rpc.wait();
 }
 
 MigrationTargetStartRpc::MigrationTargetStartRpc(

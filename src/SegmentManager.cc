@@ -167,6 +167,8 @@ SegmentManager::getReplicas()
     SpinLock::Guard _(lock);
 
     std::vector<WireFormat::MigrationTargetStart::Replica> replicas;
+    if (replicaManager.numReplicas == 0)
+        return replicas;
     reverse_foreach (LogSegment &s, allSegments) {
         replicas.emplace_back(s.replicatedSegment->toPrimary());
     }

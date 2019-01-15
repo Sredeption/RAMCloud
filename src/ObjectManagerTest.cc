@@ -66,6 +66,7 @@ class ObjectManagerTest : public ::testing::Test,
                         &unackedRpcResults,
                         &transactionManager,
                         &txRecoveryManager,
+                        NULL,
                         NULL)
         , unackedRpcResults(&context,
                             this,

@@ -34,6 +34,7 @@ class MigrationTargetManager {
     void update(uint64_t migrationId,
                 vector<WireFormat::MigrationIsLocked::Range> &ranges);
 
+    bool disableMigrationRecover;
 };
 
 }

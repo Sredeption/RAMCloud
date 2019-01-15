@@ -78,6 +78,7 @@ class CleanerCompactionBenchmark {
                                           &unackedRpcResults,
                                           &transactionManager,
                                           &txRecoveryManager,
+                                          NULL,
                                           NULL);
         unackedRpcResults.resetFreer(objectManager);
     }

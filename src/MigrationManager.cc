@@ -311,14 +311,6 @@ void MigrationManager::migrationFinished(Migration *migration)
                  activeMigrations.size() - 1);
     if (migration->wasCompletelySuccessful()) {
         // Remove recovered server from the server list and broadcast
-        // the change to the cluster.
-        try {
-//            context->coordinatorServerList->recoveryCompleted(
-//                migration->crashedServerId);
-        } catch (const ServerListException &e) {
-            // Server may have already been removed from the list
-            // because of an earlier recovery.
-        }
         (new MigrationManagerInternal::MaybeStartMigrationTask(*this))
             ->schedule();
     } else {
