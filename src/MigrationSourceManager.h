@@ -25,6 +25,7 @@ class MigrationSourceManager : public WorkerTimer {
         ItemType type;
         uint64_t migrationId;
         uint64_t keyHash;
+        uint64_t timestamp;
     };
 
     class Migration {
@@ -84,9 +85,11 @@ class MigrationSourceManager : public WorkerTimer {
                         uint64_t firstKeyHash, uint64_t lastKeyHash,
                         uint64_t sourceId, uint64_t targetId);
 
-    void lock(uint64_t migrationId, Key &key);
+    Migration *getMigration(uint64_t migrationId);
 
-    void unlock(uint64_t migrationId, Key &key);
+    void lock(uint64_t migrationId, Key &key, uint64_t timestamp);
+
+    void unlock(uint64_t migrationId, Key &key, uint64_t timestamp);
 
     Status isLocked(uint64_t migrationId, Key &key, bool *isLocked,
                     vector<WireFormat::MigrationIsLocked::Range> &ranges);

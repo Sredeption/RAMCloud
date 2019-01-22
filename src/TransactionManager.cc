@@ -827,4 +827,15 @@ uint64_t TransactionManager::getMinTimestamp()
     return minTimestamp;
 }
 
+uint64_t TransactionManager::getTimestamp(TransactionId txId)
+{
+    Lock lock(mutex);
+    TransactionRecord *tx = getTransaction(txId, lock);
+    if (tx == NULL)
+        throw FatalError(HERE, "Transaction doesn't exist, could't get "
+                               "timestamp.");
+    return tx->timestamp;
+
+}
+
 } // namespace RAMCloud

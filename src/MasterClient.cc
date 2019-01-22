@@ -805,10 +805,11 @@ MigrationIsLockedRpc::wait(vector<WireFormat::MigrationIsLocked::Range> &ranges)
 
     uint32_t offset = sizeof32(*respHdr);
 
-    const WireFormat::MigrationIsLocked::Range *rangesLocation =
-        response->getOffset<WireFormat::MigrationIsLocked::Range>(offset);
-    for (uint64_t i = 0; i < respHdr->rangesLength; i++) {
-        ranges.push_back(rangesLocation[i]);
+    for (uint64_t i = 0; i < respHdr->numRanges; i++) {
+        const WireFormat::MigrationIsLocked::Range *rangeLocation =
+            response->getOffset<WireFormat::MigrationIsLocked::Range>(offset);
+        offset += sizeof32(WireFormat::MigrationIsLocked::Range);
+        ranges.push_back(*rangeLocation);
     }
     return respHdr->isLocked;
 }

@@ -1249,7 +1249,7 @@ struct MigrationIsLocked {
     struct Response {
         ResponseCommon common;
         bool isLocked;
-        uint64_t rangesLength;
+        uint64_t numRanges;
     } __attribute__((packed));
     struct Range {
         uint64_t start;
@@ -2071,6 +2071,9 @@ struct TxPrepare {
     struct Response {
         ResponseCommon common;
         Vote vote;
+        bool migrating;
+        uint64_t sourceId;
+        uint64_t targetId;
     } __attribute__((packed));
 };
 

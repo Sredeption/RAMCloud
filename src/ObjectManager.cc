@@ -2033,8 +2033,9 @@ ObjectManager::prepareOp(PreparedOp& newOp, RejectRules* rejectRules,
         return STATUS_UNKNOWN_TABLET;
     if (tablet.state != TabletManager::NORMAL &&
         tablet.state != TabletManager::MIGRATION_SOURCE_PREP &&
-        tablet.state != TabletManager::MIGRATION_TARGET)
+        tablet.state != TabletManager::MIGRATION_TARGET){
         return STATUS_UNKNOWN_TABLET;
+    }
 
     // If the key is already locked, abort.
     if (lockTable.isLockAcquired(key)) {
@@ -2132,8 +2133,10 @@ ObjectManager::prepareOp(PreparedOp& newOp, RejectRules* rejectRules,
                      "While preparing transaction, lock already acquired "
                      "after checking lock was free. Key: %.*s",
                      keyLength, reinterpret_cast<const char*>(keyString));
-    } else if (tablet.state == TabletManager::MIGRATION_SOURCE) {
-        migrationSourceManager->lock(tablet.migrationId, key);
+    } else if (tablet.state == TabletManager::MIGRATION_SOURCE_PREP ||
+               tablet.state == TabletManager::MIGRATION_SOURCE) {
+        migrationSourceManager->lock(tablet.migrationId, key,
+            transactionManager->getTimestamp(newOp.getTransactionId()));
     }
 
     *newOpPtr = appends[0].reference.toInteger();
@@ -2394,8 +2397,10 @@ ObjectManager::commitRead(PreparedOp& op, Log::Reference& refToPreparedOp)
                      "when it should not be. Key: %.*s PrepareRef: %lu",
                      keyLength, reinterpret_cast<const char*>(keyString),
                      refToPreparedOp.toInteger());
-    } else if (tablet.state == TabletManager::MIGRATION_SOURCE) {
-        migrationSourceManager->unlock(tablet.migrationId, key);
+    } else if (tablet.state == TabletManager::MIGRATION_SOURCE ||
+               tablet.state == TabletManager::MIGRATION_SOURCE_PREP) {
+        migrationSourceManager->unlock(tablet.migrationId, key,
+            transactionManager->getTimestamp(op.getTransactionId()));
     }
 
     TableStats::increment(masterTableMetadata,
@@ -2495,8 +2500,10 @@ ObjectManager::commitRemove(PreparedOp& op,
                      "when it should not be. Key: %.*s PrepareRef: %lu",
                      keyLength, reinterpret_cast<const char*>(keyString),
                      refToPreparedOp.toInteger());
-    } else if (tablet.state == TabletManager::MIGRATION_SOURCE) {
-        migrationSourceManager->unlock(tablet.migrationId, key);
+    } else if (tablet.state == TabletManager::MIGRATION_SOURCE ||
+               tablet.state == TabletManager::MIGRATION_SOURCE_PREP) {
+        migrationSourceManager->unlock(tablet.migrationId, key,
+            transactionManager->getTimestamp(op.getTransactionId()));
     }
 
     {
@@ -2632,8 +2639,10 @@ ObjectManager::commitWrite(PreparedOp& op,
                      "when it should not be. Key: %.*s PrepareRef: %lu",
                      keyLength, reinterpret_cast<const char*>(keyString),
                      refToPreparedOp.toInteger());
-    } else if (tablet.state == TabletManager::MIGRATION_SOURCE) {
-        migrationSourceManager->unlock(tablet.migrationId, key);
+    } else if (tablet.state == TabletManager::MIGRATION_SOURCE ||
+               tablet.state == TabletManager::MIGRATION_SOURCE_PREP) {
+        migrationSourceManager->unlock(tablet.migrationId, key,
+            transactionManager->getTimestamp(op.getTransactionId()));
     }
 
     TableStats::increment(masterTableMetadata,

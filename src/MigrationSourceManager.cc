@@ -34,13 +34,15 @@ void MigrationSourceManager::handleTimerEvent()
         Item &item = buffer->front();
 
         Migration *migration = migrations[item.migrationId];
-        switch (item.type) {
-            case LOCK:
-                migration->lock(item.keyHash);
-                break;
-            case UNLOCK:
-                migration->unlock(item.keyHash);
-                break;
+        if (migration->timestamp < item.timestamp) {
+            switch (item.type) {
+                case LOCK:
+                    migration->lock(item.keyHash);
+                    break;
+                case UNLOCK:
+                    migration->unlock(item.keyHash);
+                    break;
+            }
         }
         buffer->pop();
     }
@@ -81,18 +83,31 @@ void MigrationSourceManager::startMigration(
     start(0);
 }
 
-void MigrationSourceManager::lock(uint64_t migrationId, Key &key)
+MigrationSourceManager::Migration *
+MigrationSourceManager::getMigration(uint64_t migrationId)
 {
-    SpinLock::Guard guard(bufferLock);
-    operatingBuffer[operatingIndex].emplace(
-        Item{LOCK, migrationId, key.getHash()});
+    std::lock_guard<std::mutex> guard(listLock);
+    std::unordered_map<uint64_t, Migration *>::iterator migrationPair =
+        migrations.find(migrationId);
+    if (migrationPair == migrations.end())
+        return NULL;
+    return migrationPair->second;
 }
 
-void MigrationSourceManager::unlock(uint64_t migrationId, Key &key)
+void
+MigrationSourceManager::lock(uint64_t migrationId, Key &key, uint64_t timestamp)
 {
     SpinLock::Guard guard(bufferLock);
     operatingBuffer[operatingIndex].emplace(
-        Item{UNLOCK, migrationId, key.getHash()});
+        Item{LOCK, migrationId, key.getHash(), timestamp});
+}
+
+void MigrationSourceManager::unlock(uint64_t migrationId, Key &key,
+                                    uint64_t timestamp)
+{
+    SpinLock::Guard guard(bufferLock);
+    operatingBuffer[operatingIndex].emplace(
+        Item{UNLOCK, migrationId, key.getHash(), timestamp});
 }
 
 Status

@@ -55,6 +55,8 @@ class ClientTransactionTask : public RpcTracker::TrackedRpc {
         /// operation has reached.
         enum { PENDING, PREPARE, DECIDE } state;
 
+        Transport::SessionRef session;
+
         /// Default constructor for CacheEntry.
         CacheEntry()
             : type(CacheEntry::INVALID)
@@ -62,6 +64,7 @@ class ClientTransactionTask : public RpcTracker::TrackedRpc {
             , rejectRules({0, 0, 0, 0, 0})
             , rpcId(0)
             , state(PENDING)
+            , session()
         {}
 
         DISALLOW_COPY_AND_ASSIGN(CacheEntry);
@@ -85,6 +88,8 @@ class ClientTransactionTask : public RpcTracker::TrackedRpc {
                 (state == DECISION && nextCacheEntry == commitCache.end()));
     }
     void performTask();
+    void testPrepare();
+    void testDecision();
 
   PRIVATE:
     // Forward declaration of RPCs

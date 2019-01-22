@@ -2651,7 +2651,10 @@ MasterService::txDecision(const WireFormat::TxDecision::Request* reqHdr,
             if (!tabletManager.getTablet(participants[i].tableId,
                                          participants[i].keyHash,
                                          &tablet)
-                 || tablet.state != TabletManager::NORMAL) {
+                || (tablet.state != TabletManager::NORMAL &&
+                    tablet.state != TabletManager::MIGRATION_SOURCE &&
+                    tablet.state != TabletManager::MIGRATION_SOURCE_PREP &&
+                    tablet.state != TabletManager::MIGRATION_TARGET)) {
                 respHdr->common.status = STATUS_UNKNOWN_TABLET;
                 rpc->sendReply();
                 return;
@@ -3077,7 +3080,7 @@ MasterService::txPrepare(const WireFormat::TxPrepare::Request* reqHdr,
             }
         }
 
-        uint64_t rpcResultPtr;
+        uint64_t rpcResultPtr = 0lu;
         KeyLength pKeyLen;
         const void* pKey = op->object.getKey(0, &pKeyLen);
         respHdr->common.status = STATUS_OK;
@@ -4104,11 +4107,6 @@ void MasterService::migrationTargetStart(
     const WireFormat::MigrationTargetStart::Request *reqHdr,
     WireFormat::MigrationTargetStart::Response *respHdr, Service::Rpc *rpc)
 {
-    tabletManager.migrateTablet(reqHdr->tableId, reqHdr->firstKeyHash,
-                                reqHdr->lastKeyHash, reqHdr->migrationId,
-                                reqHdr->sourceServerId, reqHdr->targetServerId,
-                                TabletManager::MIGRATION_TARGET);
-
     ReplicatedSegment::recoveryStart = Cycles::rdtsc();
 
     CycleCounter<RawMetric> recoveryTicks(&metrics->master.recoveryTicks);
@@ -4142,6 +4140,11 @@ void MasterService::migrationTargetStart(
                                          reqHdr->firstKeyHash,
                                          reqHdr->lastKeyHash,
                                          TabletManager::MIGRATION_TARGET);
+    tabletManager.migrateTablet(reqHdr->tableId, reqHdr->firstKeyHash,
+                                reqHdr->lastKeyHash, reqHdr->migrationId,
+                                reqHdr->sourceServerId,
+                                reqHdr->targetServerId,
+                                TabletManager::MIGRATION_TARGET);
     if (!added) {
         throw Exception(HERE,
                         format("Cannot recover tablet that overlaps "
@@ -4180,9 +4183,10 @@ void MasterService::migrationTargetStart(
     }
     bool cancelRecovery= false;
 
-    if (!migrationTargetManager.disableMigrationRecover)
-        cancelRecovery = CoordinatorClient::migrationMasterFinished(
-            context, recoveryId, serverId, successful);
+    if (migrationTargetManager.disableMigrationRecover)
+        return;
+    cancelRecovery = CoordinatorClient::migrationMasterFinished(
+        context, recoveryId, serverId, successful);
     if (!cancelRecovery) {
         // Re-grab all transaction locks.
 //        transactionManager.regrabLocksAfterRecovery(&objectManager);
@@ -4232,9 +4236,10 @@ void MasterService::migrationIsLocked(
     respHdr->common.status =
         migrationSourceManager.isLocked(reqHdr->migrationId, key,
                                         &respHdr->isLocked, ranges);
-    respHdr->rangesLength = ranges.size();
-    rpc->replyPayload->append(ranges.data(),
-                              downCast<uint32_t>(ranges.size()));
+    respHdr->numRanges = ranges.size();
+
+    rpc->replyPayload->appendExternal(
+        ranges.data(), downCast<uint32_t>(ranges.size() * sizeof(ranges[0])));
 }
 
 void MasterService::migrateRecover(uint64_t migrationId, ServerId sourceId,

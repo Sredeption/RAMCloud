@@ -215,6 +215,70 @@ ClientTransactionTask::performTask()
     }
 }
 
+
+
+void ClientTransactionTask::testPrepare()
+{
+    if (state == INIT) {
+        startTime = Cycles::rdtsc();
+
+        // Build participant list
+        initTask();
+        nextCacheEntry = commitCache.begin();
+        state = PREPARE;
+    }
+    if (state == PREPARE) {
+        sendPrepareRpc();
+        processPrepareRpcResults();
+        if (prepareRpcs.empty() && nextCacheEntry == commitCache.end()) {
+            switch (decision) {
+                case WireFormat::TxDecision::UNDECIDED:
+                    // Decide to commit.
+                    decision = WireFormat::TxDecision::COMMIT;
+                    TEST_LOG("Set decision to COMMIT.");
+                    // NO break; fall through to continue with commit.
+                    FALLS_THROUGH_TO
+                case WireFormat::TxDecision::ABORT:
+                    // If not READ-ONLY, move to decision phase.
+                    if (!readOnly) {
+                        nextCacheEntry = commitCache.begin();
+                        state = DECISION;
+                        TEST_LOG("Move from PREPARE to DECISION phase.");
+                        break;
+                    }
+                    // else NO break; fall through to declare the
+                    // transaction DONE.
+                    FALLS_THROUGH_TO
+                case WireFormat::TxDecision::COMMIT:
+                    // Prepare must have returned COMMITTED or was READ-ONLY
+                    // so the transaction is now done.
+                    ramcloud->rpcTracker->rpcFinished(txId);
+                    state = DONE;
+                    TEST_LOG("Move from PREPARE to DONE phase; optimized.");
+                    break;
+                default:
+                    RAMCLOUD_LOG(ERROR, "Unexpected transaction decision "
+                                        "value in transaction %lu.%lu.",
+                                 lease.leaseId, txId);
+                    ClientException::throwException(HERE,
+                                                    STATUS_INTERNAL_ERROR);
+            }
+        }
+    }
+}
+
+void ClientTransactionTask::testDecision()
+{
+    if (state == DECISION) {
+        sendDecisionRpc();
+        processDecisionRpcResults();
+        if (decisionRpcs.empty() && nextCacheEntry == commitCache.end()) {
+            ramcloud->rpcTracker->rpcFinished(txId);
+            state = DONE;
+        }
+    }
+}
+
 /**
  * Initialize all necessary values of the commit task in preparation for the
  * commit protocol.  This includes building the send-ready buffer of
@@ -409,16 +473,21 @@ ClientTransactionTask::sendDecisionRpc()
         // This naive approach behaves poorly if the table is highly sharded
         // resulting in poor batching.
         if (nextRpc == NULL) {
-            rpcSession =
-                    ramcloud->clientContext->objectFinder->lookup(key->tableId,
-                                                                  key->keyHash);
+            if (entry->session)
+                rpcSession = entry->session;
+            else
+                rpcSession = ramcloud->clientContext->objectFinder->
+                    lookup(key->tableId, key->keyHash);
             decisionRpcs.emplace_back(ramcloud, rpcSession, this);
             nextRpc = &decisionRpcs.back();
         }
 
-        Transport::SessionRef session =
-                ramcloud->clientContext->objectFinder->lookup(key->tableId,
-                                                              key->keyHash);
+        Transport::SessionRef session;
+        if (entry->session) {
+            session = entry->session;
+        } else
+            session = ramcloud->clientContext->objectFinder->
+                lookup(key->tableId, key->keyHash);
         if (session->serviceLocator != rpcSession->serviceLocator
                 || !nextRpc->appendOp(nextCacheEntry)) {
             break;
@@ -473,6 +542,8 @@ ClientTransactionTask::sendPrepareRpc()
         if (session->serviceLocator != rpcSession->serviceLocator
                 || !nextRpc->appendOp(nextCacheEntry)) {
             break;
+        } else {
+            entry->session = rpcSession;
         }
     }
     if (nextRpc) {
@@ -647,6 +718,7 @@ ClientTransactionTask::DecisionRpc::markOpsForRetry()
         CacheEntry* entry = &ops[i]->second;
         ramcloud->clientContext->objectFinder->flush(key->tableId);
         entry->state = CacheEntry::PENDING;
+        entry->session.reset();
     }
     task->nextCacheEntry = task->commitCache.begin();
 }

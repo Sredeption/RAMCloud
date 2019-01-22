@@ -39,6 +39,17 @@ void MigrationTargetManager::update(uint64_t migrationId,
 
 }
 
+MigrationTargetManager::Migration *
+MigrationTargetManager::getMigration(uint64_t migrationId)
+{
+    SpinLock::Guard guard(lock);
+    std::unordered_map<uint64_t, Migration *>::iterator migrationPair =
+        migrations.find(migrationId);
+    if (migrationPair == migrations.end())
+        return NULL;
+    return migrationPair->second;
+}
+
 MigrationTargetManager::Migration::Migration(uint64_t migrationId)
     : migrationId(migrationId), rangeList()
 {

@@ -76,6 +76,7 @@ class TransactionManager {
     void regrabLocksAfterRecovery(ObjectManager* objectManager);
     void removeOrphanedOps();
     uint64_t getMinTimestamp();
+    uint64_t getTimestamp(TransactionId txId);
 
     /**
      * This class is used to prevent the garbage collection of a (soon to be)
