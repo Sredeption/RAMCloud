@@ -77,9 +77,9 @@ class CoordinatorClient {
     static void migrationInit(Context *context,
                               ServerId targetId, uint64_t tableId,
                               uint64_t firstKeyHash, uint64_t lastKeyHash);
-    static bool migrationMasterFinished(Context *context, uint64_t migrationId,
-                                        ServerId targetServerId,
-                                        bool successful);
+    static bool migrationFinished(Context *context, uint64_t migrationId,
+                                  ServerId targetServerId,
+                                  bool successful);
   private:
     CoordinatorClient();
 };
@@ -201,18 +201,18 @@ class MigrationInitRpc : public CoordinatorRpcWrapper {
     DISALLOW_COPY_AND_ASSIGN(MigrationInitRpc);
 };
 
-class MigrationMasterFinishedRpc : public CoordinatorRpcWrapper {
+class MigrationFinishedRpc : public CoordinatorRpcWrapper {
   public:
-    MigrationMasterFinishedRpc(Context *context, uint64_t migrationId,
+    MigrationFinishedRpc(Context *context, uint64_t migrationId,
                                ServerId targetServerId, bool successful);
 
-    ~MigrationMasterFinishedRpc()
+    ~MigrationFinishedRpc()
     {}
 
     bool wait();
 
   PRIVATE:
-    DISALLOW_COPY_AND_ASSIGN(MigrationMasterFinishedRpc);
+    DISALLOW_COPY_AND_ASSIGN(MigrationFinishedRpc);
 };
 
 /**

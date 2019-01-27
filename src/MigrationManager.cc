@@ -35,19 +35,15 @@ class MaybeStartMigrationTask : public Task {
             if (alreadyMigration) {
                 alreadyActive.push_back(migration);
                 mgr.waitingMigrations.pop();
-//                LOG(NOTICE,
-//                    "Delaying start of recovery of server %s; "
-//                    "another recovery is active for the same ServerId",
-//                    migration->crashedServerId.toString().c_str());
             } else {
                 migration->schedule();
                 mgr.activeMigrations[migration->getMigrationId()] = migration;
                 mgr.waitingMigrations.pop();
-                    LOG(NOTICE,
-                        "Starting recovery of server %s (now %lu active "
-                        "recoveries)",
-                        migration->targetServerId.toString().c_str(),
-                        mgr.activeMigrations.size());
+                RAMCLOUD_LOG(NOTICE,
+                             "Starting recovery of server %s (now %lu active "
+                             "recoveries)",
+                             migration->targetServerId.toString().c_str(),
+                             mgr.activeMigrations.size());
             }
         }
         for (auto *migration: alreadyActive)
@@ -319,18 +315,10 @@ void MigrationManager::migrationFinished(Migration *migration)
                      "tablets, rescheduling another recovery",
                      migration->targetServerId.toString().c_str());
 
-        // Delay a while before rescheduling; otherwise the coordinator
-        // will flood its log with recovery messages in situations
-        // were there aren't enough resources to recover.
         if (!skipRescheduleDelay) {
             usleep(2000000);
         }
 
-        // Enqueue will schedule a MaybeStartRecoveryTask.
-//        (new MigrationManagerInternal::EnqueueMigrationTask(
-//            *this, migration->sourceServerId, migration->targetServerId,
-//            migration->tableId, migration->firstKeyHash,
-//            migration->lastKeyHash, migration->masterRecoveryInfo))->schedule();
     }
 
     activeMigrations.erase(migration->getMigrationId());

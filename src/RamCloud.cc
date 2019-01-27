@@ -57,11 +57,11 @@ static RejectRules defaultRejectRules;
 RamCloud::RamCloud(CommandLineOptions* options)
     : coordinatorLocator()
     , realClientContext(new Context(false, options))
-    , migrationClient(new MigrationClient(this))
     , clientContext(realClientContext)
     , clientLeaseAgent(new ClientLeaseAgent(this))
     , rpcTracker(new RpcTracker())
     , transactionManager(new ClientTransactionManager())
+    , migrationClient(new MigrationClient(this))
 {
     coordinatorLocator = options->getExternalStorageLocator();
     if (coordinatorLocator.size() == 0) {
@@ -80,11 +80,11 @@ RamCloud::RamCloud(CommandLineOptions* options)
 RamCloud::RamCloud(Context* context)
     : coordinatorLocator()
     , realClientContext(NULL)
-    , migrationClient(new MigrationClient(this))
     , clientContext(context)
     , clientLeaseAgent(new ClientLeaseAgent(this))
     , rpcTracker(new RpcTracker())
     , transactionManager(new ClientTransactionManager())
+    , migrationClient(new MigrationClient(this))
 {
     coordinatorLocator = context->options->getExternalStorageLocator();
     if (coordinatorLocator.size() == 0) {
@@ -100,11 +100,11 @@ RamCloud::RamCloud(Context* context)
 RamCloud::RamCloud(const char* locator, const char* clusterName)
     : coordinatorLocator(locator)
     , realClientContext(new Context(false))
-    , migrationClient(new MigrationClient(this))
     , clientContext(realClientContext)
     , clientLeaseAgent(new ClientLeaseAgent(this))
     , rpcTracker(new RpcTracker())
     , transactionManager(new ClientTransactionManager())
+    , migrationClient(new MigrationClient(this))
 {
     clientContext->coordinatorSession->setLocation(locator, clusterName);
 }
@@ -112,11 +112,11 @@ RamCloud::RamCloud(Context* context, const char* locator,
         const char* clusterName)
     : coordinatorLocator(locator)
     , realClientContext(NULL)
-    , migrationClient(new MigrationClient(this))
     , clientContext(context)
     , clientLeaseAgent(new ClientLeaseAgent(this))
     , rpcTracker(new RpcTracker())
     , transactionManager(new ClientTransactionManager())
+    , migrationClient(new MigrationClient(this))
 {
     clientContext->coordinatorSession->setLocation(locator, clusterName);
 }
@@ -294,6 +294,36 @@ CreateTableRpc::wait()
     return respHdr->tableId;
 }
 
+uint64_t RamCloud::createTableToServer(const char *name, ServerId &serverId)
+{
+    CreateTableToServerRpc rpc(this, name, serverId);
+    return rpc.wait();
+}
+
+CreateTableToServerRpc::CreateTableToServerRpc(
+    RamCloud *ramcloud, const char *name, ServerId &serverId)
+    : CoordinatorRpcWrapper(ramcloud->clientContext,
+                            sizeof(WireFormat::CreateTable::Response))
+{
+    uint32_t length = downCast<uint32_t>(strlen(name) + 1);
+    WireFormat::CreateTableToServer::Request *reqHdr(
+        allocHeader<WireFormat::CreateTableToServer>());
+    reqHdr->nameLength = length;
+    reqHdr->serverId = serverId.getId();
+    request.append(name, length);
+    send();
+}
+
+uint64_t
+CreateTableToServerRpc::wait()
+{
+    waitInternal(context->dispatch);
+    const WireFormat::CreateTableToServer::Response *respHdr(
+        getResponseHeader<WireFormat::CreateTableToServer>());
+    if (respHdr->common.status != STATUS_OK)
+        ClientException::throwException(HERE, respHdr->common.status);
+    return respHdr->tableId;
+}
 /**
  * Delete a table.
  *
@@ -2203,33 +2233,14 @@ ReadRpc::wait(uint64_t *version, bool *objectExists, bool *migrating,
 }
 
 void
-RamCloud::readMigrating(uint64_t tableId, const void* key, uint16_t keyLength,
-        Buffer* value, const RejectRules* rejectRules, uint64_t* version,
-        bool* objectExists)
+RamCloud::readMigrating(uint64_t tableId, const void *key, uint16_t keyLength,
+                        Buffer *value, const RejectRules *rejectRules,
+                        uint64_t *version,
+                        bool *objectExists)
 {
-
-    MigrationClient::MigratingTablet *migratingTablet =
-        migrationClient->getTablet(tableId, key, keyLength);
-    bool migrating;
-    uint64_t sourceId;
-    uint64_t targetId;
-    if (migratingTablet) {
-        readMigratingInternal(migratingTablet->sourceId,
-                              migratingTablet->targetId,
-                              tableId, key, keyLength, value, rejectRules,
-                              version, objectExists);
-    } else {
-        ReadRpc rpc(this, tableId, key, keyLength, value, rejectRules);
-        rpc.wait(version, objectExists, &migrating, &sourceId, &targetId);
-        if (migrating) {
-            migrationClient->putTablet(tableId, key, keyLength, sourceId,
-                                      targetId);
-            readMigratingInternal(ServerId(sourceId),
-                                  ServerId(targetId),
-                                  tableId, key, keyLength, value, rejectRules,
-                                  version, objectExists);
-        }
-    }
+    MigrationReadTask readTask(this, tableId, key, keyLength, value,
+                               rejectRules);
+    readTask.wait(version, objectExists);
 
 }
 
@@ -2239,36 +2250,55 @@ void RamCloud::readMigratingInternal(
     const void *key, uint16_t keyLength, Buffer *value,
     const RejectRules *rejectRules,uint64_t *version, bool *objectExists)
 {
-    bool migrating;
-    uint64_t sourceId;
-    uint64_t sourceVersion;
-    bool sourceObjectExists;
-    uint64_t targetId;
-    uint64_t targetVersion;
-    bool targetObjectExists;
+    while (true)
+        try {
+            bool migrating;
+            uint64_t sourceId;
+            uint64_t sourceVersion;
+            bool sourceObjectExists;
+            uint64_t targetId;
+            uint64_t targetVersion;
+            bool targetObjectExists;
 
-    Buffer sourceBuffer;
-    MigrationReadRpc sourceRpc(this, sourceServerId, tableId,
-                               key, keyLength, &sourceBuffer, rejectRules);
-    Buffer targetBuffer;
-    MigrationReadRpc targetRpc(this, targetServerId, tableId,
-                               key, keyLength, &targetBuffer, rejectRules);
-    sourceRpc.wait(&sourceVersion, &sourceObjectExists, &migrating, &sourceId,
-                   &targetId);
-    targetRpc.wait(&targetVersion, &targetObjectExists);
-    if (!migrating) {
-        migrationClient->removeTablet(tableId, key, keyLength);
-    }
-    value->reset();
-    if (sourceVersion > targetVersion) {
-        *version = sourceVersion;
-        value->append(&sourceBuffer, 0u, sourceBuffer.size());
-        *objectExists = sourceObjectExists;
-    } else {
-        *version = targetVersion;
-        value->append(&targetBuffer, 0u, targetBuffer.size());
-        *objectExists = targetObjectExists;
-    }
+            Buffer sourceBuffer;
+            MigrationReadRpc sourceRpc(this, sourceServerId, tableId,
+                                       key, keyLength, &sourceBuffer,
+                                       rejectRules);
+
+            Buffer targetBuffer;
+            MigrationReadRpc targetRpc(this, targetServerId, tableId,
+                                       key, keyLength, &targetBuffer,
+                                       rejectRules);
+            sourceRpc.wait(&sourceVersion, &sourceObjectExists, &migrating,
+                           &sourceId, &targetId);
+            targetRpc.wait(&targetVersion, &targetObjectExists);
+            if (!migrating) {
+                migrationClient->removeTablet(tableId, key, keyLength);
+            }
+            value->reset();
+            uint64_t versionConclusion;
+            bool existsConclusion;
+            if (sourceVersion > targetVersion) {
+                versionConclusion = sourceVersion;
+                value->append(&sourceBuffer, 0u, sourceBuffer.size());
+                existsConclusion = sourceObjectExists;
+            } else {
+                versionConclusion = targetVersion;
+                value->append(&targetBuffer, 0u, targetBuffer.size());
+                existsConclusion = targetObjectExists;
+            }
+            if (version)
+                *version = versionConclusion;
+            if (objectExists)
+                *objectExists = existsConclusion;
+            RAMCLOUD_CLOG(WARNING, "finish read rpc");
+            break;
+        } catch (TableDoesntExistException e) {
+            RAMCLOUD_CLOG(WARNING, "table doesn't exists");
+        } catch (UnknownTabletException e){
+            RAMCLOUD_CLOG(WARNING, "unknown tablet");
+        }
+
 }
 
 MigrationReadRpc::MigrationReadRpc(RamCloud *ramcloud, ServerId serverId,
@@ -2287,7 +2317,7 @@ MigrationReadRpc::MigrationReadRpc(RamCloud *ramcloud, ServerId serverId,
     send();
 }
 
-void
+bool
 MigrationReadRpc::wait(uint64_t *version, bool *objectExists, bool *migrating,
                        uint64_t *sourceId, uint64_t *targetId)
 {
@@ -2305,7 +2335,7 @@ MigrationReadRpc::wait(uint64_t *version, bool *objectExists, bool *migrating,
             respHdr->common.status == STATUS_OBJECT_DOESNT_EXIST) {
             *objectExists = false;
         } else {
-            ClientException::throwException(HERE, respHdr->common.status);
+            return false;
         }
     }
 
@@ -2321,6 +2351,7 @@ MigrationReadRpc::wait(uint64_t *version, bool *objectExists, bool *migrating,
     // but the object data.
     response->truncateFront(sizeof(*respHdr));
     assert(respHdr->length == response->size());
+    return true;
 }
 
 /**

@@ -929,23 +929,23 @@ MigrationInitRpc::MigrationInitRpc(Context *context, ServerId targetId,
 }
 
 bool
-CoordinatorClient::migrationMasterFinished(Context *context, uint64_t migrationId,
-                                        ServerId targetServerId,
-                                        bool successful)
+CoordinatorClient::migrationFinished(Context *context, uint64_t migrationId,
+                                     ServerId targetServerId,
+                                     bool successful)
 {
-    MigrationMasterFinishedRpc rpc(context, migrationId, targetServerId,
+    MigrationFinishedRpc rpc(context, migrationId, targetServerId,
                                    successful);
     return rpc.wait();
 }
 
-MigrationMasterFinishedRpc::MigrationMasterFinishedRpc(
+MigrationFinishedRpc::MigrationFinishedRpc(
     Context *context, uint64_t migrationId,
     ServerId targetServerId, bool successful)
     : CoordinatorRpcWrapper(context,
                             sizeof(WireFormat::RecoveryMasterFinished::Response))
 {
-    WireFormat::MigrationMasterFinished::Request *reqHdr(
-        allocHeader<WireFormat::MigrationMasterFinished>());
+    WireFormat::MigrationFinished::Request *reqHdr(
+        allocHeader<WireFormat::MigrationFinished>());
     reqHdr->migrationId = migrationId;
     reqHdr->targetId = targetServerId.getId();
     reqHdr->successful = successful;
@@ -953,11 +953,11 @@ MigrationMasterFinishedRpc::MigrationMasterFinishedRpc(
 }
 
 bool
-MigrationMasterFinishedRpc::wait()
+MigrationFinishedRpc::wait()
 {
     waitInternal(context->dispatch);
-    const WireFormat::MigrationMasterFinished::Response *respHdr(
-        getResponseHeader<WireFormat::MigrationMasterFinished>());
+    const WireFormat::MigrationFinished::Response *respHdr(
+        getResponseHeader<WireFormat::MigrationFinished>());
     if (respHdr->common.status != STATUS_OK)
         ClientException::throwException(HERE, respHdr->common.status);
     return respHdr->cancelRecovery;

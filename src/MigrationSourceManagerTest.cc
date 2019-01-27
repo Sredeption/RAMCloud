@@ -61,6 +61,19 @@ class TabletHub {
                           Tablet::NORMAL, LogPosition()});
         tablets.emplace_back(rawEntry2, "mock:host=master2");
     }
+
+    void targetAndMaster1()
+    {
+        init();
+        Tablet rawEntry1({1, 0, uint64_t(~0ul / 2), ServerId(),
+                          Tablet::NORMAL, LogPosition()});
+        tablets.emplace_back(rawEntry1, "mock:host=target");
+        Tablet rawEntry2({1, uint64_t(~0ul / 2 + 1), uint64_t(~0ul), ServerId(),
+                          Tablet::NORMAL, LogPosition()});
+        tablets.emplace_back(rawEntry2, "mock:host=master1");
+    }
+
+
 };
 
 class MigrationRefresher : public ObjectFinder::TableConfigFetcher {
@@ -122,7 +135,7 @@ class MigrationSourceManagerTest : public ::testing::Test {
           master2Server(), targetServer(), master1Service(), master2Service(),
           targetService(), mutex(), tabletHub(), clientRefresher()
     {
-        Logger::get().setLogLevels(RAMCloud::SILENT_LOG_LEVEL);
+        Logger::get().setLogLevels(RAMCloud::SILENT_LOG_LEVEL );
         backup1Config.localLocator = "mock:host=backup1";
         backup1Config.services = {WireFormat::BACKUP_SERVICE,
                                   WireFormat::ADMIN_SERVICE};
@@ -187,6 +200,29 @@ class MigrationSourceManagerTest : public ::testing::Test {
             throw UnknownTabletException(HERE);
 
         return service->objectManager.lockTable.isLockAcquired(key);
+    }
+
+    void writeValues(uint64_t tableId, int requestNum, int iteration)
+    {
+        for (int i = 0; i < requestNum; i++) {
+            string keyStr = format("%.8d", i);
+            string valueStr = format("%.8d-%.8d", i, iteration);
+            ramcloud->write(tableId, keyStr.c_str(), 8, valueStr.c_str(), 17);
+        }
+    }
+
+    void validateValues(uint64_t tableId, int requestNum, int iteration)
+    {
+        for (int i = 0; i < requestNum; i++) {
+            string keyStr = format("%.8d", i);
+            Buffer value;
+            ramcloud->readMigrating(tableId, keyStr.c_str(), 8, &value);
+            string valueStr = string(reinterpret_cast<const char *>(
+                                         value.getRange(0, value.size())),
+                                     value.size());
+            string expectedStr = format("%.8d-%.8d", i, iteration);
+            EXPECT_EQ(expectedStr, valueStr);
+        }
     }
 };
 
@@ -588,4 +624,70 @@ TEST_F(MigrationSourceManagerTest, commit_basic)
     targetService->transactionManager.cleaner.stop();
     targetService->migrationSourceManager.stop();
 }
+
+struct TestStartNotifier : public MigrationSourceManager::StartNotifier {
+
+    TestStartNotifier(TabletHub *tabletHub)
+        : tabletHub(tabletHub)
+    {
+
+    }
+
+    void notify(uint64_t migrationId)
+    {
+        tabletHub->targetAndMaster1();
+    }
+
+  private:
+    TabletHub *tabletHub;
+    DISALLOW_COPY_AND_ASSIGN(TestStartNotifier)
+};
+
+TEST_F(MigrationSourceManagerTest, migratingReadAndWrite)
+{
+    uint64_t tableId1 = 1;
+    tabletHub.allInMaster1();
+    master1Service->tabletManager.addTablet(1, 0, (~0UL) / 2,
+                                            TabletManager::NORMAL);
+    master1Service->tabletManager.addTablet(1, (~0UL) / 2 + 1, ~0UL,
+                                            TabletManager::NORMAL);
+    master1Service->migrationSourceManager.startNotifier.reset(
+        new TestStartNotifier(&tabletHub));
+    int requestNum = 10, iteration = 0;
+    writeValues(tableId1, requestNum, iteration);
+
+    uint64_t migrationId = 1;
+    MigrationSourceStartRpc migrationRpc(
+        &context, master1Server->serverId, migrationId, master1Server->serverId,
+        targetServer->serverId, tableId1, 0ul, (~0ul) / 2);
+    migrationRpc.wait();
+    master1Service->transactionManager.cleaner.manager->handleTimerEvent();
+    master1Service->migrationSourceManager.manager->handleTimerEvent();
+
+    MigrationTargetManager::Migration *migrationTarget = NULL;
+    while (migrationTarget == NULL) {
+        validateValues(tableId1, requestNum, iteration);
+        iteration += 1;
+        usleep(1000);
+
+        writeValues(tableId1, requestNum, iteration);
+
+        migrationTarget =
+            targetService->migrationTargetManager.getMigration(migrationId);
+    }
+
+    validateValues(tableId1, requestNum, iteration);
+    iteration += 1;
+    writeValues(tableId1, requestNum, iteration);
+
+    master1Service->transactionManager.cleaner.stop();
+    master1Service->migrationSourceManager.stop();
+
+    master2Service->transactionManager.cleaner.stop();
+    master2Service->migrationSourceManager.stop();
+
+    targetService->transactionManager.cleaner.stop();
+    targetService->migrationSourceManager.stop();
+}
+
 }

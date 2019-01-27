@@ -45,6 +45,8 @@ class MigrationSourceManager : public WorkerTimer {
 
         void start();
 
+        void finish();
+
       PRIVATE:
         MigrationSourceManager *manager;
         RangeList rangeList;
@@ -60,6 +62,21 @@ class MigrationSourceManager : public WorkerTimer {
         bool active;
         friend MigrationSourceManager;
         DISALLOW_COPY_AND_ASSIGN(Migration);
+    };
+
+    struct StartNotifier {
+        virtual void notify(uint64_t migrationId) = 0;
+
+        virtual ~StartNotifier()
+        {}
+    };
+
+    struct RealStartNotifier : public StartNotifier {
+
+        void notify(uint64_t migrationId);
+
+        virtual ~RealStartNotifier()
+        {}
     };
 
     MasterService *masterService;
@@ -85,6 +102,8 @@ class MigrationSourceManager : public WorkerTimer {
                         uint64_t firstKeyHash, uint64_t lastKeyHash,
                         uint64_t sourceId, uint64_t targetId);
 
+    void finishMigration(uint64_t migrationId);
+
     Migration *getMigration(uint64_t migrationId);
 
     void lock(uint64_t migrationId, Key &key, uint64_t timestamp);
@@ -94,6 +113,7 @@ class MigrationSourceManager : public WorkerTimer {
     Status isLocked(uint64_t migrationId, Key &key, bool *isLocked,
                     vector<WireFormat::MigrationIsLocked::Range> &ranges);
 
+    std::unique_ptr<StartNotifier> startNotifier;
   PRIVATE:
 
     DISALLOW_COPY_AND_ASSIGN(MigrationSourceManager);

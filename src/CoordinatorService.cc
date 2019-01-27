@@ -165,6 +165,10 @@ CoordinatorService::dispatch(WireFormat::Opcode opcode,
             callHandler<WireFormat::CreateTable, CoordinatorService,
                         &CoordinatorService::createTable>(rpc);
             break;
+        case WireFormat::CreateTableToServer::opcode:
+            callHandler<WireFormat::CreateTableToServer, CoordinatorService,
+                &CoordinatorService::createTableToServer>(rpc);
+            break;
         case WireFormat::DropIndex::opcode:
             callHandler<WireFormat::DropIndex, CoordinatorService,
                         &CoordinatorService::dropIndex>(rpc);
@@ -217,8 +221,8 @@ CoordinatorService::dispatch(WireFormat::Opcode opcode,
             callHandler<WireFormat::MigrationQuery, CoordinatorService,
                 &CoordinatorService::migrationQuery>(rpc);
             break;
-        case WireFormat::MigrationMasterFinished::opcode:
-            callHandler<WireFormat::MigrationMasterFinished, CoordinatorService,
+        case WireFormat::MigrationFinished::opcode:
+            callHandler<WireFormat::MigrationFinished, CoordinatorService,
                 &CoordinatorService::migrationMasterFinished>(rpc);
             break;
         case WireFormat::ReassignTabletOwnership::opcode:
@@ -332,6 +336,22 @@ CoordinatorService::createTable(
     respHdr->tableId = tableManager.createTable(name, serverSpan);
 }
 
+void
+CoordinatorService::createTableToServer(
+    const WireFormat::CreateTableToServer::Request *reqHdr,
+    WireFormat::CreateTableToServer::Response *respHdr,
+    Rpc *rpc)
+{
+    if (serverList.masterCount() == 0) {
+        throw RetryException(HERE, 5000000, 10000000, "no masters in cluster");
+    }
+
+    const char *name = getString(rpc->requestPayload, sizeof(*reqHdr),
+                                 reqHdr->nameLength);
+
+    respHdr->tableId = tableManager.createTable(
+        name, 1, ServerId(reqHdr->serverId));
+}
 /**
  * Top-level server method to handle the DROP_INDEX request.
  * \copydetails Service::ping
@@ -571,8 +591,8 @@ void CoordinatorService::migrationInit(
 
 
 void CoordinatorService::migrationMasterFinished(
-    const WireFormat::MigrationMasterFinished::Request *reqHdr,
-    WireFormat::MigrationMasterFinished::Response *respHdr, Service::Rpc *rpc)
+    const WireFormat::MigrationFinished::Request *reqHdr,
+    WireFormat::MigrationFinished::Response *respHdr, Service::Rpc *rpc)
 {
     respHdr->cancelRecovery =
         migrationManager.migrationMasterFinished(

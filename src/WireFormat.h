@@ -140,7 +140,8 @@ enum Opcode {
     MIGRATION_MASTERFINISH      = 88,
     MIGRATION_QUERY             = 89,
     MIGRATION_ISLOCKED          = 90,
-    ILLEGAL_RPC_TYPE            = 91, // 1 + the highest legitimate Opcode
+    CREATE_TABLE_TOSERVER       = 91,
+    ILLEGAL_RPC_TYPE            = 92, // 1 + the highest legitimate Opcode
 };
 
 /**
@@ -489,6 +490,23 @@ struct CreateTable {
                                       // follow immediately after this header.
         uint32_t serverSpan;          // The number of servers across which
                                       // this table will be divided.
+    } __attribute__((packed));
+    struct Response {
+        ResponseCommon common;
+        uint64_t tableId;             // The id of the created table.
+    } __attribute__((packed));
+};
+
+struct CreateTableToServer {
+    static const Opcode opcode = CREATE_TABLE_TOSERVER;
+    static const ServiceType service = COORDINATOR_SERVICE;
+    struct Request {
+        RequestCommon common;
+        uint32_t nameLength;          // Number of bytes in the name,
+                                      // including terminating NULL
+                                      // character. The bytes of the name
+                                      // follow immediately after this header.
+        uint64_t serverId;
     } __attribute__((packed));
     struct Response {
         ResponseCommon common;
@@ -1208,7 +1226,7 @@ struct MigrationBackupComplete {
     } __attribute__((packed));
 };
 
-struct MigrationMasterFinished {
+struct MigrationFinished {
     static const Opcode opcode = MIGRATION_MASTERFINISH;
     static const ServiceType service = COORDINATOR_SERVICE;
     struct Request {
@@ -1220,6 +1238,20 @@ struct MigrationMasterFinished {
     struct Response {
         ResponseCommon common;
         bool cancelRecovery;
+    } __attribute__((packed));
+};
+
+struct MigrationMasterFinished {
+    static const Opcode opcode = MIGRATION_MASTERFINISH;
+    static const ServiceType service = MASTER_SERVICE;
+    struct Request {
+        RequestCommon common;
+        uint64_t migrationId;
+        uint64_t targetId;
+        bool successful;
+    } __attribute__((packed));
+    struct Response {
+        ResponseCommon common;
     } __attribute__((packed));
 };
 

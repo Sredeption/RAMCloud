@@ -12,7 +12,7 @@ MigrationSourceManager::MigrationSourceManager(
       transactionManager(&masterService->transactionManager),
       operatingBuffer(new std::queue<Item>[2]), operatingIndex(0),
       bufferLock("migrationBufferLock"), listLock(), migrations(), prepQueue(),
-      activeQueue(), epoch(0)
+      activeQueue(), epoch(0), startNotifier(new RealStartNotifier())
 {
 }
 
@@ -81,6 +81,19 @@ void MigrationSourceManager::startMigration(
     }
 
     start(0);
+}
+
+void MigrationSourceManager::finishMigration(uint64_t migrationId)
+{
+    std::lock_guard<std::mutex> guard(listLock);
+    std::unordered_map<uint64_t, Migration *>::iterator migrationPair =
+        migrations.find(migrationId);
+    if (migrationPair == migrations.end())
+        return;
+    Migration *migration = migrationPair->second;
+    migration->finish();
+    delete migration;
+    migrations.erase(migrationPair);
 }
 
 MigrationSourceManager::Migration *
@@ -167,11 +180,25 @@ void MigrationSourceManager::Migration::start()
     ServerId targetServerId(targetId);
     startEpoch = manager->epoch;
 
+    if (manager->startNotifier)
+        manager->startNotifier->notify(migrationId);
+
     MasterClient::migrationTargetStart(
         manager->masterService->context, targetServerId, migrationId,
         sourceServerId, targetServerId, tableId, firstKeyHash,
         lastKeyHash, manager->masterService->tabletManager.getSafeVersion(),
         replicas.data(), downCast<uint32_t>(replicas.size()));
+}
+
+void MigrationSourceManager::Migration::finish()
+{
+    manager->masterService->tabletManager.deleteTablet(targetId, firstKeyHash,
+                                                       lastKeyHash);
+
+}
+
+void MigrationSourceManager::RealStartNotifier::notify(uint64_t migrationId)
+{
 }
 
 }

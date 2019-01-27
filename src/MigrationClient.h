@@ -3,6 +3,7 @@
 
 #include "Key.h"
 #include "Tablet.h"
+#include "RamCloud.h"
 
 namespace RAMCloud {
 
@@ -56,6 +57,42 @@ class MigrationClient {
     getTablet(uint64_t tableId, const void *key, uint16_t keyLength);
 
     void removeTablet(uint64_t tableId, const void *key, uint16_t keyLength);
+};
+
+class MigrationReadTask {
+  PRIVATE:
+    enum State {
+        INIT, NORMAL, NORMAL_WAIT, MIGRATING, MIGRATING_WAIT, DONE
+    };
+    RamCloud *ramcloud;
+    uint64_t tableId;
+    const void *key;
+    uint16_t keyLength;
+    Buffer *value;
+    const RejectRules *rejectRules;
+
+    Tub<ReadRpc> readRpc;
+    Tub<MigrationReadRpc> sourceReadRpc, targetReadRpc;
+
+    State state;
+    Buffer sourceBuffer, targetBuffer;
+
+    uint64_t version;
+    bool objectExists;
+
+    DISALLOW_COPY_AND_ASSIGN(MigrationReadTask)
+
+  PUBLIC:
+
+    MigrationReadTask(
+        RamCloud *ramcloud, uint64_t tableId, const void *key,
+        uint16_t keyLength, Buffer *value, const RejectRules *rejectRules);
+
+    void performTask();
+
+    bool isReady();
+
+    void wait(uint64_t *version, bool *objectExists);
 };
 
 }

@@ -202,6 +202,10 @@ MasterService::dispatch(WireFormat::Opcode opcode, Rpc* rpc)
             callHandler<WireFormat::MigrationSourceStart, MasterService,
                 &MasterService::migrationSourceStart>(rpc);
             break;
+        case WireFormat::MigrationMasterFinished::opcode:
+            callHandler<WireFormat::MigrationMasterFinished, MasterService,
+                &MasterService::migrationFinish>(rpc);
+            break;
         case WireFormat::MigrationTargetStart::opcode:
             callHandler<WireFormat::MigrationTargetStart, MasterService,
                 &MasterService::migrationTargetStart>(rpc);
@@ -4103,6 +4107,13 @@ void MasterService::migrationSourceStart(
 
 }
 
+void MasterService::migrationFinish(
+    const WireFormat::MigrationMasterFinished::Request *reqHdr,
+    WireFormat::MigrationMasterFinished::Response *respHdr, Service::Rpc *rpc)
+{
+    migrationSourceManager.finishMigration(reqHdr->migrationId);
+}
+
 void MasterService::migrationTargetStart(
     const WireFormat::MigrationTargetStart::Request *reqHdr,
     WireFormat::MigrationTargetStart::Response *respHdr, Service::Rpc *rpc)
@@ -4130,8 +4141,6 @@ void MasterService::migrationTargetStart(
         Replica replica(replicaLocation->backupId, replicaLocation->segmentId);
         replicas.push_back(replica);
     }
-    RAMCLOUD_LOG(DEBUG, "Starting migration %lu for crashed master %s; ",
-                 recoveryId, targetServerId.toString().c_str());
     rpc->sendReply();
 
     GetLeaseInfoRpc getLeaseInfoRpc(context, 0);
@@ -4145,6 +4154,10 @@ void MasterService::migrationTargetStart(
                                 reqHdr->sourceServerId,
                                 reqHdr->targetServerId,
                                 TabletManager::MIGRATION_TARGET);
+    RAMCLOUD_LOG(DEBUG, "Starting migration %lu <%lu, (%lu, %lu)> from "
+                          "master %s; ",
+                 recoveryId, reqHdr->tableId, reqHdr->firstKeyHash,
+                 reqHdr->lastKeyHash, targetServerId.toString().c_str());
     if (!added) {
         throw Exception(HERE,
                         format("Cannot recover tablet that overlaps "
@@ -4185,7 +4198,7 @@ void MasterService::migrationTargetStart(
 
     if (migrationTargetManager.disableMigrationRecover)
         return;
-    cancelRecovery = CoordinatorClient::migrationMasterFinished(
+    cancelRecovery = CoordinatorClient::migrationFinished(
         context, recoveryId, serverId, successful);
     if (!cancelRecovery) {
         // Re-grab all transaction locks.

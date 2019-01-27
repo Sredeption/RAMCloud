@@ -499,6 +499,9 @@ class MasterService : public Service {
         const WireFormat::MigrationSourceStart::Request *reqHdr,
         WireFormat::MigrationSourceStart::Response *respHdr,
         Rpc *rpc);
+    void migrationFinish(const WireFormat::MigrationMasterFinished::Request *reqHdr,
+        WireFormat::MigrationMasterFinished::Response *respHdr,
+        Rpc *rpc);
     void migrationTargetStart(
         const WireFormat::MigrationTargetStart::Request *reqHdr,
         WireFormat::MigrationTargetStart::Response *respHdr,

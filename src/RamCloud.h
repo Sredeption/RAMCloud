@@ -72,6 +72,7 @@ class RamCloud {
             ServerId newOwner, uint64_t tableId, uint8_t indexId,
             const void* splitKey, KeyLength splitKeyLength);
     uint64_t createTable(const char* name, uint32_t serverSpan = 1);
+    uint64_t createTableToServer(const char* name, ServerId &serverId);
     void dropTable(const char* name);
     void createIndex(uint64_t tableId, uint8_t indexId, uint8_t indexType,
             uint8_t numIndexlets = 1);
@@ -191,7 +192,6 @@ class RamCloud {
      */
     Context* realClientContext;
 
-    MigrationClient *migrationClient;
 
     void readMigratingInternal(
         ServerId sourceServerId, ServerId targetServerId, uint64_t tableId,
@@ -212,6 +212,7 @@ class RamCloud {
     ClientLeaseAgent *clientLeaseAgent;
     RpcTracker *rpcTracker;
     ClientTransactionManager *transactionManager;
+    MigrationClient *migrationClient;
 
   private:
     DISALLOW_COPY_AND_ASSIGN(RamCloud);
@@ -247,6 +248,17 @@ class CreateTableRpc : public CoordinatorRpcWrapper {
 
   PRIVATE:
     DISALLOW_COPY_AND_ASSIGN(CreateTableRpc);
+};
+
+class CreateTableToServerRpc : public CoordinatorRpcWrapper {
+  public:
+    CreateTableToServerRpc(RamCloud* ramcloud, const char* name,
+            ServerId &serverId);
+    ~CreateTableToServerRpc() {}
+    uint64_t wait();
+
+  PRIVATE:
+    DISALLOW_COPY_AND_ASSIGN(CreateTableToServerRpc);
 };
 
 /**
@@ -1018,7 +1030,7 @@ class MigrationReadRpc : public ServerIdRpcWrapper {
                      const RejectRules *rejectRules = NULL);
     ~MigrationReadRpc() {}
 
-    void wait(uint64_t *version = NULL, bool *objectExists = NULL,
+    bool wait(uint64_t *version = NULL, bool *objectExists = NULL,
               bool *migrating = NULL, uint64_t *sourceId = NULL,
               uint64_t *targetId = NULL);
 

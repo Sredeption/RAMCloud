@@ -66,6 +66,10 @@ class CoordinatorService : public Service {
     void createTable(const WireFormat::CreateTable::Request* reqHdr,
             WireFormat::CreateTable::Response* respHdr,
             Rpc* rpc);
+    void createTableToServer(
+        const WireFormat::CreateTableToServer::Request *reqHdr,
+        WireFormat::CreateTableToServer::Response *respHdr,
+        Rpc *rpc);
     void dropIndex(const WireFormat::DropIndex::Request* reqHdr,
             WireFormat::DropIndex::Response* respHdr,
             Rpc* rpc);
@@ -102,8 +106,8 @@ class CoordinatorService : public Service {
     void migrationInit(const WireFormat::MigrationInit::Request *reqHdr,
             WireFormat::MigrationInit::Response *respHdr,
             Rpc *rpc);
-    void migrationMasterFinished(const WireFormat::MigrationMasterFinished::Request *reqHdr,
-                        WireFormat::MigrationMasterFinished::Response *respHdr,
+    void migrationMasterFinished(const WireFormat::MigrationFinished::Request *reqHdr,
+                        WireFormat::MigrationFinished::Response *respHdr,
                         Rpc *rpc);
     void migrationQuery(const WireFormat::MigrationQuery::Request *reqHdr,
                         WireFormat::MigrationQuery::Response *respHdr,
