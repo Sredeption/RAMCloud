@@ -643,6 +643,15 @@ struct TestStartNotifier : public MigrationSourceManager::StartNotifier {
     DISALLOW_COPY_AND_ASSIGN(TestStartNotifier)
 };
 
+struct TestFinishNotifier : public MigrationTargetManager::FinishNotifier {
+
+    void notify(uint64_t migrationId)
+    {
+
+    }
+
+};
+
 TEST_F(MigrationSourceManagerTest, migratingReadAndWrite)
 {
     uint64_t tableId1 = 1;
@@ -676,9 +685,19 @@ TEST_F(MigrationSourceManagerTest, migratingReadAndWrite)
             targetService->migrationTargetManager.getMigration(migrationId);
     }
 
-    validateValues(tableId1, requestNum, iteration);
-    iteration += 1;
-    writeValues(tableId1, requestNum, iteration);
+    for (int i = 0; i < 10; i++) {
+        validateValues(tableId1, requestNum, iteration);
+        iteration += 1;
+        writeValues(tableId1, requestNum, iteration);
+    }
+
+    targetService->migrationTargetManager.finishMigration(migrationId, true);
+
+    for (int i = 0; i < 10; i++) {
+        validateValues(tableId1, requestNum, iteration);
+        iteration += 1;
+        writeValues(tableId1, requestNum, iteration);
+    }
 
     master1Service->transactionManager.cleaner.stop();
     master1Service->migrationSourceManager.stop();

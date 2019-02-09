@@ -518,6 +518,7 @@ class MasterService : public Service {
     friend class RecoverSegmentBenchmark;
     friend class MasterServiceInternal::RecoveryTask;
     friend class MasterServiceInternal::MigrationTask;
+    friend class MigrationTargetManager;
 
     DISALLOW_COPY_AND_ASSIGN(MasterService);
 };

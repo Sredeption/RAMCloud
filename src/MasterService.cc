@@ -108,7 +108,7 @@ MasterService::MasterService(Context* context, const ServerConfig* config)
     , maxResponseRpcLen(Transport::MAX_RPC_LEN)
     , migrationMonitor(this)
     , migrationSourceManager(this)
-    , migrationTargetManager()
+    , migrationTargetManager(this)
 {
     context->services[WireFormat::MASTER_SERVICE] = this;
 }
@@ -4125,7 +4125,7 @@ void MasterService::migrationTargetStart(
     metrics->master.replicas = objectManager.getReplicaManager()->numReplicas;
     tabletManager.raiseSafeVersion(reqHdr->safeVersion);
     objectManager.raiseSafeVersion(reqHdr->safeVersion);
-    migrationTargetManager.init(reqHdr->migrationId);
+
 
     uint64_t recoveryId = reqHdr->migrationId;
     ServerId targetServerId(reqHdr->targetServerId);
@@ -4144,33 +4144,14 @@ void MasterService::migrationTargetStart(
     rpc->sendReply();
 
     GetLeaseInfoRpc getLeaseInfoRpc(context, 0);
+    migrationTargetManager.startMigration(
+        reqHdr->migrationId, reqHdr->tableId, reqHdr->firstKeyHash,
+        reqHdr->lastKeyHash, reqHdr->sourceServerId, reqHdr->targetServerId);
 
-    bool added = tabletManager.addTablet(reqHdr->tableId,
-                                         reqHdr->firstKeyHash,
-                                         reqHdr->lastKeyHash,
-                                         TabletManager::MIGRATION_TARGET);
-    tabletManager.migrateTablet(reqHdr->tableId, reqHdr->firstKeyHash,
-                                reqHdr->lastKeyHash, reqHdr->migrationId,
-                                reqHdr->sourceServerId,
-                                reqHdr->targetServerId,
-                                TabletManager::MIGRATION_TARGET);
     RAMCLOUD_LOG(DEBUG, "Starting migration %lu <%lu, (%lu, %lu)> from "
                           "master %s; ",
                  recoveryId, reqHdr->tableId, reqHdr->firstKeyHash,
                  reqHdr->lastKeyHash, targetServerId.toString().c_str());
-    if (!added) {
-        throw Exception(HERE,
-                        format("Cannot recover tablet that overlaps "
-                               "an already existing one (tablet to recover: %lu "
-                               "range [0x%lx,0x%lx], current tablet map: %s)",
-                               reqHdr->tableId,
-                               reqHdr->firstKeyHash, reqHdr->lastKeyHash,
-                               tabletManager.toString().c_str()));
-    } else {
-        TableStats::addKeyHashRange(&masterTableMetadata,
-                                    reqHdr->tableId,
-                                    reqHdr->firstKeyHash, reqHdr->lastKeyHash);
-    }
 
     WireFormat::ClientLease clientLease = getLeaseInfoRpc.wait();
     clusterClock.updateClock(ClusterTime(clientLease.timestamp));
@@ -4194,38 +4175,10 @@ void MasterService::migrationTargetStart(
             LOG(ERROR, "Unexpected ClientException during recovery: %s",
                 statusToString(e.status));
     }
-    bool cancelRecovery= false;
 
     if (migrationTargetManager.disableMigrationRecover)
         return;
-    cancelRecovery = CoordinatorClient::migrationFinished(
-        context, recoveryId, serverId, successful);
-    if (!cancelRecovery) {
-        // Re-grab all transaction locks.
-//        transactionManager.regrabLocksAfterRecovery(&objectManager);
-        bool changed = tabletManager.changeState(
-            reqHdr->tableId,
-            reqHdr->firstKeyHash, reqHdr->lastKeyHash,
-            TabletManager::MIGRATION_TARGET, TabletManager::NORMAL);
-        if (!changed) {
-            throw FatalError(
-                HERE, format("Could not change recovering "
-                             "tablet's state to NORMAL (%lu range [%lu,%lu])",
-                             reqHdr->tableId,
-                             reqHdr->firstKeyHash,
-                             reqHdr->lastKeyHash));
-        }
-    } else {
-        bool removed = tabletManager.deleteTablet(
-            reqHdr->tableId, reqHdr->firstKeyHash, reqHdr->lastKeyHash);
-        if (removed) {
-            TableStats::deleteKeyHashRange(
-                &masterTableMetadata, reqHdr->tableId,
-                reqHdr->firstKeyHash, reqHdr->lastKeyHash);
-        }
-        objectManager.removeOrphanedObjects();
-        transactionManager.removeOrphanedOps();
-    }
+    migrationTargetManager.finishMigration(reqHdr->migrationId, successful);
 }
 
 void MasterService::migrationIsLocked(
