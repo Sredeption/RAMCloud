@@ -623,7 +623,7 @@ TableManager::markTabletsMigration(ServerId sourceId, ServerId targetId,
             if (tablet->serverId == sourceId && tablet->tableId == tableId &&
                 firstKeyHash <= tablet->startKeyHash &&
                 tablet->endKeyHash <= lastKeyHash) {
-                tablet->status = Tablet::MIGRATING;
+                tablet->status = Tablet::NORMAL;
                 tablet->serverId = targetId;
                 results.push_back(*tablet);
             }

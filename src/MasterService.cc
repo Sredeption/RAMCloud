@@ -87,7 +87,7 @@ MasterService::MasterService(Context* context, const ServerConfig* config)
                     &transactionManager,
                     &txRecoveryManager,
                     &migrationSourceManager,
-                    &migrationTargetManager)
+                    context->migrationTargetManager)
     , tabletManager()
     , txRecoveryManager(context)
     , indexletManager(context, &objectManager)
@@ -108,7 +108,7 @@ MasterService::MasterService(Context* context, const ServerConfig* config)
     , maxResponseRpcLen(Transport::MAX_RPC_LEN)
     , migrationMonitor(this)
     , migrationSourceManager(this)
-    , migrationTargetManager(this)
+    , migrationTargetManager(context->migrationTargetManager)
 {
     context->services[WireFormat::MASTER_SERVICE] = this;
 }
@@ -209,6 +209,14 @@ MasterService::dispatch(WireFormat::Opcode opcode, Rpc* rpc)
         case WireFormat::MigrationTargetStart::opcode:
             callHandler<WireFormat::MigrationTargetStart, MasterService,
                 &MasterService::migrationTargetStart>(rpc);
+            break;
+        case WireFormat::MigrationReplay::opcode:
+            callHandler<WireFormat::MigrationReplay, MasterService,
+                &MasterService::migrationReplay>(rpc);
+            break;
+        case WireFormat::MigrationSideLogCommit::opcode:
+            callHandler<WireFormat::MigrationSideLogCommit, MasterService,
+                &MasterService::migrationSideLogCommit>(rpc);
             break;
         case WireFormat::MigrationIsLocked::opcode:
             callHandler<WireFormat::MigrationIsLocked, MasterService,
@@ -4086,6 +4094,44 @@ class MigrationTask {
 };
 }
 
+void MasterService::migrationReplay(
+    const WireFormat::MigrationReplay::Request *reqHdr,
+    WireFormat::MigrationReplay::Response *respHdr, Service::Rpc *rpc)
+{
+    Tub<Buffer>* replayBuffer =
+            reinterpret_cast<Tub<Buffer>*>(reqHdr->bufferPtr);
+    Tub<SideLog>* replaySideLog =
+            reinterpret_cast<Tub<SideLog>*>(reqHdr->sideLogPtr);
+    SegmentCertificate certificate = reqHdr->certificate;
+
+    const uint32_t bufferLength = (*replayBuffer)->size();
+    void* bufferMemory = (*replayBuffer)->getRange(0, bufferLength);
+
+    SegmentIterator segmentIt(bufferMemory, bufferLength, certificate);
+    segmentIt.checkMetadataIntegrity();
+
+    objectManager.replaySegment(replaySideLog->get(), segmentIt);
+
+    // If the source owns the tablet during migration, synchronize this
+    // sidelog with backups.
+
+    respHdr->numReplayedBytes = bufferLength;
+    respHdr->common.status = STATUS_OK;
+}
+
+
+void MasterService::migrationSideLogCommit(
+    const WireFormat::MigrationSideLogCommit::Request *reqHdr,
+    WireFormat::MigrationSideLogCommit::Response *respHdr, Service::Rpc *rpc)
+{
+    Tub<SideLog> *sideLog =
+        reinterpret_cast<Tub<SideLog> *>(reqHdr->sideLogPtr);
+
+    (*sideLog)->commit();
+
+    respHdr->common.status = STATUS_OK;
+}
+
 void MasterService::migrationSourceStart(
     const WireFormat::MigrationSourceStart::Request *reqHdr,
     WireFormat::MigrationSourceStart::Response *respHdr,
@@ -4118,67 +4164,15 @@ void MasterService::migrationTargetStart(
     const WireFormat::MigrationTargetStart::Request *reqHdr,
     WireFormat::MigrationTargetStart::Response *respHdr, Service::Rpc *rpc)
 {
-    ReplicatedSegment::recoveryStart = Cycles::rdtsc();
-
-    CycleCounter<RawMetric> recoveryTicks(&metrics->master.recoveryTicks);
-    metrics->master.recoveryCount++;
-    metrics->master.replicas = objectManager.getReplicaManager()->numReplicas;
-    tabletManager.raiseSafeVersion(reqHdr->safeVersion);
-    objectManager.raiseSafeVersion(reqHdr->safeVersion);
-
-
-    uint64_t recoveryId = reqHdr->migrationId;
-    ServerId targetServerId(reqHdr->targetServerId);
-
-    uint32_t offset = sizeof32(*reqHdr);
-    vector<Replica> replicas;
-    replicas.reserve(reqHdr->numReplicas);
-    for (uint32_t i = 0; i < reqHdr->numReplicas; ++i) {
-        const WireFormat::MigrationTargetStart::Replica *replicaLocation =
-            rpc->requestPayload->
-                getOffset<WireFormat::MigrationTargetStart::Replica>(offset);
-        offset += sizeof32(WireFormat::MigrationTargetStart::Replica);
-        Replica replica(replicaLocation->backupId, replicaLocation->segmentId);
-        replicas.push_back(replica);
-    }
-    rpc->sendReply();
-
     GetLeaseInfoRpc getLeaseInfoRpc(context, 0);
-    migrationTargetManager.startMigration(
-        reqHdr->migrationId, reqHdr->tableId, reqHdr->firstKeyHash,
-        reqHdr->lastKeyHash, reqHdr->sourceServerId, reqHdr->targetServerId);
-
-    RAMCLOUD_LOG(DEBUG, "Starting migration %lu <%lu, (%lu, %lu)> from "
-                          "master %s; ",
-                 recoveryId, reqHdr->tableId, reqHdr->firstKeyHash,
-                 reqHdr->lastKeyHash, targetServerId.toString().c_str());
+    migrationTargetManager->startMigration(
+        reqHdr->migrationId, rpc->requestPayload);
+    rpc->sendReply();
 
     WireFormat::ClientLease clientLease = getLeaseInfoRpc.wait();
     clusterClock.updateClock(ClusterTime(clientLease.timestamp));
 
-//    LogPosition headOfLog = objectManager.getLog()->rollHeadOver();
 
-    bool successful = false;
-    try {
-        if (!migrationTargetManager.disableMigrationRecover)
-            migrateRecover(recoveryId, ServerId(reqHdr->sourceServerId),
-                           replicas);
-        successful = true;
-    } catch (const SegmentRecoveryFailedException &e) {
-        // Recovery wasn't successful.
-    } catch (const OutOfSpaceException &e) {
-        // Recovery wasn't successful.
-    } catch (const Exception &e) {
-            LOG(ERROR, "Unexpected exception during recovery: %s",
-                e.message.c_str());
-    } catch (const ClientException &e) {
-            LOG(ERROR, "Unexpected ClientException during recovery: %s",
-                statusToString(e.status));
-    }
-
-    if (migrationTargetManager.disableMigrationRecover)
-        return;
-    migrationTargetManager.finishMigration(reqHdr->migrationId, successful);
 }
 
 void MasterService::migrationIsLocked(

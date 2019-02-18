@@ -33,6 +33,8 @@
 #include "UnackedRpcResults.h"
 #include "WallTime.h"
 #include "MasterService.h"
+#include "MigrationSourceManager.h"
+#include "MigrationTargetManager.h"
 
 namespace RAMCloud {
 

@@ -140,8 +140,11 @@ enum Opcode {
     MIGRATION_MASTERFINISH      = 88,
     MIGRATION_QUERY             = 89,
     MIGRATION_ISLOCKED          = 90,
-    CREATE_TABLE_TOSERVER       = 91,
-    ILLEGAL_RPC_TYPE            = 92, // 1 + the highest legitimate Opcode
+    MIGRATION_GETLOCATOR        = 91,
+    MIGRATION_REPLAY            = 92,
+    MIGRATION_SIDELOGCOMMIT     = 93,
+    CREATE_TABLE_TOSERVER       = 94,
+    ILLEGAL_RPC_TYPE            = 95, // 1 + the highest legitimate Opcode
 };
 
 /**
@@ -1072,6 +1075,43 @@ struct MigrationInit {
     } __attribute__((packed));
 };
 
+struct MigrationReplay {
+    static const Opcode opcode = MIGRATION_REPLAY;
+    static const ServiceType service = MASTER_SERVICE;
+
+    struct Request {
+        RequestCommon common;
+        uintptr_t bufferPtr;
+        uintptr_t sideLogPtr;
+        SegmentCertificate certificate;
+
+        Request() : common(), bufferPtr(), sideLogPtr(), certificate()
+        {}
+    } __attribute__((packed));
+
+    struct Response {
+        ResponseCommon common;
+        uint64_t numReplayedBytes;
+    } __attribute__((packed));
+};
+
+struct MigrationSideLogCommit {
+    static const Opcode opcode = MIGRATION_SIDELOGCOMMIT;
+    static const ServiceType service = MASTER_SERVICE;
+
+    struct Request {
+        RequestCommon common;
+        uintptr_t sideLogPtr;
+
+        Request()
+            : common(), sideLogPtr()
+        {}
+    } __attribute__((packed));
+    struct Response {
+        ResponseCommon common;
+    } __attribute__((packed));
+};
+
 struct MigrationSourceStart {
     static const Opcode opcode = MIGRATION_SOURCESTART;
     static const ServiceType service = MASTER_SERVICE;
@@ -1286,6 +1326,21 @@ struct MigrationIsLocked {
     struct Range {
         uint64_t start;
         uint64_t end;
+    } __attribute__((packed));
+};
+
+struct MigrationGetLocator {
+    static const Opcode opcode = MIGRATION_GETLOCATOR;
+    static const ServiceType service = COORDINATOR_SERVICE;
+    struct Request {
+        RequestCommon common;
+        uint64_t sourceId;
+        uint64_t targetId;
+    } __attribute__((packed));
+    struct Response {
+        ResponseCommon common;
+        uint32_t sourceLength;
+        uint32_t targetLength;
     } __attribute__((packed));
 };
 

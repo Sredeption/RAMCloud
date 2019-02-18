@@ -60,8 +60,12 @@ callees = {
                               "REASSIGN_TABLET_OWNERSHIP"],
     "MIGRATION_SOURCESTART": ["MIGRATION_TARGETSTART"],
     "MIGRATION_TARGETSTART": ["MIGRATION_GETDATA", "BACKUP_WRITE"],
+    "MIGRATION_REPLAY":      ["BACKUP_WRITE"],
+    "MIGRATION_SIDELOGCOMMIT":
+                             ["BACKUP_WRITE"],
     "MULTI_OP":              ["BACKUP_WRITE", "INSERT_INDEX_ENTRY",
                               "REMOVE_INDEX_ENTRY"],
+    "PING":                  ["MIGRATION_GETDATA"],
     "READ":                  ["BACKUP_WRITE"],
     "READ_HASHES":           ["BACKUP_WRITE"],
     "READ_KEYS_AND_VALUE":   ["BACKUP_WRITE"],

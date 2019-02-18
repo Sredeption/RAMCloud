@@ -131,6 +131,9 @@ opcodeSymbol(uint32_t opcode)
         case MIGRATION_MASTERFINISH:       return "MIGRATION_MASTER_FINISH";
         case MIGRATION_QUERY:              return "MIGRATION_QUERY";
         case MIGRATION_ISLOCKED:           return "MIGRATION_ISLOCKED";
+        case MIGRATION_GETLOCATOR:         return "MIGRATION_GET_LOCATOR";
+        case MIGRATION_REPLAY:             return "MIGRATION_REPLAY";
+        case MIGRATION_SIDELOGCOMMIT:      return "MIGRATION_SIDE_LOG_COMMIT";
         case ILLEGAL_RPC_TYPE:             return "ILLEGAL_RPC_TYPE";
     }
 

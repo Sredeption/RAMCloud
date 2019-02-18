@@ -38,10 +38,12 @@
 #include "MasterTableMetadata.h"
 #include "UnackedRpcResults.h"
 #include "LockTable.h"
-#include "MigrationSourceManager.h"
-#include "MigrationTargetManager.h"
 
 namespace RAMCloud {
+
+class MigrationSourceManager;
+
+class MigrationTargetManager;
 
 /**
  * The ObjectManager class is responsible for storing objects in a master

@@ -24,6 +24,7 @@ import recoverymetrics
 
 
 def backup_migrate(num_servers,
+                   num_clients,
                    object_size,
                    num_objects,
                    num_overwrites,
@@ -46,6 +47,7 @@ def backup_migrate(num_servers,
 
     args = {}
     args['num_servers'] = num_servers
+    args['num_clients'] = num_clients
     args['replicas'] = replicas
     args['timeout'] = timeout
     args['log_level'] = log_level
@@ -55,6 +57,7 @@ def backup_migrate(num_servers,
     args['debug'] = debug
     args['coordinator_host'] = getOldMasterHost()
     args['coordinator_args'] = coordinator_args
+    args['share_hosts'] = True
 
     if backup_args:
         args['backup_args'] += backup_args
@@ -71,7 +74,6 @@ def backup_migrate(num_servers,
                       (client_binary, log_level))
 
     args['old_master_host'] = getOldMasterHost()
-    args['client_hosts'] = [getOldMasterHost()]
     if old_master_ram:
         args['old_master_args'] = '-d -t %d' % old_master_ram
     else:
@@ -151,6 +153,10 @@ if __name__ == '__main__':
                       metavar='N', dest='num_servers',
                       help='Number of hosts on which to run servers for use '
                            "as recovery masters; doesn't include crashed server")
+    parser.add_option('--clients', type=int, default=1,
+                      metavar='N', dest='num_clients',
+                      help='Number of clients on which to run servers for use '
+                           "as recovery masters; doesn't include crashed server")
     parser.add_option('-s', '--size', type=int, default=1024,
                       help='Object size in bytes')
     parser.add_option('-n', '--numObjects', type=int,
@@ -184,6 +190,7 @@ if __name__ == '__main__':
     (options, args) = parser.parse_args()
     args = {}
     args['num_servers'] = options.num_servers
+    args['num_clients'] = options.num_clients
     args['object_size'] = options.size
     if options.num_objects == 0:
         # The value below depends on Recovery::PARTITION_MAX_BYTES

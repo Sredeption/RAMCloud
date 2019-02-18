@@ -135,7 +135,7 @@ class MigrationSourceManagerTest : public ::testing::Test {
           master2Server(), targetServer(), master1Service(), master2Service(),
           targetService(), mutex(), tabletHub(), clientRefresher()
     {
-        Logger::get().setLogLevels(RAMCloud::SILENT_LOG_LEVEL );
+        Logger::get().setLogLevels(RAMCloud::SILENT_LOG_LEVEL);
         backup1Config.localLocator = "mock:host=backup1";
         backup1Config.services = {WireFormat::BACKUP_SERVICE,
                                   WireFormat::ADMIN_SERVICE};
@@ -672,6 +672,7 @@ TEST_F(MigrationSourceManagerTest, migratingReadAndWrite)
     migrationRpc.wait();
     master1Service->transactionManager.cleaner.manager->handleTimerEvent();
     master1Service->migrationSourceManager.manager->handleTimerEvent();
+
 
     MigrationTargetManager::Migration *migrationTarget = NULL;
     while (migrationTarget == NULL) {

@@ -112,6 +112,9 @@ class CoordinatorService : public Service {
     void migrationQuery(const WireFormat::MigrationQuery::Request *reqHdr,
                         WireFormat::MigrationQuery::Response *respHdr,
                         Rpc *rpc);
+    void migrationGetLocator(const WireFormat::MigrationGetLocator::Request *reqHdr,
+                        WireFormat::MigrationGetLocator::Response *respHdr,
+                        Rpc *rpc);
     void reassignTabletOwnership(
             const WireFormat::ReassignTabletOwnership::Request* reqHdr,
             WireFormat::ReassignTabletOwnership::Response* respHdr,

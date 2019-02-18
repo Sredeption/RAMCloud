@@ -33,10 +33,13 @@ class MigrationClient {
         ServerId sourceId;
         ServerId targetId;
 
+        string sourceLocator;
+        string targetLocator;
+
         MigratingTablet(Tablet tablet, uint64_t sourceId,
                         uint64_t targetId)
             : tablet(tablet), sourceId(sourceId),
-              targetId(targetId)
+              targetId(targetId), sourceLocator(), targetLocator()
         {}
     };
 

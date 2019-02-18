@@ -80,6 +80,8 @@ class CoordinatorClient {
     static bool migrationFinished(Context *context, uint64_t migrationId,
                                   ServerId targetServerId,
                                   bool successful);
+    static void migrationGetLocator(Context *context, uint64_t sourceId,
+        uint64_t targetId, string *sourceLocator, string *targetLocator);
   private:
     CoordinatorClient();
 };
@@ -213,6 +215,23 @@ class MigrationFinishedRpc : public CoordinatorRpcWrapper {
 
   PRIVATE:
     DISALLOW_COPY_AND_ASSIGN(MigrationFinishedRpc);
+};
+
+class MigrationGetLocatorRpc : public CoordinatorRpcWrapper {
+  PUBLIC:
+
+    MigrationGetLocatorRpc(Context *context, uint64_t sourceId,
+                           uint64_t targetId);
+
+    ~MigrationGetLocatorRpc()
+    {
+    }
+
+    void wait(string *sourceLocator, string *targetLocator);
+
+  PRIVATE:
+
+    DISALLOW_COPY_AND_ASSIGN(MigrationGetLocatorRpc);
 };
 
 /**

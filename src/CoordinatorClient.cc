@@ -938,11 +938,21 @@ CoordinatorClient::migrationFinished(Context *context, uint64_t migrationId,
     return rpc.wait();
 }
 
+void CoordinatorClient::migrationGetLocator(Context *context, uint64_t sourceId,
+                                            uint64_t targetId,
+                                            string *sourceLocator,
+                                            string *targetLocator)
+{
+
+    MigrationGetLocatorRpc rpc(context, sourceId, targetId);
+    rpc.wait(sourceLocator, targetLocator);
+}
+
 MigrationFinishedRpc::MigrationFinishedRpc(
     Context *context, uint64_t migrationId,
     ServerId targetServerId, bool successful)
     : CoordinatorRpcWrapper(context,
-                            sizeof(WireFormat::RecoveryMasterFinished::Response))
+                            sizeof(WireFormat::MigrationFinished::Response))
 {
     WireFormat::MigrationFinished::Request *reqHdr(
         allocHeader<WireFormat::MigrationFinished>());
@@ -962,4 +972,38 @@ MigrationFinishedRpc::wait()
         ClientException::throwException(HERE, respHdr->common.status);
     return respHdr->cancelRecovery;
 }
+
+MigrationGetLocatorRpc::MigrationGetLocatorRpc(
+    Context *context, uint64_t sourceId, uint64_t targetId)
+    : CoordinatorRpcWrapper(context,
+                            sizeof(WireFormat::MigrationGetLocator::Response))
+{
+    WireFormat::MigrationGetLocator::Request *reqHdr(
+        allocHeader<WireFormat::MigrationGetLocator>());
+
+    reqHdr->sourceId = sourceId;
+    reqHdr->targetId = targetId;
+    send();
+}
+
+void MigrationGetLocatorRpc::wait(string *sourceLocator, string *targetLocator)
+{
+    waitInternal(context->dispatch);
+    const WireFormat::MigrationGetLocator::Response *respHdr(
+        getResponseHeader<WireFormat::MigrationGetLocator>());
+    if (respHdr->common.status != STATUS_OK)
+        ClientException::throwException(HERE, respHdr->common.status);
+
+
+    uint32_t offset = sizeof(*respHdr);
+    *sourceLocator = string(
+        static_cast<char *>(response->getRange(offset, respHdr->sourceLength)),
+        respHdr->sourceLength);
+    offset += respHdr->sourceLength;
+    *targetLocator = string(
+        static_cast<char *>(response->getRange(offset, respHdr->targetLength)),
+        respHdr->targetLength);
+
+}
+
 } // namespace RAMCloud

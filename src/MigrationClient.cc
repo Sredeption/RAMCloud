@@ -2,6 +2,7 @@
 #include "RamCloud.h"
 #include "ObjectFinder.h"
 #include "Key.h"
+#include "Dispatch.h"
 
 
 namespace RAMCloud {
@@ -22,8 +23,16 @@ void MigrationClient::putTablet(uint64_t tableId, const void *key,
     ramcloud->clientContext->objectFinder->flush(tableId);
     Tablet tablet = ramcloud->clientContext->objectFinder
         ->lookupTablet(tableId, keyHash)->tablet;
-    tableMap.emplace(TabletKey{tablet.tableId, tablet.startKeyHash},
-                     MigratingTablet(tablet, sourceId, targetId));
+    auto result = tableMap.emplace(
+        TabletKey{tablet.tableId, tablet.startKeyHash},
+        MigratingTablet(tablet, sourceId, targetId));
+    MigratingTablet &migratingTablet = result.first->second;
+    CoordinatorClient::migrationGetLocator(
+        ramcloud->clientContext,
+        migratingTablet.sourceId.getId(),
+        migratingTablet.targetId.getId(),
+        &migratingTablet.sourceLocator,
+        &migratingTablet.targetLocator);
 }
 
 MigrationClient::MigratingTablet *
@@ -73,11 +82,11 @@ void MigrationReadTask::performTask()
             ramcloud->migrationClient->getTablet(tableId, key, keyLength);
         if (migratingTablet) {
             sourceReadRpc.construct(
-                ramcloud, migratingTablet->sourceId, tableId, key, keyLength,
-                &sourceBuffer, rejectRules);
+                ramcloud, migratingTablet->sourceLocator, tableId, key,
+                keyLength, &sourceBuffer, rejectRules);
             targetReadRpc.construct(
-                ramcloud, migratingTablet->targetId, tableId, key, keyLength,
-                &targetBuffer, rejectRules);
+                ramcloud, migratingTablet->targetLocator, tableId, key,
+                keyLength, &targetBuffer, rejectRules);
             state = MIGRATING;
         } else {
             readRpc.construct(ramcloud, tableId, key, keyLength, value,
@@ -101,6 +110,8 @@ void MigrationReadTask::performTask()
             } else {
                 state = DONE;
             }
+        } else {
+            ramcloud->clientContext->dispatch->poll();
         }
     }
 
@@ -148,6 +159,8 @@ void MigrationReadTask::performTask()
             if (objectExists)
                 objectExists = existsConclusion;
             state = DONE;
+        } else {
+            ramcloud->clientContext->dispatch->poll();
         }
     }
 

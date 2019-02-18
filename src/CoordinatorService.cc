@@ -225,6 +225,10 @@ CoordinatorService::dispatch(WireFormat::Opcode opcode,
             callHandler<WireFormat::MigrationFinished, CoordinatorService,
                 &CoordinatorService::migrationMasterFinished>(rpc);
             break;
+        case WireFormat::MigrationGetLocator::opcode:
+            callHandler<WireFormat::MigrationGetLocator, CoordinatorService,
+                &CoordinatorService::migrationGetLocator>(rpc);
+            break;
         case WireFormat::ReassignTabletOwnership::opcode:
             callHandler<WireFormat::ReassignTabletOwnership, CoordinatorService,
                         &CoordinatorService::reassignTabletOwnership>(rpc);
@@ -603,7 +607,20 @@ void CoordinatorService::migrationQuery(
     const WireFormat::MigrationQuery::Request *reqHdr,
     WireFormat::MigrationQuery::Response *respHdr, Service::Rpc *rpc)
 {
-    respHdr->finish= migrationManager.testFinish();
+    respHdr->finish= migrationManager.isFinished(reqHdr->migrationId);
+}
+
+
+void CoordinatorService::migrationGetLocator(
+    const WireFormat::MigrationGetLocator::Request *reqHdr,
+    WireFormat::MigrationGetLocator::Response *respHdr, Service::Rpc *rpc)
+{
+    string sourceLocator = serverList.getLocator(ServerId(reqHdr->sourceId));
+    string targetLocator = serverList.getLocator(ServerId(reqHdr->targetId));
+    respHdr->sourceLength = static_cast<uint32_t>(sourceLocator.length());
+    respHdr->targetLength = static_cast<uint32_t>(targetLocator.length());
+    rpc->replyPayload->appendCopy(sourceLocator.c_str(), respHdr->sourceLength);
+    rpc->replyPayload->appendCopy(targetLocator.c_str(), respHdr->targetLength);
 }
 /**
  * Handle the REASSIGN_TABLET_OWNER RPC.

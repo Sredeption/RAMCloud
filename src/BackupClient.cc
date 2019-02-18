@@ -596,10 +596,6 @@ SegmentCertificate MigrationGetDataRpc::wait()
         getResponseHeader<WireFormat::MigrationGetData>());
     SegmentCertificate certificate = respHdr->certificate;
 
-    // respHdr off limits.
-    response->truncateFront(sizeof(
-                                WireFormat::MigrationGetData::Response));
-
     return certificate;
 }
 

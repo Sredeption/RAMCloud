@@ -325,9 +325,9 @@ void MigrationManager::migrationFinished(Migration *migration)
     delete migration;
 }
 
-bool MigrationManager::testFinish()
+bool MigrationManager::isFinished(uint64_t migrationId)
 {
-    return activeMigrations.empty();
+    return activeMigrations.find(migrationId) == activeMigrations.end();
 }
 
 }

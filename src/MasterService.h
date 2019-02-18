@@ -442,7 +442,7 @@ class MasterService : public Service {
     };
     MigrationMonitor migrationMonitor;
     MigrationSourceManager migrationSourceManager;
-    MigrationTargetManager migrationTargetManager;
+    MigrationTargetManager* migrationTargetManager;
 
 ///////////////////////////////////////////////////////////////////////////////
 /////Recovery related code. This should eventually move into its own file./////
@@ -495,6 +495,14 @@ class MasterService : public Service {
 ///////////////////////////////////////////////////////////////////////////////
 /////////////////////////End of Recovery related code./////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
+    void migrationReplay(
+        const WireFormat::MigrationReplay::Request *reqHdr,
+        WireFormat::MigrationReplay::Response *respHdr,
+        Rpc *rpc);
+    void migrationSideLogCommit(
+        const WireFormat::MigrationSideLogCommit::Request *reqHdr,
+        WireFormat::MigrationSideLogCommit::Response *respHdr,
+        Rpc *rpc);
     void migrationSourceStart(
         const WireFormat::MigrationSourceStart::Request *reqHdr,
         WireFormat::MigrationSourceStart::Response *respHdr,

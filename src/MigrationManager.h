@@ -47,8 +47,7 @@ class MigrationManager
 
     virtual void migrationFinished(Migration *migration);
 
-
-    bool testFinish();
+    bool isFinished(uint64_t migrationId);
 
   PRIVATE:
 

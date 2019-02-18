@@ -1,94 +1,25 @@
 #include "MigrationTargetManager.h"
 #include "MasterService.h"
+#include "WorkerManager.h"
 
 namespace RAMCloud {
 
-MigrationTargetManager::MigrationTargetManager(MasterService *masterService) :
-    masterService(masterService), migrations(), lock("MigrationTargetManager"),
-    disableMigrationRecover(false)
+MigrationTargetManager::MigrationTargetManager(Context *context) :
+    Dispatch::Poller(context->dispatch, "MigrationTargetManager"),
+    context(context), migrations(), migrationsInProgress(),
+    lock("MigrationTargetManager"), finishNotifier(new RealFinishNotifier()),
+    disableMigrationRecover(false), polling(false)
 {
 }
 
 void
-MigrationTargetManager::startMigration(
-    uint64_t migrationId, uint64_t tableId, uint64_t firstKeyHash,
-    uint64_t lastKeyHash, uint64_t sourceId, uint64_t targetId)
+MigrationTargetManager::startMigration(uint64_t migrationId, Buffer *payload)
 {
-
-    SpinLock::Guard guard(lock);
-    Migration *migration = new Migration(migrationId, tableId, firstKeyHash,
-                                         lastKeyHash, sourceId, targetId);
+    Migration *migration = new Migration(
+        context, payload, finishNotifier->clone());
     migrations[migrationId] = migration;
-
-    bool added = masterService->tabletManager.addTablet(
-        tableId,
-        firstKeyHash,
-        lastKeyHash,
-        TabletManager::MIGRATION_TARGET);
-    masterService->tabletManager.migrateTablet(
-        tableId, firstKeyHash, lastKeyHash, migrationId, sourceId, targetId,
-        TabletManager::MIGRATION_TARGET);
-
-    if (!added) {
-        throw Exception(HERE,
-                        format("Cannot recover tablet that overlaps "
-                               "an already existing one (tablet to recover: %lu "
-                               "range [0x%lx,0x%lx], current tablet map: %s)",
-                               tableId,
-                               firstKeyHash, lastKeyHash,
-                               masterService->tabletManager.toString().c_str()));
-    } else {
-        TableStats::addKeyHashRange(&masterService->masterTableMetadata,
-                                    tableId, firstKeyHash, lastKeyHash);
-    }
-
-}
-
-void
-MigrationTargetManager::finishMigration(uint64_t migrationId, bool successful)
-{
-    SpinLock::Guard guard(lock);
-    Migration *migration;
-    std::unordered_map<uint64_t, Migration *>::iterator iter =
-        migrations.find(migrationId);
-    if (iter == migrations.end())
-        return;
-    migration = iter->second;
-    migrations.erase(iter);
-    bool cancelRecovery = false;
-    if (!disableMigrationRecover)
-        cancelRecovery = CoordinatorClient::migrationFinished(
-            masterService->context, migrationId, ServerId(migration->targetId),
-            successful);
-
-    if (!cancelRecovery) {
-        // Re-grab all transaction locks.
-//        transactionManager.regrabLocksAfterRecovery(&objectManager);
-
-        bool changed = masterService->tabletManager.changeState(
-            migration->tableId,
-            migration->firstKeyHash, migration->lastKeyHash,
-            TabletManager::MIGRATION_TARGET, TabletManager::NORMAL);
-        if (!changed) {
-            throw FatalError(
-                HERE, format("Could not change recovering "
-                             "tablet's state to NORMAL (%lu range [%lu,%lu])",
-                             migration->tableId,
-                             migration->firstKeyHash,
-                             migration->lastKeyHash));
-        }
-    } else {
-        bool removed = masterService->tabletManager.deleteTablet(
-            migration->tableId, migration->firstKeyHash,
-            migration->lastKeyHash);
-        if (removed) {
-            TableStats::deleteKeyHashRange(
-                &masterService->masterTableMetadata, migration->tableId,
-                migration->firstKeyHash, migration->lastKeyHash);
-        }
-        masterService->objectManager.removeOrphanedObjects();
-        masterService->transactionManager.removeOrphanedOps();
-    }
+    migrationsInProgress.push_back(migration);
+    RAMCLOUD_LOG(NOTICE, "Start migration %lu in Target", migrationId);
 }
 
 bool MigrationTargetManager::isLocked(uint64_t migrationId, Key &key)
@@ -116,7 +47,6 @@ void MigrationTargetManager::update(uint64_t migrationId,
 MigrationTargetManager::Migration *
 MigrationTargetManager::getMigration(uint64_t migrationId)
 {
-    SpinLock::Guard guard(lock);
     std::unordered_map<uint64_t, Migration *>::iterator migrationPair =
         migrations.find(migrationId);
     if (migrationPair == migrations.end())
@@ -124,19 +54,398 @@ MigrationTargetManager::getMigration(uint64_t migrationId)
     return migrationPair->second;
 }
 
+int MigrationTargetManager::poll()
+{
+
+    int workPerformed = 0;
+    if (polling)
+        return workPerformed;
+    polling = true;
+    for (auto migration = migrationsInProgress.begin();
+         migration != migrationsInProgress.end();) {
+        Migration *currentMigration = *migration;
+
+
+        workPerformed += currentMigration->poll();
+
+        if (currentMigration->phase == Migration::COMPLETED) {
+            migration = migrationsInProgress.erase(migration);
+//            migrations.erase(currentMigration->migrationId);
+            delete currentMigration;
+        } else {
+            migration++;
+        }
+    }
+
+    polling = false;
+    return workPerformed == 0 ? 0 : 1;
+}
+
 MigrationTargetManager::Migration::Migration(
-    uint64_t migrationId, uint64_t tableId, uint64_t firstKeyHash,
-    uint64_t lastKeyHash, uint64_t sourceId, uint64_t targetId)
-    : migrationId(migrationId), rangeList(), tableId(tableId),
-      firstKeyHash(firstKeyHash), lastKeyHash(lastKeyHash), sourceId(sourceId),
-      targetId(targetId)
+    Context *context, Buffer *payload, FinishNotifier *finishNotifier)
+    : context(context), localLocator(), migrationId(), replicas(),
+      replicaIterator(), rangeList(), tableId(), firstKeyHash(),
+      lastKeyHash(), sourceServerId(),
+      targetServerId(), tabletManager(), objectManager(), phase(SETUP),
+      freePullBuffers(), freeReplayBuffers(), freePullRpcs(), busyPullRpcs(),
+      freeReplayRpcs(), busyReplayRpcs(), freeSideLogs(), sideLogCommitRpc(),
+      totalReplayedBytes(0), numReplicas(), numCompletedReplicas(0),
+      migrationStartTS(), migrationEndTS(), migratedMegaBytes(),
+      sideLogCommitStartTS(), sideLogCommitEndTS(),
+      finishNotifier(finishNotifier), tombstoneProtector()
+{
+    WireFormat::MigrationTargetStart::Request *reqHdr =
+        payload->getOffset<WireFormat::MigrationTargetStart::Request>(0);
+
+    migrationId = reqHdr->migrationId;
+    tableId = reqHdr->tableId;
+    firstKeyHash = reqHdr->firstKeyHash;
+    lastKeyHash = reqHdr->lastKeyHash;
+    sourceServerId = ServerId(reqHdr->sourceServerId);
+    targetServerId = ServerId(reqHdr->targetServerId);
+    numReplicas = reqHdr->numReplicas;
+
+    MasterService *masterService = context->getMasterService();
+    tabletManager = &(masterService->tabletManager);
+    objectManager = &(masterService->objectManager);
+    tabletManager->raiseSafeVersion(reqHdr->safeVersion);
+    objectManager->raiseSafeVersion(reqHdr->safeVersion);
+    localLocator = masterService->config->localLocator;
+
+    replicas.reserve(numReplicas);
+    uint32_t offset = sizeof32(WireFormat::MigrationTargetStart::Request);
+    for (uint32_t i = 0; i < numReplicas; ++i) {
+        const WireFormat::MigrationTargetStart::Replica *replicaLocation =
+            payload->getOffset<WireFormat::MigrationTargetStart::Replica>(
+                offset);
+        offset += sizeof32(WireFormat::MigrationTargetStart::Replica);
+        Replica replica(replicaLocation->backupId, replicaLocation->segmentId);
+        replicas.push_back(replica);
+    }
+
+    RAMCLOUD_LOG(WARNING, "replicas number: %u", numReplicas);
+    replicaIterator = replicas.begin();
+
+    for (uint32_t i = 0; i < PIPELINE_DEPTH; i++) {
+        freePullBuffers.push_back(&(rpcBuffers[i]));
+    }
+
+    for (uint32_t i = 0; i < MAX_PARALLEL_PULL_RPCS; i++) {
+        freePullRpcs.push_back(&(pullRpcs[i]));
+    }
+
+    // To begin with, all replay rpcs are free.
+    for (uint32_t i = 0; i < MAX_PARALLEL_REPLAY_RPCS; i++) {
+        freeReplayRpcs.push_back(&(replayRpcs[i]));
+    }
+
+    for (uint32_t i = 0; i < MAX_PARALLEL_REPLAY_RPCS; i++) {
+        sideLogs[i].construct(objectManager->getLog());
+    }
+
+    // To begin with, all sidelogs are free.
+    for (uint32_t i = 0; i < MAX_PARALLEL_REPLAY_RPCS; i++) {
+        freeSideLogs.push_back(&(sideLogs[i]));
+    }
+
+    migrationStartTS = Cycles::rdtsc();
+}
+
+int MigrationTargetManager::Migration::poll()
+{
+    switch (phase) {
+        case SETUP :
+            return prepare();
+
+        case MIGRATING_DATA :
+            return pullAndReplay_main();
+
+        case SIDE_LOG_COMMIT :
+            return sideLogCommit();
+
+        case COMPLETED :
+            return 0;
+
+        default :
+            return 0;
+    }
+}
+
+int MigrationTargetManager::Migration::prepare()
+{
+    bool added = tabletManager->addTablet(
+        tableId,
+        firstKeyHash,
+        lastKeyHash,
+        TabletManager::MIGRATION_TARGET);
+    if (!added) {
+        throw Exception(HERE,
+                        format("Cannot recover tablet that overlaps "
+                               "an already existing one (tablet to recover: %lu "
+                               "range [0x%lx,0x%lx], current tablet map: %s)",
+                               tableId,
+                               firstKeyHash, lastKeyHash,
+                               tabletManager->toString().c_str()));
+    }
+    tabletManager->migrateTablet(
+        tableId, firstKeyHash, lastKeyHash, migrationId, sourceServerId.getId(),
+        targetServerId.getId(), TabletManager::MIGRATION_TARGET);
+
+    phase = MIGRATING_DATA;
+    if (!tombstoneProtector)
+        tombstoneProtector.construct(objectManager);
+
+    RAMCLOUD_LOG(NOTICE, "Migration %lu start serving at Target",
+                 migrationId);
+    return 1;
+}
+
+int MigrationTargetManager::Migration::pullAndReplay_main()
+{
+    int workDone = 0;
+
+    workDone += pullAndReplay_reapPullRpcs();
+
+    workDone += pullAndReplay_reapReplayRpcs();
+
+    if (numCompletedReplicas == numReplicas) {
+        migrationEndTS = Cycles::rdtsc();
+        sideLogCommitStartTS = migrationEndTS;
+
+        double migrationSeconds = Cycles::toSeconds(migrationEndTS -
+                                                    migrationStartTS);
+
+        migratedMegaBytes =
+            static_cast<double>(totalReplayedBytes) / (1024. * 1024.);
+
+        RAMCLOUD_LOG(WARNING,
+                     "Migration has completed. Changing state to state to"
+                     " SIDE_LOG_COMMIT (Tablet[0x%lx, 0x%lx] in table %lu)."
+                     " Moving %.2f MB of data over took %.2f seconds (%.2f MB/s)",
+                     firstKeyHash, lastKeyHash, tableId, migratedMegaBytes,
+                     migrationSeconds, migratedMegaBytes / migrationSeconds);
+
+        bool changed = tabletManager->changeState(
+            tableId, firstKeyHash, lastKeyHash,
+            TabletManager::MIGRATION_TARGET, TabletManager::NORMAL);
+        if (!changed) {
+            throw FatalError(
+                HERE, format("Could not change recovering "
+                             "tablet's state to NORMAL (%lu range [%lu,%lu])",
+                             tableId, firstKeyHash, lastKeyHash));
+        }
+        phase = SIDE_LOG_COMMIT;
+
+        return workDone;
+
+    }
+
+    workDone += pullAndReplay_sendPullRpcs();
+
+    workDone += pullAndReplay_sendReplayRpcs();
+    return workDone;
+}
+
+__inline __attribute__((always_inline))
+int MigrationTargetManager::Migration::pullAndReplay_reapPullRpcs()
+{
+    int workDone = 0;
+    size_t numBusyPullRpcs = busyPullRpcs.size();
+
+    for (size_t i = 0; i < numBusyPullRpcs; i++) {
+        Tub<PullRpc> *pullRpc = busyPullRpcs.front();
+        if ((*pullRpc)->rpc->isReady()) {
+            RAMCLOUD_LOG(NOTICE, "pulled segment %lu", (*pullRpc)->segmentId);
+            (*pullRpc)->rpc->wait();
+            freeReplayBuffers.push_back((*pullRpc)->responseBuffer);
+            (*pullRpc).destroy();
+
+            freePullRpcs.push_back(pullRpc);
+            workDone++;
+        } else {
+            busyPullRpcs.push_back(pullRpc);
+        }
+        busyPullRpcs.pop_front();
+    }
+    return 0;
+}
+
+__inline __attribute__((always_inline))
+int MigrationTargetManager::Migration::pullAndReplay_reapReplayRpcs()
+{
+    int workDone = 0;
+
+    size_t numBusyReplayRpcs = busyReplayRpcs.size();
+
+    for (size_t i = 0; i < numBusyReplayRpcs; i++) {
+        Tub<ReplayRpc> *replayRpc = busyReplayRpcs.front();
+
+        if ((*replayRpc)->isReady()) {
+            Tub<Buffer> *responseBuffer = (*replayRpc)->responseBuffer;
+            Tub<SideLog> *sideLog = (*replayRpc)->sideLog;
+            uint32_t numReplayedBytes = (*responseBuffer)->size();
+            totalReplayedBytes += numReplayedBytes;
+            (*responseBuffer).destroy();
+            freePullBuffers.push_back(responseBuffer);
+            freeSideLogs.push_back(sideLog);
+
+            (*replayRpc).destroy();
+            freeReplayRpcs.push_back(replayRpc);
+            numCompletedReplicas++;
+            workDone++;
+        } else {
+            busyReplayRpcs.push_back(replayRpc);
+        }
+        busyReplayRpcs.pop_front();
+    }
+    return 0;
+}
+
+__inline __attribute__((always_inline))
+int MigrationTargetManager::Migration::pullAndReplay_sendPullRpcs()
+{
+    int workDone = 0;
+    while (freePullRpcs.size() != 0 && replicaIterator != replicas.end()) {
+        Tub<PullRpc> *pullRpc = freePullRpcs.front();
+
+        Tub<Buffer> *responseBuffer = freePullBuffers.front();
+        responseBuffer->construct();
+        pullRpc->construct(context, replicaIterator->backupId, migrationId,
+                           sourceServerId, replicaIterator->segmentId,
+                           responseBuffer);
+        replicaIterator++;
+
+        freePullBuffers.pop_front();
+        freePullRpcs.pop_front();
+        busyPullRpcs.push_back(pullRpc);
+        workDone++;
+    }
+
+    return workDone;
+}
+
+__inline __attribute__((always_inline))
+int MigrationTargetManager::Migration::pullAndReplay_sendReplayRpcs()
+{
+
+    int workDone = 0;
+
+    while (!freeReplayRpcs.empty() && !freeReplayBuffers.empty()) {
+        Tub<ReplayRpc> *replayRpc = freeReplayRpcs.front();
+        Tub<SideLog> *sideLog = freeSideLogs.front();
+        Tub<Buffer> *responseBuffer = freeReplayBuffers.front();
+        void *respHdr = (*responseBuffer)->getRange(0, sizeof32(
+            WireFormat::MigrationGetData::Response));
+
+        SegmentCertificate certificate =
+            (reinterpret_cast<
+                WireFormat::MigrationGetData::Response *>(
+                respHdr))->certificate;
+        (*responseBuffer)->truncateFront(
+            sizeof32(WireFormat::MigrationGetData::Response));
+
+        (*replayRpc).construct(responseBuffer, sideLog,
+                               localLocator, certificate);
+        context->workerManager->handleRpc(replayRpc->get());
+
+        freeReplayBuffers.pop_front();
+        freeSideLogs.pop_front();
+        busyReplayRpcs.push_back(replayRpc);
+        freeReplayRpcs.pop_front();
+        workDone++;
+    }
+    return workDone;
+}
+
+int MigrationTargetManager::Migration::sideLogCommit()
+{
+
+    int workDone = 0;
+
+    if (finishNotifier->isSent()) {
+        if (finishNotifier->isReady()) {
+            finishNotifier->wait();
+            if (tombstoneProtector)
+                tombstoneProtector.destroy();
+            RAMCLOUD_LOG(WARNING, "SideLog commit finish, migration %lu "
+                                  "is over", migrationId);
+            phase = COMPLETED;
+            return 1;
+        }
+        return 0;
+    }
+
+    if (sideLogCommitRpc) {
+        if (sideLogCommitRpc->isReady()) {
+            sideLogCommitRpc.destroy();
+            workDone++;
+        }
+    }
+
+    if (!sideLogCommitRpc) {
+        if (freeSideLogs.empty()) {
+            sideLogCommitEndTS = Cycles::rdtsc();
+            finishNotifier->notify(this);
+            RAMCLOUD_LOG(WARNING, "SideLog commit finish, notifying");
+        } else {
+            sideLogCommitRpc.construct(freeSideLogs.front(), localLocator);
+            context->workerManager->handleRpc(sideLogCommitRpc.get());
+            freeSideLogs.pop_front();
+        }
+        workDone++;
+    }
+    return workDone;
+}
+
+MigrationTargetManager::Migration::Replica::Replica(
+    uint64_t backupId, uint64_t segmentId)
+    : backupId(backupId), segmentId(segmentId)
 {
 
 }
 
-void MigrationTargetManager::RealFinishNotifier::notify(uint64_t migrationId)
+
+MigrationTargetManager::RealFinishNotifier::RealFinishNotifier()
+    : rpc()
 {
+}
+
+MigrationTargetManager::RealFinishNotifier::~RealFinishNotifier()
+{
+}
+
+void MigrationTargetManager::RealFinishNotifier::notify(Migration *migration)
+{
+    rpc.construct(migration->context, migration->migrationId,
+                  migration->targetServerId, true);
+}
+
+bool MigrationTargetManager::RealFinishNotifier::isSent()
+{
+    return rpc;
+}
+
+bool MigrationTargetManager::RealFinishNotifier::isReady()
+{
+    if (rpc)
+        return rpc->isReady();
+    else
+        return false;
+}
+
+bool MigrationTargetManager::RealFinishNotifier::wait()
+{
+    if (rpc)
+        return rpc->wait();
+    return false;
 
 }
+
+MigrationTargetManager::FinishNotifier *
+MigrationTargetManager::RealFinishNotifier::clone()
+{
+    return new RealFinishNotifier();
+}
+
 
 }

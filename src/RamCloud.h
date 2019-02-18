@@ -28,6 +28,7 @@
 #include "LogMetrics.pb.h"
 #include "ServerConfig.pb.h"
 #include "ServerStatistics.pb.h"
+#include "ClientServerIdRpcWrapper.h"
 
 namespace RAMCloud {
 class ClientLeaseAgent;
@@ -1023,9 +1024,9 @@ class ReadRpc : public ObjectRpcWrapper {
     DISALLOW_COPY_AND_ASSIGN(ReadRpc);
 };
 
-class MigrationReadRpc : public ServerIdRpcWrapper {
+class MigrationReadRpc : public ClientServerIdRpcWrapper {
   public:
-    MigrationReadRpc(RamCloud *ramcloud, ServerId serverId, uint64_t tableId,
+    MigrationReadRpc(RamCloud *ramcloud, string locator, uint64_t tableId,
                      const void *key, uint16_t keyLength, Buffer *value,
                      const RejectRules *rejectRules = NULL);
     ~MigrationReadRpc() {}

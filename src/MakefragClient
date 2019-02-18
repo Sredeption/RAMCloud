@@ -34,6 +34,7 @@ CLIENT_SRCFILES := \
 		   src/CacheTrace.cc \
 		   src/ClientException.cc \
 		   src/ClientLeaseAgent.cc \
+		   src/ClientServerIdRpcWrapper.cc \
 		   src/ClientTransactionManager.cc \
 		   src/ClientTransactionTask.cc \
 		   src/ClusterMetrics.cc \
