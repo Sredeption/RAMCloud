@@ -24,6 +24,23 @@
 
 using namespace RAMCloud;
 
+Tub<RamCloud> client;
+
+uint64_t controlHubId = 0;
+string testControlHub = "testControlHub";
+
+int clientIndex;
+int numClients;
+
+string tableName;
+uint64_t firstKey;
+uint64_t lastKey;
+uint32_t newOwnerMasterId;
+
+uint32_t objectCount = 0;
+uint32_t objectSize = 0;
+uint32_t otherObjectCount = 0;
+
 void makeKey(int value, uint32_t length, char *dest)
 {
     memset(dest, 'x', length);
@@ -43,11 +60,12 @@ class BasicClient {
         uint64_t firstKey;
         uint64_t lastKey;
         ServerId targetServerId;
+        bool skipMaster;
 
         Migration(uint64_t tableId, uint64_t firstKey,
-                  uint64_t lastKey, ServerId targetServerId)
+                  uint64_t lastKey, ServerId targetServerId, bool skipMaster)
             : tableId(tableId), firstKey(firstKey), lastKey(lastKey),
-              targetServerId(targetServerId)
+              targetServerId(targetServerId), skipMaster(skipMaster)
         {
         }
     };
@@ -72,13 +90,13 @@ class BasicClient {
         delete[] value;
     }
 
-    void doWorkload(bool generateWorkload = true)
+    void doWorkload(uint64_t pressTableId, bool generateWorkload = true)
     {
         uint64_t start = Cycles::rdtsc();
         this->generateWorkload = generateWorkload;
         RAMCLOUD_LOG(NOTICE, "start benchmark");
         while (true) {
-            uint64_t latency = randomOp();
+            uint64_t latency = randomOp(pressTableId);
             totalLatency += latency;
             totalOps += 1;
             uint64_t current = Cycles::rdtsc();
@@ -141,7 +159,7 @@ class BasicClient {
     char *key;
     char *value;
 
-    uint64_t randomOp()
+    uint64_t randomOp(uint64_t pressTableId)
     {
         if (!generateWorkload) {
             usleep(100000);
@@ -150,32 +168,32 @@ class BasicClient {
         int choice = static_cast<int>(generateRandom() % 2);
         switch (choice) {
             case 0:
-                return randomRead();
+                return randomRead(pressTableId);
             case 1:
-                return randomWrite();
+                return randomWrite(pressTableId);
             default:
                 return 0;
         }
     }
 
-    uint64_t randomWrite()
+    uint64_t randomWrite(uint64_t pressTableId)
     {
         memset(value, 'x', valueLength);
         uint64_t start = Cycles::rdtsc();
         makeKey(downCast<int>(generateRandom() % numObjects), keyLength, key);
-        ramcloud->write(migration->tableId, key, keyLength, value, valueLength,
+        ramcloud->write(pressTableId, key, keyLength, value, valueLength,
                         NULL, NULL, false);
         uint64_t interval = Cycles::rdtsc() - start;
         return interval;
     }
 
-    uint64_t randomRead()
+    uint64_t randomRead(uint64_t pressTableId)
     {
         Buffer value;
         uint64_t start = Cycles::rdtsc();
         makeKey(downCast<int>(generateRandom() % numObjects), keyLength, key);
         bool exists;
-        ramcloud->readMigrating(migration->tableId, key, keyLength, &value,
+        ramcloud->readMigrating(pressTableId, key, keyLength, &value,
                                 NULL, NULL, &exists);
         uint64_t interval = Cycles::rdtsc() - start;
 
@@ -284,7 +302,8 @@ class BasicClient {
         migrationId = ramcloud->backupMigrate(migration->tableId,
                                               migration->firstKey,
                                               migration->lastKey,
-                                              migration->targetServerId);
+                                              migration->targetServerId,
+                                              migration->skipMaster);
     }
 
 
@@ -292,23 +311,133 @@ class BasicClient {
 
 };
 
+void basic()
+{
+    uint64_t tableId = 0;
+    const uint64_t totalBytes = objectCount * objectSize;
+    if (clientIndex == 0) {
+        ServerId server1 = ServerId(1u, 0u);
+        ServerId server3 = ServerId(3u, 0u);
+        tableId = client->createTableToServer(tableName.c_str(), server1);
+        controlHubId = client->createTableToServer(testControlHub.c_str(),
+                                                   server3);
+        client->testingFill(tableId, "", 0, objectCount, objectSize);
+
+        client->splitTablet(tableName.c_str(), lastKey + 1);
+
+        client->write(controlHubId, status.c_str(),
+                      static_cast<uint16_t>(status.length()),
+                      filling.c_str(), static_cast<uint32_t>(filling.length()));
+        RAMCLOUD_LOG(WARNING, "write status to %lu", controlHubId);
+
+    } else {
+
+        while (true) {
+            try {
+                controlHubId = client->getTableId(testControlHub.c_str());
+                tableId = client->getTableId(tableName.c_str());
+                break;
+            } catch (TableDoesntExistException &e) {
+            }
+        }
+
+        Buffer statusValue;
+        bool exists = false;
+        while (true) {
+            client->read(controlHubId, status.c_str(),
+                         static_cast<uint16_t>(status.length()),
+                         &statusValue, NULL, NULL, &exists);
+
+            if (exists) {
+                statusValue.size();
+                string currentStatus = string(
+                    reinterpret_cast<const char *>(
+                        statusValue.getRange(0, statusValue.size())),
+                    statusValue.size());
+
+                RAMCLOUD_CLOG(WARNING, "status:%s", currentStatus.c_str());
+                if (currentStatus == filling)
+                    break;
+            }
+
+            RAMCLOUD_CLOG(WARNING, "wait for filling");
+        }
+
+    }
+
+
+    const uint16_t keyLength = 30;
+    const uint32_t valueLength = objectSize;
+    BasicClient::Migration migration(tableId, firstKey, lastKey,
+                                     ServerId(newOwnerMasterId, 0), false);
+    BasicClient basicClient(client.get(), clientIndex, &migration, controlHubId,
+                            keyLength, valueLength, objectCount);
+    basicClient.doWorkload(tableId);
+
+    if (clientIndex == 0) {
+        double seconds = Cycles::toSeconds(basicClient.migrationDuration());
+        RAMCLOUD_LOG(NOTICE, "Migration took %0.2f MB/s",
+                     double(totalBytes) / seconds / double(1 << 20));
+
+    }
+}
+
+void backupEvaluation()
+{
+    string migrationTableName = "mt";
+    uint64_t migrationTableId = 0;
+    string pressTableName = "pt";
+    uint64_t pressTableId = 0;
+    if (clientIndex == 0) {
+        ServerId server1 = ServerId(1u, 0u);
+        ServerId server3 = ServerId(3u, 0u);
+        migrationTableId = client->createTableToServer(
+            migrationTableName.c_str(), server1);
+
+        controlHubId = client->createTableToServer(testControlHub.c_str(),
+                                                   server3);
+        client->testingFill(migrationTableId, "", 0, objectCount, objectSize);
+
+        client->splitTablet(migrationTableName.c_str(), lastKey + 1);
+
+        pressTableId = client->createTableToServer(
+            pressTableName.c_str(), server3);
+
+        client->write(controlHubId, status.c_str(),
+                      static_cast<uint16_t>(status.length()),
+                      filling.c_str(), static_cast<uint32_t>(filling.length()));
+        RAMCLOUD_LOG(WARNING, "write status to %lu", controlHubId);
+
+    } else {
+
+    }
+
+    const uint16_t keyLength = 30;
+    const uint32_t valueLength = objectSize;
+    BasicClient::Migration migration(migrationTableId, firstKey, lastKey,
+                                     ServerId(newOwnerMasterId, 0), true);
+    BasicClient basicClient(client.get(), clientIndex, &migration,
+                            controlHubId,
+                            keyLength, valueLength, objectCount);
+    basicClient.doWorkload(pressTableId);
+}
+
+struct BenchmarkInfo {
+    const char *name;
+
+    void (*func)();
+};
+
+BenchmarkInfo tests[] = {
+    {"basic", basic}
+};
 
 int
 main(int argc, char *argv[])
 try
 {
     Context context(true);
-    int clientIndex;
-    int numClients;
-    string tableName;
-    string testHub;
-    uint64_t firstKey;
-    uint64_t lastKey;
-    uint32_t newOwnerMasterId;
 
-    uint32_t objectCount = 0;
-    uint32_t objectSize = 0;
-    uint32_t otherObjectCount = 0;
 
     OptionsDescription migrateOptions("Migrate");
     migrateOptions.add_options()
@@ -361,79 +490,12 @@ try
     }
 
     string coordinatorLocator = optionParser.options.getCoordinatorLocator();
-    testHub = "testHub";
     RAMCLOUD_LOG(NOTICE, "client: Connecting to coordinator %s",
                  coordinatorLocator.c_str());
 
-    RamCloud client(&context, coordinatorLocator.c_str());
+    client.construct(&context, coordinatorLocator.c_str());
 
-    uint64_t tableId = 0;
-    uint64_t controlHubId = 0;
-    const uint64_t totalBytes = objectCount * objectSize;
-    if (clientIndex == 0) {
-        ServerId server1 = ServerId(1u, 0u);
-        ServerId server3 = ServerId(3u, 0u);
-        tableId = client.createTableToServer(tableName.c_str(), server1);
-        controlHubId = client.createTableToServer(testHub.c_str(), server3);
-        client.testingFill(tableId, "", 0, objectCount, objectSize);
-
-        client.splitTablet(tableName.c_str(), lastKey + 1);
-
-        client.write(controlHubId, status.c_str(),
-                     static_cast<uint16_t>(status.length()),
-                     filling.c_str(), static_cast<uint32_t>(filling.length()));
-        RAMCLOUD_LOG(WARNING, "write status to %lu", controlHubId);
-
-    } else {
-
-        while (true) {
-            try {
-                controlHubId = client.getTableId(testHub.c_str());
-                tableId = client.getTableId(tableName.c_str());
-                break;
-            } catch (TableDoesntExistException &e) {
-            }
-        }
-
-        Buffer statusValue;
-        bool exists = false;
-        while (true) {
-            client.read(controlHubId, status.c_str(),
-                        static_cast<uint16_t>(status.length()),
-                        &statusValue, NULL, NULL, &exists);
-
-            if (exists) {
-                statusValue.size();
-                string currentStatus = string(
-                    reinterpret_cast<const char *>(
-                        statusValue.getRange(0, statusValue.size())),
-                    statusValue.size());
-
-                RAMCLOUD_CLOG(WARNING, "status:%s", currentStatus.c_str());
-                if (currentStatus == filling)
-                    break;
-            }
-
-            RAMCLOUD_CLOG(WARNING, "wait for filling");
-        }
-
-    }
-
-
-    const uint16_t keyLength = 30;
-    const uint32_t valueLength = objectSize;
-    BasicClient::Migration migration(tableId, firstKey, lastKey,
-                                     ServerId(newOwnerMasterId, 0));
-    BasicClient basicClient(&client, clientIndex, &migration, controlHubId,
-                            keyLength, valueLength, objectCount);
-    basicClient.doWorkload(false);
-
-    if (clientIndex == 0) {
-        double seconds = Cycles::toSeconds(basicClient.migrationDuration());
-        RAMCLOUD_LOG(NOTICE, "Migration took %0.2f MB/s",
-                     double(totalBytes) / seconds / double(1 << 20));
-
-    }
+    backupEvaluation();
 
     return 0;
 } catch (ClientException &e) {

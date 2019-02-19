@@ -590,7 +590,8 @@ void CoordinatorService::migrationInit(
         sourceServerId,
         ServerId(reqHdr->targetId),
         reqHdr->tableId, reqHdr->firstKeyHash,
-        reqHdr->lastKeyHash, masterRecoveryInfo);
+        reqHdr->lastKeyHash, masterRecoveryInfo,
+        reqHdr->skipMaster);
 }
 
 

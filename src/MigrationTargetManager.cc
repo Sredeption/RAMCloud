@@ -125,6 +125,11 @@ MigrationTargetManager::Migration::Migration(
 
     RAMCLOUD_LOG(WARNING, "replicas number: %u", numReplicas);
     replicaIterator = replicas.begin();
+    //TODO: handle log head
+    RAMCLOUD_CLOG(WARNING, "skip segment %lu", replicaIterator->segmentId);
+    replicaIterator++;
+    RAMCLOUD_CLOG(WARNING, "skip segment %lu", replicaIterator->segmentId);
+    replicaIterator++;
 
     for (uint32_t i = 0; i < PIPELINE_DEPTH; i++) {
         freePullBuffers.push_back(&(rpcBuffers[i]));
@@ -246,7 +251,7 @@ int MigrationTargetManager::Migration::pullAndReplay_main()
     return workDone;
 }
 
-__inline __attribute__((always_inline))
+//__inline __attribute__((always_inline))
 int MigrationTargetManager::Migration::pullAndReplay_reapPullRpcs()
 {
     int workDone = 0;
@@ -270,7 +275,7 @@ int MigrationTargetManager::Migration::pullAndReplay_reapPullRpcs()
     return 0;
 }
 
-__inline __attribute__((always_inline))
+//__inline __attribute__((always_inline))
 int MigrationTargetManager::Migration::pullAndReplay_reapReplayRpcs()
 {
     int workDone = 0;
@@ -301,11 +306,12 @@ int MigrationTargetManager::Migration::pullAndReplay_reapReplayRpcs()
     return 0;
 }
 
-__inline __attribute__((always_inline))
+//__inline __attribute__((always_inline))
 int MigrationTargetManager::Migration::pullAndReplay_sendPullRpcs()
 {
     int workDone = 0;
-    while (freePullRpcs.size() != 0 && replicaIterator != replicas.end()) {
+    while (!freePullRpcs.empty() && !freePullBuffers.empty() &&
+           replicaIterator != replicas.end()) {
         Tub<PullRpc> *pullRpc = freePullRpcs.front();
 
         Tub<Buffer> *responseBuffer = freePullBuffers.front();
@@ -313,6 +319,7 @@ int MigrationTargetManager::Migration::pullAndReplay_sendPullRpcs()
         pullRpc->construct(context, replicaIterator->backupId, migrationId,
                            sourceServerId, replicaIterator->segmentId,
                            responseBuffer);
+        RAMCLOUD_CLOG(WARNING, "fetch segment %lu", replicaIterator->segmentId);
         replicaIterator++;
 
         freePullBuffers.pop_front();
@@ -324,7 +331,7 @@ int MigrationTargetManager::Migration::pullAndReplay_sendPullRpcs()
     return workDone;
 }
 
-__inline __attribute__((always_inline))
+//__inline __attribute__((always_inline))
 int MigrationTargetManager::Migration::pullAndReplay_sendReplayRpcs()
 {
 

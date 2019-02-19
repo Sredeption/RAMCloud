@@ -4100,8 +4100,8 @@ void MasterService::migrationReplay(
 {
     Tub<Buffer>* replayBuffer =
             reinterpret_cast<Tub<Buffer>*>(reqHdr->bufferPtr);
-    Tub<SideLog>* replaySideLog =
-            reinterpret_cast<Tub<SideLog>*>(reqHdr->sideLogPtr);
+//    Tub<SideLog>* replaySideLog =
+//            reinterpret_cast<Tub<SideLog>*>(reqHdr->sideLogPtr);
     SegmentCertificate certificate = reqHdr->certificate;
 
     const uint32_t bufferLength = (*replayBuffer)->size();
@@ -4110,10 +4110,9 @@ void MasterService::migrationReplay(
     SegmentIterator segmentIt(bufferMemory, bufferLength, certificate);
     segmentIt.checkMetadataIntegrity();
 
-    objectManager.replaySegment(replaySideLog->get(), segmentIt);
-
-    // If the source owns the tablet during migration, synchronize this
-    // sidelog with backups.
+    RAMCLOUD_LOG(WARNING, "try replay");
+//    objectManager.replaySegment(replaySideLog->get(), segmentIt);
+    RAMCLOUD_LOG(WARNING, "replay done");
 
     respHdr->numReplayedBytes = bufferLength;
     respHdr->common.status = STATUS_OK;

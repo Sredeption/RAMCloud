@@ -1068,6 +1068,7 @@ struct MigrationInit {
         uint64_t tableId;           // TabletId of the tablet to migrate.
         uint64_t firstKeyHash;      // First key of the tablet to migrate.
         uint64_t lastKeyHash;       // Last key of the tablet to migrate.
+        bool skipMaster;
     } __attribute__((packed));
     struct Response {
         ResponseCommon common;

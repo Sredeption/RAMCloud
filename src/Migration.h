@@ -233,6 +233,8 @@ class Migration : public Task {
         testingBackupEndTaskSendCallback;
     uint32_t testingFailRecoveryMasters;
 
+    bool skipMaster;
+
     friend class MigrationInternal::BackupStartTask;
 
     friend class MigrationInternal::BackupStartPartitionTask;

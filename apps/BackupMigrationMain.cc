@@ -110,7 +110,7 @@ try
     {
         CycleCounter<> counter{};
         client.backupMigrate(tableId, firstKey, lastKey,
-                             ServerId(newOwnerMasterId, 0));
+                             ServerId(newOwnerMasterId, 0), false);
         usleep(100000);
         while (!client.migrationQuery(1)) {
             usleep(100000);

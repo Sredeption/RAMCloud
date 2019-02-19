@@ -33,7 +33,8 @@ class MigrationManager
         ServerId sourceServerId, ServerId targetServerId,
         uint64_t tableId, uint64_t firstKeyHash,
         uint64_t lastKeyHash,
-        const ProtoBuf::MasterRecoveryInfo &masterRecoveryInfo);
+        const ProtoBuf::MasterRecoveryInfo &masterRecoveryInfo,
+        bool skipMaster);
 
     bool migrationMasterFinished(uint64_t recoveryId,
                                  ServerId recoveryMasterId,

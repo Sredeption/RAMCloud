@@ -63,42 +63,23 @@ class EnqueueMigrationTask : public Task {
   PUBLIC:
 
     EnqueueMigrationTask(MigrationManager &migrationManager,
-                         uint64_t migrationId,
-                         ServerId sourceServerId, ServerId targetServerId,
-                         uint64_t tableId, uint64_t firstKeyHash,
-                         uint64_t lastKeyHash,
-                         const ProtoBuf::MasterRecoveryInfo &masterRecoveryInfo)
+                         Migration *migration)
         : Task(migrationManager.taskQueue),
-          mgr(migrationManager), migrationId(migrationId),
-          sourceServerId(sourceServerId), targetServerId(targetServerId),
-          tableId(tableId), firstKeyHash(firstKeyHash),
-          lastKeyHash(lastKeyHash),
-          masterRecoveryInfo(masterRecoveryInfo)
+          mgr(migrationManager),
+          migration(migration)
     {}
 
     void performTask()
     {
-        mgr.waitingMigrations.push(new Migration(mgr.context, mgr.taskQueue,
-                                                 migrationId,
-                                                 &mgr.tableManager,
-                                                 &mgr.tracker,
-                                                 &mgr, sourceServerId,
-                                                 targetServerId, tableId,
-                                                 firstKeyHash, lastKeyHash,
-                                                 masterRecoveryInfo));
+        mgr.waitingMigrations.push(migration);
         (new MaybeStartMigrationTask(mgr))->schedule();
         delete this;
     }
 
   PRIVATE:
     MigrationManager &mgr;
-    uint64_t migrationId;
-    ServerId sourceServerId;
-    ServerId targetServerId;
-    uint64_t tableId;
-    uint64_t firstKeyHash;
-    uint64_t lastKeyHash;
-    const ProtoBuf::MasterRecoveryInfo masterRecoveryInfo;
+    Migration *migration;
+
     DISALLOW_COPY_AND_ASSIGN(EnqueueMigrationTask);
 };
 
@@ -230,7 +211,8 @@ uint64_t MigrationManager::startMigration(
     uint64_t tableId,
     uint64_t firstKeyHash,
     uint64_t lastKeyHash,
-    const ProtoBuf::MasterRecoveryInfo &masterRecoveryInfo)
+    const ProtoBuf::MasterRecoveryInfo &masterRecoveryInfo,
+    bool skipMaster)
 {
     uint64_t migrationId;
     if (!thread && !startMigrationsEvenIfNoThread) {
@@ -255,9 +237,17 @@ uint64_t MigrationManager::startMigration(
         std::unique_lock<std::mutex> _(mutex);
         migrationNumber++;
         migrationId = migrationNumber;
+        Migration *migration = new Migration(context, taskQueue,
+                                             migrationId,
+                                             &tableManager,
+                                             &tracker,
+                                             this, sourceServerId,
+                                             targetServerId, tableId,
+                                             firstKeyHash, lastKeyHash,
+                                             masterRecoveryInfo);
+        migration->skipMaster = skipMaster;
         (new MigrationManagerInternal::EnqueueMigrationTask(
-            *this, migrationId, sourceServerId, targetServerId, tableId,
-            firstKeyHash, lastKeyHash, masterRecoveryInfo))->schedule();
+            *this, migration))->schedule();
     }
     return migrationId;
 }

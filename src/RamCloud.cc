@@ -1908,10 +1908,11 @@ RamCloud::migrateTablet(uint64_t tableId, uint64_t firstKeyHash,
 }
 
 uint64_t RamCloud::backupMigrate(uint64_t tableId, uint64_t firstKeyHash,
-                             uint64_t lastKeyHash, ServerId newOwnerMasterId)
+                                 uint64_t lastKeyHash,
+                                 ServerId newOwnerMasterId, bool skipMaster)
 {
     BackupMigrationRpc rpc(this, newOwnerMasterId, tableId, firstKeyHash,
-                           lastKeyHash);
+                           lastKeyHash, skipMaster);
     return rpc.wait();
 }
 
@@ -1954,7 +1955,7 @@ MigrateTabletRpc::MigrateTabletRpc(RamCloud* ramcloud, uint64_t tableId,
 
 BackupMigrationRpc::BackupMigrationRpc(RamCloud *ramcloud, ServerId targetId,
                                    uint64_t tableId, uint64_t firstKeyHash,
-                                   uint64_t lastKeyHash)
+                                   uint64_t lastKeyHash, bool skipMaster)
     : CoordinatorRpcWrapper(ramcloud->clientContext,
                             sizeof(WireFormat::MigrationInit::Response))
 {
@@ -1965,6 +1966,7 @@ BackupMigrationRpc::BackupMigrationRpc(RamCloud *ramcloud, ServerId targetId,
     reqHdr->tableId = tableId;
     reqHdr->firstKeyHash = firstKeyHash;
     reqHdr->lastKeyHash = lastKeyHash;
+    reqHdr->skipMaster=skipMaster;
 
     send();
 }

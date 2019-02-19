@@ -49,7 +49,8 @@ Migration::Migration(Context *context, TaskQueue &taskQueue,
       testingBackupStartTaskSendCallback(),
       testingMasterStartTaskSendCallback(),
       testingBackupEndTaskSendCallback(),
-      testingFailRecoveryMasters()
+      testingFailRecoveryMasters(),
+      skipMaster(false)
 {
 }
 
@@ -575,26 +576,29 @@ void Migration::startBackups()
 
 void Migration::startMasters()
 {
-    tableManager->markTabletsMigration(
-        sourceServerId, targetServerId, tableId, firstKeyHash, lastKeyHash);
-    CycleCounter<RawMetric> _(&metrics->coordinator.recoveryStartTicks);
-    RAMCLOUD_LOG(NOTICE, "Starting migration %lu for crashed server %s with %u "
-                         "partitions", migrationId,
-                 sourceServerId.toString().c_str(),
-                 numPartitions);
+    if (!skipMaster) {
+        tableManager->markTabletsMigration(
+            sourceServerId, targetServerId, tableId, firstKeyHash, lastKeyHash);
+        CycleCounter<RawMetric> _(&metrics->coordinator.recoveryStartTicks);
+        RAMCLOUD_LOG(NOTICE,
+                     "Starting migration %lu for server %s with %u "
+                     "partitions", migrationId,
+                     sourceServerId.toString().c_str(),
+                     numPartitions);
 
 
-    auto migrationTasks =
-        std::unique_ptr<Tub<MasterStartTask>[]>(
-            new Tub<MasterStartTask>[2]);
-    migrationTasks[0].construct(*this, sourceServerId);
+        auto migrationTasks =
+            std::unique_ptr<Tub<MasterStartTask>[]>(
+                new Tub<MasterStartTask>[2]);
+        migrationTasks[0].construct(*this, sourceServerId);
 
-    parallelRun(migrationTasks.get(), 1, 1);
+        parallelRun(migrationTasks.get(), 1, 1);
 
+    }
     if (status > WAIT_FOR_RECOVERY_MASTERS)
         return;
     status = WAIT_FOR_RECOVERY_MASTERS;
-        LOG(DEBUG, "Waiting for recovery to complete on recovery masters");
+    RAMCLOUD_LOG(DEBUG, "Waiting for migration to complete");
 
 }
 
