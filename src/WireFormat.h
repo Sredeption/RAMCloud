@@ -143,8 +143,9 @@ enum Opcode {
     MIGRATION_GETLOCATOR        = 91,
     MIGRATION_REPLAY            = 92,
     MIGRATION_SIDELOGCOMMIT     = 93,
-    CREATE_TABLE_TOSERVER       = 94,
-    ILLEGAL_RPC_TYPE            = 95, // 1 + the highest legitimate Opcode
+    MIGRATION_FILTER            = 94,
+    CREATE_TABLE_TOSERVER       = 95,
+    ILLEGAL_RPC_TYPE            = 96, // 1 + the highest legitimate Opcode
 };
 
 /**
@@ -1075,6 +1076,24 @@ struct MigrationInit {
         uint64_t migrationId;
     } __attribute__((packed));
 };
+
+struct MigrationFilter {
+    static const Opcode opcode = MIGRATION_FILTER;
+    static const ServiceType service = BACKUP_SERVICE;
+
+    struct Request {
+        RequestCommon common;
+        uintptr_t replicaPtr;
+
+        Request() : common(), replicaPtr()
+        {}
+    } __attribute__((packed));
+
+    struct Response {
+        ResponseCommon common;
+    } __attribute__((packed));
+};
+
 
 struct MigrationReplay {
     static const Opcode opcode = MIGRATION_REPLAY;

@@ -37,6 +37,7 @@ class Logger;
 class MasterRecoveryManager;
 class MasterService;
 class MigrationManager;
+class MigrationBackupManager;
 class MigrationTargetManager;
 class MockContextMember;
 class ObjectFinder;
@@ -142,6 +143,7 @@ class Context {
 
     MigrationManager* migrationManager;
 
+    MigrationBackupManager *migrationBackupManager;
     MigrationTargetManager *migrationTargetManager;
     // On masters, it points to a permanently mapped region of read-only
     // memory that can be used as zero-copy source buffer for transmission;

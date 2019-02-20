@@ -70,6 +70,10 @@ class BackupService : public Service
         const WireFormat::BackupStartPartitioningReplicas::Request* reqHdr,
         WireFormat::BackupStartPartitioningReplicas::Response* respHdr,
         Rpc* rpc);
+    void migrationFilter(
+        const WireFormat::MigrationFilter::Request *reqHdr,
+        WireFormat::MigrationFilter::Response *respHdr,
+        Rpc *rpc);
     void migrationGetData(
         const WireFormat::MigrationGetData::Request *reqHdr,
         WireFormat::MigrationGetData::Response *respHdr,
@@ -163,6 +167,7 @@ class BackupService : public Service
     std::map<ServerId, BackupMasterRecovery*> recoveries;
 
     std::map<uint64_t , BackupMasterMigration*> migrations;
+    MigrationBackupManager *migrationBackupManager;
 
     /// The uniform size of each segment this backup deals with.
     const uint32_t segmentSize;

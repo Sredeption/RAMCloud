@@ -221,7 +221,6 @@ class Migration : public Task {
 
     void broadcastMigrationComplete();
 
-    vector<WireFormat::MigrationTargetStart::Replica> replicaMap;
     uint32_t numPartitions;
 
   PUBLIC:

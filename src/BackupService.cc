@@ -24,6 +24,7 @@
 #include "MultiFileStorage.h"
 #include "Status.h"
 #include "WorkerManager.h"
+#include "MigrationBackupManager.h"
 
 namespace RAMCloud {
 
@@ -49,6 +50,7 @@ BackupService::BackupService(Context* context,
     , frames()
     , recoveries()
     , migrations()
+    , migrationBackupManager(context->migrationBackupManager)
     , segmentSize(config->segmentSize)
     , readSpeed()
     , bytesWritten(0)
@@ -216,6 +218,10 @@ BackupService::dispatch(WireFormat::Opcode opcode, Rpc* rpc)
         case WireFormat::BackupWrite::opcode:
             callHandler<WireFormat::BackupWrite, BackupService,
                         &BackupService::writeSegment>(rpc);
+            break;
+        case WireFormat::MigrationFilter::opcode:
+            callHandler<WireFormat::MigrationFilter, BackupService,
+                &BackupService::migrationFilter>(rpc);
             break;
         case WireFormat::MigrationStartReading::opcode:
             callHandler<WireFormat::MigrationStartReading, BackupService,
@@ -544,6 +550,17 @@ BackupService::startPartitioningReplicas(
     recovery->setPartitionsAndSchedule(partitions);
 }
 
+
+void BackupService::migrationFilter(
+    const WireFormat::MigrationFilter::Request *reqHdr,
+    WireFormat::MigrationFilter::Response *respHdr, Service::Rpc *rpc)
+{
+    MigrationBackupManager::Replica *replica =
+        reinterpret_cast<MigrationBackupManager::Replica *>(reqHdr->replicaPtr);
+    replica->filter();
+    respHdr->common.status = STATUS_OK;
+}
+
 void BackupService::migrationGetData(
     const WireFormat::MigrationGetData::Request *reqHdr,
     WireFormat::MigrationGetData::Response *respHdr, Service::Rpc *rpc)
@@ -566,12 +583,10 @@ void BackupService::migrationGetData(
                  reqHdr->segmentId, reqHdr->partitionId,
                  Cycles::toMicroseconds(
                      start - migrationIt->second->startTime));
+Status status =
+    migrationBackupManager->getSegment(reqHdr->migrationId,reqHdr->segmentId,
+        rpc->replyPayload, &respHdr->certificate);
 
-    Status status =
-        migrationIt->second->getRecoverySegment(reqHdr->migrationId,
-                                                reqHdr->segmentId,
-                                                rpc->replyPayload,
-                                                &respHdr->certificate);
     if (status != STATUS_OK) {
         respHdr->common.status = status;
         return;
@@ -596,51 +611,7 @@ void BackupService::migrationStartReading(
     WireFormat::MigrationStartReading::Response *respHdr,
     Rpc *rpc)
 {
-    if (!gcThread && !testingDoNotStartGcThread) {
-        RAMCLOUD_LOG(NOTICE,
-                     "Starting backup replica garbage collector thread");
-//        Lock _(mutex);
-//        if (!gcThread) {
-            gcThread.construct(&BackupService::gcMain, this);
-//        }
-    }
-    ServerId sourceServerId(reqHdr->sourceId);
-    ServerId targetServerId(reqHdr->targetId);
-    bool mustCreateMigration = false;
-    auto migrationIt = migrations.find(reqHdr->migrationId);
-    if (migrationIt == migrations.end()) {
-        mustCreateMigration = true;
-    } else if (migrationIt->second->getMigrationId() != reqHdr->migrationId) {
-        // The old recovery may be in the middle of processing so we can just
-        // delete it outright. Let it know it should schedule itself on the task
-        // queue and should delete itself on the next iteration.
-        RAMCLOUD_LOG(NOTICE,
-                     "Got startReadingData for recovery %lu for crashed master "
-                     "%s; abandoning existing recovery %lu for that master and starting "
-                     "anew.", reqHdr->migrationId,
-                     sourceServerId.toString().c_str(),
-                     migrationIt->second->getMigrationId());
-        BackupMasterMigration *oldMigration = migrationIt->second;
-        migrations.erase(migrationIt);
-        oldMigration->free();
-        mustCreateMigration = true;
-    }
-
-    BackupMasterMigration *migration;
-    if (mustCreateMigration) {
-        migration = new BackupMasterMigration(taskQueue,
-                                             reqHdr->migrationId,
-                                             sourceServerId,
-                                             targetServerId,
-                                             reqHdr->tableId,
-                                             reqHdr->firstKeyHash,
-                                             reqHdr->lastKeyHash,
-                                             segmentSize,
-                                             readSpeed,
-                                             config->backup.maxRecoveryReplicas);
-        migrations[reqHdr->migrationId] = migration;
-    }
-    migration = migrations[reqHdr->migrationId];
+    ServerId sourceServerId = ServerId(reqHdr->sourceId);
 
     std::vector<BackupStorage::FrameRef> framesForRecovery;
     for (auto it = frames.lower_bound({sourceServerId, 0});
@@ -649,7 +620,10 @@ void BackupService::migrationStartReading(
             break;
         framesForRecovery.emplace_back(it->second);
     }
-    migration->start(framesForRecovery, rpc->replyPayload, respHdr);
+    migrationBackupManager->start(reqHdr->migrationId,
+                                  reqHdr->sourceId, reqHdr->targetId,
+                                  reqHdr->targetId, reqHdr->firstKeyHash,
+                                  reqHdr->lastKeyHash, framesForRecovery);
     metrics->backup.storageType = uint64_t(storage->storageType);
 }
 

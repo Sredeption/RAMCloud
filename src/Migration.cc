@@ -44,7 +44,6 @@ Migration::Migration(Context *context, TaskQueue &taskQueue,
       migrationId(migrationId),
       status(START_RECOVERY_ON_BACKUPS),
       migrateSuccessful(0),
-      replicaMap(),
       numPartitions(),
       testingBackupStartTaskSendCallback(),
       testingMasterStartTaskSendCallback(),
@@ -422,13 +421,6 @@ struct MasterStartTask {
     {
         RAMCLOUD_LOG(NOTICE, "Starting migration %lu on recovery master %s",
                      migration.migrationId, serverId.toString().c_str());
-        auto replicaMapData = migration.replicaMap.data();
-        uint32_t replicaMapSize = downCast<uint32_t>(
-            migration.replicaMap.size());
-        if (serverId == migration.sourceServerId) {
-            replicaMapData = NULL;
-            replicaMapSize = 0;
-        }
 
         (*migration.tracker)[serverId] = &migration;
         if (!testingCallback) {
@@ -449,8 +441,8 @@ struct MasterStartTask {
         } else {
             testingCallback->masterStartTaskSend(migration.migrationId,
                                                  serverId,
-                                                 replicaMapData,
-                                                 replicaMapSize);
+                                                 NULL,
+                                                 0);
         }
     }
 
@@ -552,23 +544,14 @@ void Migration::startBackups()
 
     auto backupStartTasks = std::unique_ptr<Tub<BackupStartTask>[]>(
         new Tub<BackupStartTask>[backups.size()]);
-    auto backupPartitionTasks =
-        std::unique_ptr<Tub<BackupStartPartitionTask>[]>(
-            new Tub<BackupStartPartitionTask>[backups.size()]);
     uint32_t i = 0;
     for (ServerId backup: backups) {
         backupStartTasks[i].construct(this, backup);
-        backupPartitionTasks[i].construct(this, backup);
         i++;
     }
 
     /* Broadcast 1: start reading replicas from disk and verify log integrity */
     parallelRun(backupStartTasks.get(), backups.size(), maxActiveBackupHosts);
-
-    parallelRun(backupPartitionTasks.get(), backups.size(),
-                maxActiveBackupHosts);
-    replicaMap = buildReplicaMap(backupStartTasks.get(), backups.size(),
-                                 tracker);
 
     status = START_RECOVERY_MASTERS;
     schedule();
