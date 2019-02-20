@@ -128,8 +128,10 @@ MigrationTargetManager::Migration::Migration(
     //TODO: handle log head
     RAMCLOUD_CLOG(WARNING, "skip segment %lu", replicaIterator->segmentId);
     replicaIterator++;
+    numReplicas--;
     RAMCLOUD_CLOG(WARNING, "skip segment %lu", replicaIterator->segmentId);
     replicaIterator++;
+    numReplicas--;
 
     for (uint32_t i = 0; i < PIPELINE_DEPTH; i++) {
         freePullBuffers.push_back(&(rpcBuffers[i]));
@@ -251,7 +253,7 @@ int MigrationTargetManager::Migration::pullAndReplay_main()
     return workDone;
 }
 
-//__inline __attribute__((always_inline))
+__inline __attribute__((always_inline))
 int MigrationTargetManager::Migration::pullAndReplay_reapPullRpcs()
 {
     int workDone = 0;
@@ -275,7 +277,7 @@ int MigrationTargetManager::Migration::pullAndReplay_reapPullRpcs()
     return 0;
 }
 
-//__inline __attribute__((always_inline))
+__inline __attribute__((always_inline))
 int MigrationTargetManager::Migration::pullAndReplay_reapReplayRpcs()
 {
     int workDone = 0;
@@ -297,6 +299,8 @@ int MigrationTargetManager::Migration::pullAndReplay_reapReplayRpcs()
             (*replayRpc).destroy();
             freeReplayRpcs.push_back(replayRpc);
             numCompletedReplicas++;
+            RAMCLOUD_LOG(NOTICE, "replay progress: %u/%u",
+                         numCompletedReplicas, numReplicas);
             workDone++;
         } else {
             busyReplayRpcs.push_back(replayRpc);
@@ -306,7 +310,7 @@ int MigrationTargetManager::Migration::pullAndReplay_reapReplayRpcs()
     return 0;
 }
 
-//__inline __attribute__((always_inline))
+__inline __attribute__((always_inline))
 int MigrationTargetManager::Migration::pullAndReplay_sendPullRpcs()
 {
     int workDone = 0;
@@ -319,7 +323,7 @@ int MigrationTargetManager::Migration::pullAndReplay_sendPullRpcs()
         pullRpc->construct(context, replicaIterator->backupId, migrationId,
                            sourceServerId, replicaIterator->segmentId,
                            responseBuffer);
-        RAMCLOUD_CLOG(WARNING, "fetch segment %lu", replicaIterator->segmentId);
+        RAMCLOUD_LOG(DEBUG, "fetch segment %lu", replicaIterator->segmentId);
         replicaIterator++;
 
         freePullBuffers.pop_front();
@@ -331,7 +335,7 @@ int MigrationTargetManager::Migration::pullAndReplay_sendPullRpcs()
     return workDone;
 }
 
-//__inline __attribute__((always_inline))
+__inline __attribute__((always_inline))
 int MigrationTargetManager::Migration::pullAndReplay_sendReplayRpcs()
 {
 

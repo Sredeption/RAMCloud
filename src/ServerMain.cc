@@ -273,6 +273,9 @@ main(int argc, char *argv[])
                                WireFormat::ADMIN_SERVICE};
         }
 
+        config.maxCores = std::thread::hardware_concurrency();
+        RAMCLOUD_LOG(NOTICE, "cpu core number:%u", config.maxCores);
+
         const string localLocator = optionParser.options.getLocalLocator();
 
 #if INFINIBAND

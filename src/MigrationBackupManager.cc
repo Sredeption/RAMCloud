@@ -25,6 +25,17 @@ MigrationBackupManager::Replica::~Replica()
 
 }
 
+void MigrationBackupManager::Replica::load()
+{
+    void *tryHead = NULL;
+    if (!head)
+        tryHead = frame->copyIfOpen();
+    if (tryHead)
+        head = tryHead;
+    else
+        frame->startLoading();
+}
+
 void MigrationBackupManager::Replica::filter()
 {
     recoveryException.reset();
@@ -57,11 +68,11 @@ void MigrationBackupManager::Replica::filter()
         built = true;
     }
     RAMCLOUD_LOG(NOTICE,
-                 "<%s,%lu> migration  segments took %lu us to construct. ",
+                 "<%s,%lu> migration  segments took %lu us to construct.",
                  migration->sourceServerId.toString().c_str(),
                  metadata->segmentId,
                  Cycles::toNanoseconds(Cycles::rdtsc() - start) / 1000);
-    migrationSegment = std::move(migrationSegment);
+    this->migrationSegment = std::move(migrationSegment);
     Fence::sfence();
     built = true;
     lastAccessTime = Cycles::rdtsc();
@@ -103,7 +114,7 @@ MigrationBackupManager::Migration::Migration(
         (metadata->primary ? primaries : secondaries).push_back(frame);
     }
 
-    RAMCLOUD_LOG(NOTICE,
+    RAMCLOUD_LOG(DEBUG,
                  "Backup preparing for migration %lu of source server %s; "
                  "loading %lu primary replicas", migrationId,
                  sourceServerId.toString().c_str(),
@@ -172,12 +183,18 @@ Status MigrationBackupManager::Migration::getSegment(
                              "desired segment not yet filtered");
     }
 
+    if (replica->recoveryException) {
+        auto e = SegmentRecoveryFailedException(*replica->recoveryException);
+        replica->recoveryException.reset();
+        throw e;
+    }
+
     if (buffer)
         replica->migrationSegment->appendToBuffer(*buffer);
     if (certificate)
         replica->migrationSegment->getAppendedLength(certificate);
 
-    replica->migrationSegment.release();
+//    replica->migrationSegment.release();
 
     replica->fetchCount++;
     return STATUS_OK;
@@ -199,6 +216,7 @@ int MigrationBackupManager::Migration::loadAndFilter_main()
     return workPerformed;
 }
 
+__inline __attribute__((always_inline))
 int MigrationBackupManager::Migration::loadAndFilter_reapLoadRpcs()
 {
     size_t numBusyLoadRpcs = busyLoadRpcs.size();
@@ -206,7 +224,7 @@ int MigrationBackupManager::Migration::loadAndFilter_reapLoadRpcs()
         Tub<LoadRpc> *loadRpc = busyLoadRpcs.front();
         if ((*loadRpc)->isReady()) {
             Replica *replica = (*loadRpc)->replica;
-            RAMCLOUD_LOG(NOTICE, "load segmented %lu in memory",
+            RAMCLOUD_LOG(DEBUG, "load segmented %lu in memory",
                          replica->metadata->segmentId);
             replicaToFilter.push_back(replica);
             (*loadRpc).destroy();
@@ -222,6 +240,7 @@ int MigrationBackupManager::Migration::loadAndFilter_reapLoadRpcs()
     return 0;
 }
 
+__inline __attribute__((always_inline))
 int MigrationBackupManager::Migration::loadAndFilter_reapFilterRpcs()
 {
     int workPerformed = 0;
@@ -232,7 +251,7 @@ int MigrationBackupManager::Migration::loadAndFilter_reapFilterRpcs()
 
             Replica *replica = (*filterRpc)->replica;
 
-            RAMCLOUD_LOG(NOTICE, "filter segmented %lu in memory",
+            RAMCLOUD_LOG(DEBUG, "filter segmented %lu in memory",
                          replica->metadata->segmentId);
             (*filterRpc).destroy();
             completedReplicaNum++;
@@ -247,6 +266,7 @@ int MigrationBackupManager::Migration::loadAndFilter_reapFilterRpcs()
     return workPerformed;
 }
 
+__inline __attribute__((always_inline))
 int MigrationBackupManager::Migration::loadAndFilter_sendLoadRpcs()
 {
     int workPerformed = 0;
@@ -254,7 +274,8 @@ int MigrationBackupManager::Migration::loadAndFilter_sendLoadRpcs()
         Tub<LoadRpc> *loadRpc = freeLoadRpcs.front();
 
         Replica &replica = *replicasIterator;
-        loadRpc->construct(&replica);
+        loadRpc->construct(manager->localLocator, &replica);
+        context->workerManager->handleRpc(loadRpc->get());
         workPerformed++;
 
         replicasIterator++;
@@ -264,6 +285,7 @@ int MigrationBackupManager::Migration::loadAndFilter_sendLoadRpcs()
     return workPerformed;
 }
 
+__inline __attribute__((always_inline))
 int MigrationBackupManager::Migration::loadAndFilter_sendFilterRpcs()
 {
     int workPerformed = 0;
@@ -271,7 +293,7 @@ int MigrationBackupManager::Migration::loadAndFilter_sendFilterRpcs()
         Tub<FilterRpc> *filterRpc = freeFilterRpcs.front();
         Replica *replica = replicaToFilter.front();
 
-        RAMCLOUD_LOG(NOTICE, "send segmented %lu to filter",
+        RAMCLOUD_LOG(DEBUG, "send segmented %lu to filter",
                      replica->metadata->segmentId);
         filterRpc->construct(manager->localLocator, replica);
 
@@ -325,6 +347,7 @@ void MigrationBackupManager::start(
         lastKeyHash, frames);
 
     migrationsInProgress.push_back(migration);
+    migrationMap[migrationId] = migration;
 
 }
 

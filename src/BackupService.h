@@ -74,6 +74,9 @@ class BackupService : public Service
         const WireFormat::MigrationFilter::Request *reqHdr,
         WireFormat::MigrationFilter::Response *respHdr,
         Rpc *rpc);
+    void migrationLoad(
+        const WireFormat::MigrationLoad::Request *reqHdr,
+        WireFormat::MigrationLoad::Response *respHdr, Service::Rpc *rpc);
     void migrationGetData(
         const WireFormat::MigrationGetData::Request *reqHdr,
         WireFormat::MigrationGetData::Response *respHdr,

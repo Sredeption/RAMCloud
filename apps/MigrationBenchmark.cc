@@ -111,7 +111,7 @@ class BasicClient {
                 static_cast<uint64_t>(lastQuery + 1) * 100000) {
                 lastQuery += 1;
                 if (lastQuery > 10 && isFinished()) {
-                    finishTime = Cycles::rdtsc();
+                    finishTime = current;
                     RAMCLOUD_LOG(NOTICE, "Migration finish, waiting 1 second");
                 }
             }
@@ -123,7 +123,7 @@ class BasicClient {
             }
 
             if (finishTime != 0 &&
-                Cycles::toSeconds(current - finishTime) > 1) {
+                Cycles::toSeconds(current - finishTime) > 1.0) {
                 RAMCLOUD_LOG(NOTICE, "break benchmark");
                 break;
             }
@@ -495,7 +495,7 @@ try
 
     client.construct(&context, coordinatorLocator.c_str());
 
-    backupEvaluation();
+    basic();
 
     return 0;
 } catch (ClientException &e) {

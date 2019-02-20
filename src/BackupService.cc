@@ -219,6 +219,10 @@ BackupService::dispatch(WireFormat::Opcode opcode, Rpc* rpc)
             callHandler<WireFormat::BackupWrite, BackupService,
                         &BackupService::writeSegment>(rpc);
             break;
+        case WireFormat::MigrationLoad::opcode:
+            callHandler<WireFormat::MigrationLoad, BackupService,
+                &BackupService::migrationLoad>(rpc);
+            break;
         case WireFormat::MigrationFilter::opcode:
             callHandler<WireFormat::MigrationFilter, BackupService,
                 &BackupService::migrationFilter>(rpc);
@@ -561,49 +565,35 @@ void BackupService::migrationFilter(
     respHdr->common.status = STATUS_OK;
 }
 
+void BackupService::migrationLoad(
+    const WireFormat::MigrationLoad::Request *reqHdr,
+    WireFormat::MigrationLoad::Response *respHdr, Service::Rpc *rpc)
+{
+    MigrationBackupManager::Replica *replica =
+        reinterpret_cast<MigrationBackupManager::Replica *>(reqHdr->replicaPtr);
+    replica->load();
+    respHdr->common.status = STATUS_OK;
+}
+
 void BackupService::migrationGetData(
     const WireFormat::MigrationGetData::Request *reqHdr,
     WireFormat::MigrationGetData::Response *respHdr, Service::Rpc *rpc)
 {
     uint64_t start = Cycles::rdtsc();
     rpc->worker->rpc->activities = Transport::ServerRpc::READ_ACTIVITY;
-    ServerId sourceServerId(reqHdr->sourceId);
-    auto migrationIt = migrations.find(reqHdr->migrationId);
-    if (migrationIt == migrations.end()) {
-        RAMCLOUD_LOG(WARNING,
-                     "Asked for recovery segment for <%s,%lu> but the master "
-                     "wasn't under recovery on the backup",
-                     sourceServerId.toString().c_str(), reqHdr->segmentId);
-        throw BackupBadSegmentIdException(HERE);
-    }
-    RAMCLOUD_LOG(DEBUG,
-                 "migrationGetData sourceId %s, segmentId %lu, partitionId %lu,"
-                 " %lu us from startTime",
-                 sourceServerId.toString().c_str(),
-                 reqHdr->segmentId, reqHdr->partitionId,
-                 Cycles::toMicroseconds(
-                     start - migrationIt->second->startTime));
-Status status =
-    migrationBackupManager->getSegment(reqHdr->migrationId,reqHdr->segmentId,
-        rpc->replyPayload, &respHdr->certificate);
+    Status status = migrationBackupManager->getSegment(
+        reqHdr->migrationId, reqHdr->segmentId, rpc->replyPayload,
+        &respHdr->certificate);
 
     if (status != STATUS_OK) {
         respHdr->common.status = status;
         return;
     }
-    uint64_t readBytes = metrics->backup.storageReadBytes;
-    uint64_t readTicks = metrics->backup.storageReadTicks;
     RAMCLOUD_LOG(NOTICE,
-                 "migrationGetData sourceId %s, segmentId %lu, total:"
-                 "load %lf MB, takes %lu us, rpc serving time: %lu us",
-                 sourceServerId.toString().c_str(),
+                 "migrationGetData  segmentId %lu, rpc serving time: %lu us",
                  reqHdr->segmentId,
-                 (double) readBytes / 1024 / 1024,
-                 Cycles::toMicroseconds(readTicks),
                  Cycles::toMicroseconds(Cycles::rdtsc() - start));
 
-    ++metrics->backup.readCompletionCount;
-    RAMCLOUD_LOG(DEBUG, "getRecoveryData complete");
 }
 
 void BackupService::migrationStartReading(
@@ -622,7 +612,7 @@ void BackupService::migrationStartReading(
     }
     migrationBackupManager->start(reqHdr->migrationId,
                                   reqHdr->sourceId, reqHdr->targetId,
-                                  reqHdr->targetId, reqHdr->firstKeyHash,
+                                  reqHdr->tableId, reqHdr->firstKeyHash,
                                   reqHdr->lastKeyHash, framesForRecovery);
     metrics->backup.storageType = uint64_t(storage->storageType);
 }

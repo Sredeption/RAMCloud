@@ -41,6 +41,8 @@ class MigrationBackupManager : public Dispatch::Poller {
 
         ~Replica();
 
+        void load();
+
         void filter();
 
         DISALLOW_COPY_AND_ASSIGN(Replica);
@@ -76,23 +78,24 @@ class MigrationBackupManager : public Dispatch::Poller {
         uint32_t replicaNum;
         uint32_t completedReplicaNum;
 
-        class LoadRpc {
+        class LoadRpc : public Transport::ServerRpc {
           PRIVATE:
+            const string localLocator;
             Replica *replica;
           PUBLIC:
 
-            LoadRpc(Replica *replica)
-                : replica(replica)
+            LoadRpc(string localLocator, Replica *replica)
+                : localLocator(localLocator), replica(replica)
             {
-                replica->frame->copyIfOpen();
-                replica->frame->startLoading();
-                void *tryHead = NULL;
-                if (!replica->head)
-                    tryHead = replica->frame->copyIfOpen();
-                if (tryHead)
-                    replica->head = tryHead;
-                else
-                    replica->frame->startLoading();
+                WireFormat::MigrationLoad::Request *reqHdr =
+                    requestPayload.emplaceAppend<
+                        WireFormat::MigrationLoad::Request>();
+                reqHdr->common.opcode =
+                    WireFormat::MigrationLoad::opcode;
+                reqHdr->common.service =
+                    WireFormat::MigrationLoad::service;
+
+                reqHdr->replicaPtr = reinterpret_cast<uintptr_t>(replica);
             }
 
             bool isReady()
@@ -100,11 +103,21 @@ class MigrationBackupManager : public Dispatch::Poller {
                 return replica->head != NULL || replica->frame->isLoaded();
             }
 
+            void sendReply()
+            {
+            }
+
+            string getClientServiceLocator()
+            {
+                return this->localLocator;
+            }
+
+            DISALLOW_COPY_AND_ASSIGN(LoadRpc);
+
             friend class Migration;
         };
 
-      PRIVATE:
-        static const uint32_t MAX_PARALLEL_LOAD_RPCS = 1;
+        static const uint32_t MAX_PARALLEL_LOAD_RPCS = 2;
 
         Tub<LoadRpc> loadRpcs[MAX_PARALLEL_LOAD_RPCS];
 
@@ -160,7 +173,7 @@ class MigrationBackupManager : public Dispatch::Poller {
             friend class Migration;
         };
 
-        static const uint32_t MAX_PARALLEL_FILTER_RPCS = 1;
+        static const uint32_t MAX_PARALLEL_FILTER_RPCS = 2;
 
         Tub<FilterRpc> filterRpcs[MAX_PARALLEL_FILTER_RPCS];
 
