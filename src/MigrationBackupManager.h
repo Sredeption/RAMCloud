@@ -7,11 +7,36 @@
 
 namespace RAMCloud {
 
+class SegmentManager;
+
+class SegmentIterator;
+
 class MigrationBackupManager : public Dispatch::Poller {
 
   PUBLIC:
 
     class Migration;
+
+    class Chunk {
+      PUBLIC:
+        Buffer buffer;
+        Crc32C checksum;
+
+        Chunk() : buffer(), checksum()
+        {
+
+        };
+
+        void append(LogEntryType type, uint32_t length, Buffer &entryBuffer);
+
+
+        void createSegmentCertificate(SegmentCertificate *certificate);
+
+        uint32_t size();
+
+        DISALLOW_COPY_AND_ASSIGN(Chunk);
+
+    };
 
     class Replica {
 
@@ -22,7 +47,7 @@ class MigrationBackupManager : public Dispatch::Poller {
 
         const BackupReplicaMetadata *metadata;
 
-        std::unique_ptr<Segment> migrationSegment;
+        std::deque<Chunk *> chunks;
 
         std::unique_ptr<SegmentRecoveryFailedException> recoveryException;
 
@@ -35,6 +60,8 @@ class MigrationBackupManager : public Dispatch::Poller {
         Atomic<int> fetchCount;
 
         void *head;
+
+        uint32_t ackId;
 
         explicit Replica(const BackupStorage::FrameRef &frame,
                          Migration *migration);
@@ -53,6 +80,7 @@ class MigrationBackupManager : public Dispatch::Poller {
       PRIVATE:
         MigrationBackupManager *manager;
         Context *context;
+        SegmentManager *segmentManager;
         uint64_t migrationId;
         ServerId sourceServerId;
         ServerId targetServerId;
@@ -77,6 +105,8 @@ class MigrationBackupManager : public Dispatch::Poller {
 
         uint32_t replicaNum;
         uint32_t completedReplicaNum;
+
+        static const uint32_t MAX_BATCH_SIZE = 10 * 1024;
 
         class LoadRpc : public Transport::ServerRpc {
           PRIVATE:
@@ -117,7 +147,7 @@ class MigrationBackupManager : public Dispatch::Poller {
             friend class Migration;
         };
 
-        static const uint32_t MAX_PARALLEL_LOAD_RPCS = 2;
+        static const uint32_t MAX_PARALLEL_LOAD_RPCS = 1;
 
         Tub<LoadRpc> loadRpcs[MAX_PARALLEL_LOAD_RPCS];
 
@@ -173,7 +203,7 @@ class MigrationBackupManager : public Dispatch::Poller {
             friend class Migration;
         };
 
-        static const uint32_t MAX_PARALLEL_FILTER_RPCS = 2;
+        static const uint32_t MAX_PARALLEL_FILTER_RPCS = 1;
 
         Tub<FilterRpc> filterRpcs[MAX_PARALLEL_FILTER_RPCS];
 
@@ -205,8 +235,8 @@ class MigrationBackupManager : public Dispatch::Poller {
 
         int poll();
 
-        Status getSegment(uint64_t segmentId, Buffer *buffer,
-                          SegmentCertificate *certificate);
+        bool getSegment(uint64_t segmentId, uint32_t seqId, Buffer *buffer,
+                        SegmentCertificate *certificate);
 
         friend class MigrationBackupManager;
         DISALLOW_COPY_AND_ASSIGN(Migration)
@@ -224,8 +254,8 @@ class MigrationBackupManager : public Dispatch::Poller {
         uint64_t tableId, uint64_t firstKeyHash, uint64_t lastKeyHash,
         const std::vector<BackupStorage::FrameRef> &frames);
 
-    Status getSegment(
-        uint64_t migrationId, uint64_t segmentId,
+    bool getSegment(
+        uint64_t migrationId, uint64_t segmentId, uint32_t seqId,
         Buffer *buffer, SegmentCertificate *certificate);
 
   PRIVATE:

@@ -232,7 +232,7 @@ MultiFileStorage::Frame::startLoading()
 bool
 MultiFileStorage::Frame::isLoaded()
 {
-    Lock _(storage->mutex);
+//    Lock _(storage->mutex);
     return loadRequested && buffer;
 }
 
@@ -391,7 +391,7 @@ MultiFileStorage::Frame::append(Buffer& source,
         if (sync) {
             performWrite(lock);
         } else {
-            schedule(lock, LOW);
+            schedule(lock, NORMAL);
         }
     }
 }
@@ -870,9 +870,9 @@ MultiFileStorage::Frame::performWrite(Lock& lock)
     }
 
     if (loadRequested) {
-        schedule(lock, NORMAL);
+        schedule(lock, HIGH);
     } else if (!isSynced()) {
-        schedule(lock, LOW);
+        schedule(lock, NORMAL);
     }
 }
 

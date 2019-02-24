@@ -177,7 +177,8 @@ main(int argc, char *argv[])
              "The server should run the master service only (no backup)")
             ("maxCores",
              ProgramOptions::value<uint32_t>(
-                &config.maxCores)->default_value(8),
+                 &config.maxCores)->default_value(
+                 std::thread::hardware_concurrency()),
              "Limit on number of cores to use for the dispatch and worker "
              "threads. This value should not exceed the number of cores "
              "available on the machine. RAMCloud will try to keep its usage "
@@ -272,9 +273,8 @@ main(int argc, char *argv[])
                                WireFormat::BACKUP_SERVICE,
                                WireFormat::ADMIN_SERVICE};
         }
-
-        config.maxCores = std::thread::hardware_concurrency();
         RAMCLOUD_LOG(NOTICE, "cpu core number:%u", config.maxCores);
+        RAMCLOUD_LOG(NOTICE, "backup sync: %d", config.backup.sync);
 
         const string localLocator = optionParser.options.getLocalLocator();
 

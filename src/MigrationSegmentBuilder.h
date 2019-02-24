@@ -23,10 +23,6 @@ class MigrationSegmentBuilder {
 
   PRIVATE:
 
-    static bool isEntryAlive(const LogPosition &position,
-                             const ProtoBuf::Tablets::Tablet *tablet);
-
-
     // Disallow construction.
     MigrationSegmentBuilder()
     {}

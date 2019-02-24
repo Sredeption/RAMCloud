@@ -78,7 +78,8 @@ class BasicClient {
           valueLength(valueLength), numObjects(numObjects), totalLatency(0),
           totalOps(0), startTime(0), finishTime(0), lastQuery(0), lastUpload(0),
           firstTimestamp(-1), lastTimestamp(-1), migrationId(),
-          generateWorkload(true), key(NULL), value(NULL)
+          generateWorkload(true), totalWriteLatency(0), totalWriteOps(0),
+          totalReadLatency(0), totalReadOps(0), key(NULL), value(NULL)
     {
         key = new char[keyLength];
         value = new char[valueLength];
@@ -155,6 +156,10 @@ class BasicClient {
     int lastTimestamp;
     uint64_t migrationId;
     bool generateWorkload;
+    uint64_t totalWriteLatency;
+    uint64_t totalWriteOps;
+    uint64_t totalReadLatency;
+    uint64_t totalReadOps;
 
     char *key;
     char *value;
@@ -165,7 +170,8 @@ class BasicClient {
             usleep(100000);
             return 0;
         }
-        int choice = static_cast<int>(generateRandom() % 2);
+//        int choice = static_cast<int>(generateRandom() % 2);
+        int choice = 0;
         switch (choice) {
             case 0:
                 return randomRead(pressTableId);
@@ -184,6 +190,8 @@ class BasicClient {
         ramcloud->write(pressTableId, key, keyLength, value, valueLength,
                         NULL, NULL, false);
         uint64_t interval = Cycles::rdtsc() - start;
+        totalWriteLatency += interval;
+        totalWriteOps += 1;
         return interval;
     }
 
@@ -196,6 +204,8 @@ class BasicClient {
         ramcloud->readMigrating(pressTableId, key, keyLength, &value,
                                 NULL, NULL, &exists);
         uint64_t interval = Cycles::rdtsc() - start;
+        totalReadLatency += interval;
+        totalReadOps += 1;
 
         return interval;
     }
@@ -223,6 +233,17 @@ class BasicClient {
                 statusValue.size());
             return currentStatus == ending;
         }
+    }
+
+    float averageLatency(uint64_t totalLatency, uint64_t totalOps)
+    {
+        float latency;
+        if (totalOps == 0)
+            latency = -1;
+        else
+            latency = static_cast<float>(Cycles::toMicroseconds(totalLatency)) /
+                      static_cast<float>(totalOps);
+        return latency;
     }
 
     void uploadMetric()
@@ -256,9 +277,8 @@ class BasicClient {
         string throughputKey = format("T:%d:%d", clientIndex, timestamp);
 
 
-        float latency =
-            static_cast<float>(Cycles::toMicroseconds(totalLatency)) /
-            static_cast<float>(totalOps);
+        float latency;
+        latency = averageLatency(totalLatency, totalOps);
         RAMCLOUD_LOG(NOTICE, "%d:<latency:%f, throughput:%f/ms>",
                      timestamp, latency, static_cast<float>(totalOps) / 100.f);
 
@@ -269,9 +289,22 @@ class BasicClient {
         ramcloud->write(controlHubId, throughputKey.c_str(),
                         static_cast<uint16_t>(throughputKey.length()),
                         &totalOps, sizeof(totalOps));
-
         totalLatency = 0;
         totalOps = 0;
+
+        latency = averageLatency(totalWriteLatency, totalWriteOps);
+        RAMCLOUD_LOG(DEBUG, "%d:write<latency:%f, throughput:%f/ms>",
+                     timestamp, latency,
+                     static_cast<float>(totalWriteOps) / 100.f);
+        totalWriteLatency = 0;
+        totalWriteOps = 0;
+
+        latency = averageLatency(totalReadLatency, totalReadOps);
+        RAMCLOUD_LOG(DEBUG, "%d:read<latency:%f, throughput:%f/ms>",
+                     timestamp, latency,
+                     static_cast<float>(totalReadOps) / 100.f);
+        totalReadLatency = 0;
+        totalReadOps = 0;
     }
 
     void finish()
@@ -390,6 +423,7 @@ void backupEvaluation()
     uint64_t pressTableId = 0;
     if (clientIndex == 0) {
         ServerId server1 = ServerId(1u, 0u);
+        ServerId server2 = ServerId(2u, 0u);
         ServerId server3 = ServerId(3u, 0u);
         migrationTableId = client->createTableToServer(
             migrationTableName.c_str(), server1);
@@ -401,7 +435,7 @@ void backupEvaluation()
         client->splitTablet(migrationTableName.c_str(), lastKey + 1);
 
         pressTableId = client->createTableToServer(
-            pressTableName.c_str(), server3);
+            pressTableName.c_str(), server2);
 
         client->write(controlHubId, status.c_str(),
                       static_cast<uint16_t>(status.length()),

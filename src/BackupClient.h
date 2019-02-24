@@ -291,12 +291,13 @@ class MigrationGetDataRpc : public ServerIdRpcWrapper {
                         uint64_t migrationId,
                         ServerId sourceId,
                         uint64_t segmentId,
+                        uint32_t seqId,
                         Buffer *responseBuffer);
 
     ~MigrationGetDataRpc()
     {}
 
-    SegmentCertificate wait();
+    bool wait();
 
   PRIVATE:
     DISALLOW_COPY_AND_ASSIGN(MigrationGetDataRpc);
@@ -335,6 +336,7 @@ class WriteSegmentRpc : public ServerIdRpcWrapper {
 
   PRIVATE:
     DISALLOW_COPY_AND_ASSIGN(WriteSegmentRpc);
+    uint64_t startTime;
 };
 
 /**
@@ -364,7 +366,7 @@ class BackupClient {
             uint64_t recoveryId, ServerId masterId,
             const ProtoBuf::RecoveryPartition* partitions);
 
-    static SegmentCertificate migrationGetData(Context *context,
+    static bool migrationGetData(Context *context,
                                                ServerId backupId,
                                                uint64_t migrationId,
                                                ServerId sourceId,

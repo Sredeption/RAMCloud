@@ -12,7 +12,7 @@ namespace RAMCloud {
 
 
 class MigrationTargetManager : public Dispatch::Poller {
-  PRIVATE:
+  PUBLIC:
 
     class Migration;
 
@@ -34,15 +34,20 @@ class MigrationTargetManager : public Dispatch::Poller {
 
     };
 
+    struct Replica {
+        Replica(uint64_t backupId, uint64_t segmentId);
+
+        ServerId backupId;
+        uint64_t segmentId;
+        uint32_t seqId;
+
+        bool done;
+
+    };
+
     class Migration {
       PUBLIC:
 
-        struct Replica {
-            Replica(uint64_t backupId, uint64_t segmentId);
-
-            ServerId backupId;
-            uint64_t segmentId;
-        };
 
         Migration(Context *context, Buffer *payload,
                   FinishNotifier *finishNotifier);
@@ -53,8 +58,7 @@ class MigrationTargetManager : public Dispatch::Poller {
         Context *context;
         string localLocator;
         uint64_t migrationId;
-        vector<Replica> replicas;
-        vector<Replica>::iterator replicaIterator;
+        std::deque<Replica *> replicas;
         RangeList rangeList;
         uint64_t tableId;
         uint64_t firstKeyHash;
@@ -82,22 +86,32 @@ class MigrationTargetManager : public Dispatch::Poller {
 
         std::deque<Tub<Buffer> *> freePullBuffers;
 
-        std::deque<Tub<Buffer> *> freeReplayBuffers;
+        std::deque<std::pair<Tub<Buffer> *, Replica *>> freeReplayBuffers;
 
         class PullRpc {
           PUBLIC:
 
-            PullRpc(Context *context, ServerId backupServerId,
-                    uint64_t migrationId, ServerId sourceServerId,
-                    uint64_t segmentId, Tub<Buffer> *response)
-                : segmentId(segmentId), responseBuffer(response), rpc()
+            PullRpc(Context *context, uint64_t migrationId, Replica *replica,
+                    ServerId sourceServerId, Tub<Buffer> *response)
+                : replica(replica), responseBuffer(response), rpc()
             {
-                rpc.construct(context, backupServerId, migrationId,
-                              sourceServerId, segmentId, response->get());
+                rpc.construct(context, replica->backupId, migrationId,
+                              sourceServerId, replica->segmentId,
+                              replica->seqId, response->get());
+            }
+
+            bool isReady()
+            {
+                return rpc->isReady();
+            }
+
+            bool wait()
+            {
+                return rpc->wait();
             }
 
           PRIVATE:
-            uint64_t segmentId;
+            Replica *replica;
 
             Tub<Buffer> *responseBuffer;
 
@@ -108,7 +122,7 @@ class MigrationTargetManager : public Dispatch::Poller {
 
         };
 
-        static const uint32_t MAX_PARALLEL_PULL_RPCS = 2;
+        static const uint32_t MAX_PARALLEL_PULL_RPCS = 4;
 
         Tub<PullRpc> pullRpcs[MAX_PARALLEL_PULL_RPCS];
 
@@ -120,11 +134,15 @@ class MigrationTargetManager : public Dispatch::Poller {
         class ReplayRpc : public Transport::ServerRpc {
           PUBLIC:
 
-            explicit ReplayRpc(Tub<Buffer> *response, Tub<SideLog> *sideLog,
-                               string localLocator,
+            explicit ReplayRpc(Replica *replica, Tub<Buffer> *response,
+                               Tub<SideLog> *sideLog,
+                               string localLocator, bool done,
                                SegmentCertificate certificate)
-                : responseBuffer(response),
-                  sideLog(sideLog), completed(false), localLocator(localLocator)
+                : replica(replica),
+                  responseBuffer(response),
+                  sideLog(sideLog), completed(false),
+                  localLocator(localLocator),
+                  done(done)
             {
                 WireFormat::MigrationReplay::Request *reqHdr =
                     requestPayload.emplaceAppend<
@@ -135,6 +153,7 @@ class MigrationTargetManager : public Dispatch::Poller {
                 reqHdr->common.service =
                     WireFormat::MigrationReplay::service;
 
+                reqHdr->replicaPtr = reinterpret_cast<uintptr_t>(replica);
                 reqHdr->bufferPtr = reinterpret_cast<uintptr_t>(responseBuffer);
                 reqHdr->sideLogPtr = reinterpret_cast<uintptr_t>(sideLog);
                 reqHdr->certificate = certificate;
@@ -159,6 +178,8 @@ class MigrationTargetManager : public Dispatch::Poller {
             }
 
           PRIVATE:
+            Replica *replica;
+
             Tub<Buffer> *responseBuffer;
 
             Tub<SideLog> *sideLog;
@@ -167,11 +188,13 @@ class MigrationTargetManager : public Dispatch::Poller {
 
             const string localLocator;
 
+            bool done;
+
             friend class Migration;
             DISALLOW_COPY_AND_ASSIGN(ReplayRpc);
         };
 
-        static const uint32_t MAX_PARALLEL_REPLAY_RPCS = 2;
+        static const uint32_t MAX_PARALLEL_REPLAY_RPCS = 3;
         Tub<ReplayRpc> replayRpcs[MAX_PARALLEL_REPLAY_RPCS];
         std::deque<Tub<ReplayRpc> *> freeReplayRpcs;
         std::deque<Tub<ReplayRpc> *> busyReplayRpcs;
@@ -259,6 +282,7 @@ class MigrationTargetManager : public Dispatch::Poller {
         DISALLOW_COPY_AND_ASSIGN(Migration);
     };
 
+  PRIVATE:
     Context *context;
     std::unordered_map<uint64_t, Migration *> migrations;
     std::vector<Migration *> migrationsInProgress;

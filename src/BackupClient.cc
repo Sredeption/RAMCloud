@@ -563,19 +563,19 @@ MigrationStartPartitioningRpc::MigrationStartPartitioningRpc(
 }
 
 
-SegmentCertificate
+bool
 BackupClient::migrationGetData(Context *context, ServerId backupId,
                                uint64_t migrationId, ServerId sourceId,
                                uint64_t segmentId, Buffer *response)
 {
     MigrationGetDataRpc rpc(context, backupId, migrationId,
-                            sourceId, segmentId, response);
+                            sourceId, segmentId, 0, response);
     return rpc.wait();
 }
 
 MigrationGetDataRpc::MigrationGetDataRpc(Context *context, ServerId backupId,
                                          uint64_t migrationId, ServerId sourceId,
-                                         uint64_t segmentId,
+                                         uint64_t segmentId, uint32_t seqId,
                                          Buffer *responseBuffer)
     : ServerIdRpcWrapper(context, backupId,
                          sizeof(WireFormat::MigrationGetData::Response),
@@ -586,17 +586,17 @@ MigrationGetDataRpc::MigrationGetDataRpc(Context *context, ServerId backupId,
     reqHdr->migrationId = migrationId;
     reqHdr->sourceId = sourceId.getId();
     reqHdr->segmentId = segmentId;
+    reqHdr->seqId = seqId;
     send();
 }
 
-SegmentCertificate MigrationGetDataRpc::wait()
+bool MigrationGetDataRpc::wait()
 {
     waitAndCheckErrors();
     const WireFormat::MigrationGetData::Response *respHdr(
         getResponseHeader<WireFormat::MigrationGetData>());
-    SegmentCertificate certificate = respHdr->certificate;
 
-    return certificate;
+    return respHdr->done;
 }
 
 MigrationCompleteRpc::MigrationCompleteRpc(Context *context, ServerId backupId,
@@ -803,7 +803,8 @@ WriteSegmentRpc::WriteSegmentRpc(Context* context,
                                  bool close,
                                  bool primary)
     : ServerIdRpcWrapper(context, backupId,
-                         sizeof(WireFormat::BackupWrite::Response))
+                         sizeof(WireFormat::BackupWrite::Response)),
+                         startTime(Cycles::rdtsc())
 {
     WireFormat::BackupWrite::Request* reqHdr(
             allocHeader<WireFormat::BackupWrite>(backupId));

@@ -431,6 +431,7 @@ class ObjectManager : public LogEntryHandlers,
 
     friend class CleanerCompactionBenchmark;
     friend class ObjectManagerBenchmark;
+    friend class MigrationBackupManager;
 
     DISALLOW_COPY_AND_ASSIGN(ObjectManager);
 };

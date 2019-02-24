@@ -579,21 +579,14 @@ void BackupService::migrationGetData(
     const WireFormat::MigrationGetData::Request *reqHdr,
     WireFormat::MigrationGetData::Response *respHdr, Service::Rpc *rpc)
 {
-    uint64_t start = Cycles::rdtsc();
     rpc->worker->rpc->activities = Transport::ServerRpc::READ_ACTIVITY;
-    Status status = migrationBackupManager->getSegment(
-        reqHdr->migrationId, reqHdr->segmentId, rpc->replyPayload,
+    bool done = migrationBackupManager->getSegment(
+        reqHdr->migrationId, reqHdr->segmentId, reqHdr->seqId,
+        rpc->replyPayload,
         &respHdr->certificate);
 
-    if (status != STATUS_OK) {
-        respHdr->common.status = status;
-        return;
-    }
-    RAMCLOUD_LOG(NOTICE,
-                 "migrationGetData  segmentId %lu, rpc serving time: %lu us",
-                 reqHdr->segmentId,
-                 Cycles::toMicroseconds(Cycles::rdtsc() - start));
-
+    respHdr->common.status = STATUS_OK;
+    respHdr->done = done;
 }
 
 void BackupService::migrationStartReading(

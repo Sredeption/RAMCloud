@@ -1118,11 +1118,13 @@ struct MigrationReplay {
 
     struct Request {
         RequestCommon common;
+        uintptr_t replicaPtr;
         uintptr_t bufferPtr;
         uintptr_t sideLogPtr;
         SegmentCertificate certificate;
 
-        Request() : common(), bufferPtr(), sideLogPtr(), certificate()
+        Request()
+            : common(), replicaPtr(), bufferPtr(), sideLogPtr(), certificate()
         {}
     } __attribute__((packed));
 
@@ -1270,24 +1272,23 @@ struct MigrationGetData {
         uint64_t migrationId;
         uint64_t sourceId;
         uint64_t segmentId;
-        uint64_t partitionId;
+        uint32_t seqId;
     } __attribute__((packed));
     struct Response {
         Response()
             : common()
             , certificate()
+            , done()
         {}
         Response(const ResponseCommon& common,
                  const SegmentCertificate& certificate)
             : common(common)
             , certificate(certificate)
+            , done()
         {}
         ResponseCommon common;
-        SegmentCertificate certificate; ///< Certificate for the segment
-                                        ///< which follows this fields in
-                                        ///< the response field. Used by
-                                        ///< master to iterate over the
-                                        ///< segment.
+        SegmentCertificate certificate;
+        bool done;
     } __attribute__((packed));
 };
 

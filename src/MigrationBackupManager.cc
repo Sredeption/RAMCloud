@@ -1,6 +1,9 @@
 #include "MigrationBackupManager.h"
 #include "MigrationSegmentBuilder.h"
 #include "WorkerManager.h"
+#include "MasterService.h"
+#include "ObjectManager.h"
+#include "SegmentManager.h"
 
 namespace RAMCloud {
 
@@ -9,27 +12,29 @@ MigrationBackupManager::Replica::Replica(const BackupStorage::FrameRef &frame,
     : frame(frame), migration(migration),
       metadata(
           static_cast<const BackupReplicaMetadata *>(frame->getMetadata())),
-      migrationSegment(),
+      chunks(),
       recoveryException(),
       built(),
       lastAccessTime(0),
       refCount(0),
       fetchCount(0),
-      head(NULL)
+      head(NULL),
+      ackId(0)
 {
 
 }
 
 MigrationBackupManager::Replica::~Replica()
 {
-
+    while (!chunks.empty()) {
+        delete chunks.front();
+        chunks.pop_front();
+    }
 }
 
 void MigrationBackupManager::Replica::load()
 {
-    void *tryHead = NULL;
-    if (!head)
-        tryHead = frame->copyIfOpen();
+    void *tryHead = frame->copyIfOpen();
     if (tryHead)
         head = tryHead;
     else
@@ -39,8 +44,6 @@ void MigrationBackupManager::Replica::load()
 void MigrationBackupManager::Replica::filter()
 {
     recoveryException.reset();
-    migrationSegment.reset();
-    std::unique_ptr<Segment> migrationSegment(new Segment());
     uint64_t start = Cycles::rdtsc();
     void *replicaData = NULL;
     if (head)
@@ -49,12 +52,66 @@ void MigrationBackupManager::Replica::filter()
         replicaData = frame->load();
 
     try {
-        MigrationSegmentBuilder::build(replicaData, migration->segmentSize,
-                                       metadata->certificate,
-                                       migrationSegment.get(),
-                                       migration->tableId,
-                                       migration->firstKeyHash,
-                                       migration->lastKeyHash);
+        Chunk *chunk = new Chunk();
+
+        SegmentIterator it(replicaData, migration->segmentSize,
+                           metadata->certificate);
+        it.checkMetadataIntegrity();
+
+        Buffer headerBuffer;
+        const SegmentHeader *header = NULL;
+        for (; !it.isDone(); it.next()) {
+            LogEntryType type = it.getType();
+            if (type == LOG_ENTRY_TYPE_SEGHEADER) {
+                it.appendToBuffer(headerBuffer);
+                header = headerBuffer.getStart<SegmentHeader>();
+                continue;
+            }
+            if (type != LOG_ENTRY_TYPE_OBJ && type != LOG_ENTRY_TYPE_OBJTOMB)
+                continue;
+
+            if (header == NULL) {
+                RAMCLOUD_DIE("Found log entry before header while "
+                             "building recovery segments");
+            }
+
+            Buffer entryBuffer;
+            uint64_t tableId;
+            KeyHash keyHash;
+
+            it.appendToBuffer(entryBuffer);
+            if (type == LOG_ENTRY_TYPE_OBJ) {
+                Object object(entryBuffer);
+                tableId = object.getTableId();
+                keyHash = Key::getHash(tableId,
+                                       object.getKey(), object.getKeyLength());
+            } else if (type == LOG_ENTRY_TYPE_OBJTOMB) {
+                ObjectTombstone tomb(entryBuffer);
+                tableId = tomb.getTableId();
+                keyHash = Key::getHash(tableId,
+                                       tomb.getKey(), tomb.getKeyLength());
+            } else {
+                    LOG(WARNING, "Unknown LogEntry (id=%u)", type);
+                throw SegmentRecoveryFailedException(HERE);
+            }
+            if (!(tableId == migration->tableId &&
+                  migration->firstKeyHash <= keyHash &&
+                  keyHash <= migration->lastKeyHash)) {
+                continue;
+            }
+
+            uint32_t length = entryBuffer.size();
+
+            if (chunk->size() + length > Migration::MAX_BATCH_SIZE) {
+                chunks.push_back(chunk);
+                chunk = new Chunk();
+            }
+
+            chunk->append(type, length, entryBuffer);
+        }
+
+        chunks.push_back(chunk);
+
     } catch (const Exception &e) {
         // Can throw SegmentIteratorException or SegmentRecoveryFailedException.
         // Exception is a little broad, but it catches them both; hopefully we
@@ -72,7 +129,6 @@ void MigrationBackupManager::Replica::filter()
                  migration->sourceServerId.toString().c_str(),
                  metadata->segmentId,
                  Cycles::toNanoseconds(Cycles::rdtsc() - start) / 1000);
-    this->migrationSegment = std::move(migrationSegment);
     Fence::sfence();
     built = true;
     lastAccessTime = Cycles::rdtsc();
@@ -86,14 +142,18 @@ MigrationBackupManager::Migration::Migration(
     MigrationBackupManager *manager, uint64_t migrationId, uint64_t sourceId,
     uint64_t targetId, uint64_t tableId, uint64_t firstKeyHash,
     uint64_t lastKeyHash, const std::vector<BackupStorage::FrameRef> &frames)
-    : manager(manager), context(manager->context), migrationId(migrationId),
-      sourceServerId(sourceId), targetServerId(targetId), tableId(tableId),
-      firstKeyHash(firstKeyHash), lastKeyHash(lastKeyHash),
-      segmentSize(manager->segmentSize), phase(LOADING), replicas(),
-      replicasIterator(), replicaToFilter(), segmentIdToReplica(), replicaNum(),
-      completedReplicaNum(), freeLoadRpcs(), busyLoadRpcs(), freeFilterRpcs(),
-      busyFilterRpcs()
+    : manager(manager), context(manager->context), segmentManager(),
+      migrationId(migrationId), sourceServerId(sourceId),
+      targetServerId(targetId), tableId(tableId), firstKeyHash(firstKeyHash),
+      lastKeyHash(lastKeyHash), segmentSize(manager->segmentSize),
+      phase(LOADING), replicas(), replicasIterator(), replicaToFilter(),
+      segmentIdToReplica(), replicaNum(), completedReplicaNum(), freeLoadRpcs(),
+      busyLoadRpcs(), freeFilterRpcs(), busyFilterRpcs()
 {
+    MasterService *masterService = context->getMasterService();
+    ObjectManager *objectManager = &(masterService->objectManager);
+    segmentManager = &objectManager->segmentManager;
+
     vector<BackupStorage::FrameRef> primaries;
     vector<BackupStorage::FrameRef> secondaries;
 
@@ -153,8 +213,9 @@ int MigrationBackupManager::Migration::poll()
     return 0;
 }
 
-Status MigrationBackupManager::Migration::getSegment(
-    uint64_t segmentId, Buffer *buffer, SegmentCertificate *certificate)
+bool MigrationBackupManager::Migration::getSegment(
+    uint64_t segmentId, uint32_t seqId, Buffer *buffer,
+    SegmentCertificate *certificate)
 {
 
     auto replicaIt = segmentIdToReplica.find(segmentId);
@@ -189,15 +250,23 @@ Status MigrationBackupManager::Migration::getSegment(
         throw e;
     }
 
-    if (buffer)
-        replica->migrationSegment->appendToBuffer(*buffer);
-    if (certificate)
-        replica->migrationSegment->getAppendedLength(certificate);
+    if (seqId > replica->ackId) {
+        delete replica->chunks.front();
+        replica->chunks.pop_front();
+        replica->ackId++;
+    }
 
-//    replica->migrationSegment.release();
+    Chunk *chunk = replica->chunks.front();
+
+    if (buffer) {
+        buffer->append(&chunk->buffer);
+    }
+    if (certificate) {
+        chunk->createSegmentCertificate(certificate);
+    }
 
     replica->fetchCount++;
-    return STATUS_OK;
+    return replica->chunks.size() == 1;
 }
 
 int MigrationBackupManager::Migration::loadAndFilter_main()
@@ -351,8 +420,8 @@ void MigrationBackupManager::start(
 
 }
 
-Status MigrationBackupManager::getSegment(
-    uint64_t migrationId, uint64_t segmentId, Buffer *buffer,
+bool MigrationBackupManager::getSegment(
+    uint64_t migrationId, uint64_t segmentId, uint32_t seqId, Buffer *buffer,
     SegmentCertificate *certificate)
 {
 
@@ -363,10 +432,40 @@ Status MigrationBackupManager::getSegment(
         throw BackupBadSegmentIdException(HERE);
     }
 
-    migrationIt->second->getSegment(segmentId, buffer, certificate);
+    return migrationIt->second->getSegment(segmentId, seqId, buffer,
+                                           certificate);
 
-    return STATUS_OK;
 }
 
+
+void
+MigrationBackupManager::Chunk::append(
+    LogEntryType type, uint32_t length, Buffer &entryBuffer)
+{
+    Segment::EntryHeader entryHeader(type, length);
+
+    buffer.appendCopy(&entryHeader);
+    checksum.update(&entryHeader, sizeof(entryHeader));
+
+    buffer.appendCopy(&length, entryHeader.getLengthBytes());
+    checksum.update(&length, entryHeader.getLengthBytes());
+    buffer.appendCopy(entryBuffer.getRange(0, length), length);
+}
+
+void MigrationBackupManager::Chunk::createSegmentCertificate(
+    SegmentCertificate *certificate)
+{
+    certificate->segmentLength = buffer.size();
+
+    checksum.update(certificate, static_cast<unsigned>(
+        sizeof(*certificate) - sizeof(certificate->checksum)));
+
+    certificate->checksum = checksum.getResult();
+}
+
+uint32_t MigrationBackupManager::Chunk::size()
+{
+    return buffer.size();
+}
 
 }

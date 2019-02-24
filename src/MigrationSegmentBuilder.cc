@@ -45,13 +45,7 @@ MigrationSegmentBuilder::build(
             header = headerBuffer.getStart<SegmentHeader>();
             continue;
         }
-        if (type != LOG_ENTRY_TYPE_OBJ && type != LOG_ENTRY_TYPE_OBJTOMB
-            && type != LOG_ENTRY_TYPE_SAFEVERSION
-            && type != LOG_ENTRY_TYPE_RPCRESULT
-            && type != LOG_ENTRY_TYPE_PREP
-            && type != LOG_ENTRY_TYPE_PREPTOMB
-            && type != LOG_ENTRY_TYPE_TXDECISION
-            && type != LOG_ENTRY_TYPE_TXPLIST)
+        if (type != LOG_ENTRY_TYPE_OBJ && type != LOG_ENTRY_TYPE_OBJTOMB)
             continue;
 
         if (header == NULL) {
@@ -62,12 +56,11 @@ MigrationSegmentBuilder::build(
         Buffer entryBuffer;
         it.appendToBuffer(entryBuffer);
 
-        uint64_t tableId = -1;
-        KeyHash keyHash = -1;
+        uint64_t tableId;
+        KeyHash keyHash;
         if (type == LOG_ENTRY_TYPE_SAFEVERSION) {
             // Copy SAFEVERSION to all the partitions for safeVersion recovery
             // on all recovery masters
-            LogPosition position(header->segmentId, it.getOffset());
             if (!migrationSegment->append(type, entryBuffer)) {
                     LOG(WARNING, "Failure appending to a recovery segment "
                                  "for a replica of <%s,%lu>",
@@ -138,14 +131,6 @@ MigrationSegmentBuilder::build(
             continue;
         }
 
-//        LogPosition position(header->segmentId, it.getOffset());
-//        if (!isEntryAlive(position, partition)) {
-//                LOG(NOTICE, "Skipping object with <tableId, keyHash> of "
-//                            "<%lu,%lu> because it appears to have existed prior "
-//                            "to this tablet's creation.", tableId, keyHash);
-//            continue;
-//        }
-
         if (!migrationSegment->append(type, entryBuffer)) {
                 LOG(WARNING, "Failure appending to a recovery segment "
                              "for a replica of <%s,%lu>",
@@ -194,13 +179,5 @@ bool MigrationSegmentBuilder::extractDigest(const void *buffer,
     return foundDigest;
 }
 
-bool MigrationSegmentBuilder::isEntryAlive(
-    const LogPosition &position,
-    const ProtoBuf::Tablets::Tablet *tablet)
-{
-    LogPosition minimum(tablet->ctime_log_head_id(),
-                        tablet->ctime_log_head_offset());
-    return position >= minimum;
-}
 
 }

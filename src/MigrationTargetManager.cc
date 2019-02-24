@@ -84,8 +84,7 @@ int MigrationTargetManager::poll()
 MigrationTargetManager::Migration::Migration(
     Context *context, Buffer *payload, FinishNotifier *finishNotifier)
     : context(context), localLocator(), migrationId(), replicas(),
-      replicaIterator(), rangeList(), tableId(), firstKeyHash(),
-      lastKeyHash(), sourceServerId(),
+      rangeList(), tableId(), firstKeyHash(), lastKeyHash(), sourceServerId(),
       targetServerId(), tabletManager(), objectManager(), phase(SETUP),
       freePullBuffers(), freeReplayBuffers(), freePullRpcs(), busyPullRpcs(),
       freeReplayRpcs(), busyReplayRpcs(), freeSideLogs(), sideLogCommitRpc(),
@@ -112,25 +111,23 @@ MigrationTargetManager::Migration::Migration(
     objectManager->raiseSafeVersion(reqHdr->safeVersion);
     localLocator = masterService->config->localLocator;
 
-    replicas.reserve(numReplicas);
     uint32_t offset = sizeof32(WireFormat::MigrationTargetStart::Request);
     for (uint32_t i = 0; i < numReplicas; ++i) {
         const WireFormat::MigrationTargetStart::Replica *replicaLocation =
             payload->getOffset<WireFormat::MigrationTargetStart::Replica>(
                 offset);
         offset += sizeof32(WireFormat::MigrationTargetStart::Replica);
-        Replica replica(replicaLocation->backupId, replicaLocation->segmentId);
-        replicas.push_back(replica);
+        replicas.push_back(
+            new Replica(replicaLocation->backupId, replicaLocation->segmentId));
     }
 
     RAMCLOUD_LOG(WARNING, "replicas number: %u", numReplicas);
-    replicaIterator = replicas.begin();
     //TODO: handle log head
-    RAMCLOUD_CLOG(WARNING, "skip segment %lu", replicaIterator->segmentId);
-    replicaIterator++;
+    RAMCLOUD_CLOG(WARNING, "skip segment %lu", replicas.front()->segmentId);
+    replicas.pop_front();
     numReplicas--;
-    RAMCLOUD_CLOG(WARNING, "skip segment %lu", replicaIterator->segmentId);
-    replicaIterator++;
+    RAMCLOUD_CLOG(WARNING, "skip segment %lu", replicas.front()->segmentId);
+    replicas.pop_front();
     numReplicas--;
 
     for (uint32_t i = 0; i < PIPELINE_DEPTH; i++) {
@@ -253,7 +250,7 @@ int MigrationTargetManager::Migration::pullAndReplay_main()
     return workDone;
 }
 
-__inline __attribute__((always_inline))
+//__inline __attribute__((always_inline))
 int MigrationTargetManager::Migration::pullAndReplay_reapPullRpcs()
 {
     int workDone = 0;
@@ -261,10 +258,12 @@ int MigrationTargetManager::Migration::pullAndReplay_reapPullRpcs()
 
     for (size_t i = 0; i < numBusyPullRpcs; i++) {
         Tub<PullRpc> *pullRpc = busyPullRpcs.front();
-        if ((*pullRpc)->rpc->isReady()) {
-            RAMCLOUD_LOG(NOTICE, "pulled segment %lu", (*pullRpc)->segmentId);
-            (*pullRpc)->rpc->wait();
-            freeReplayBuffers.push_back((*pullRpc)->responseBuffer);
+        if ((*pullRpc)->isReady()) {
+            bool done = (*pullRpc)->wait();
+            Replica *replica = (*pullRpc)->replica;
+
+            replica->done = done;
+            freeReplayBuffers.emplace_back((*pullRpc)->responseBuffer, replica);
             (*pullRpc).destroy();
 
             freePullRpcs.push_back(pullRpc);
@@ -277,7 +276,7 @@ int MigrationTargetManager::Migration::pullAndReplay_reapPullRpcs()
     return 0;
 }
 
-__inline __attribute__((always_inline))
+//__inline __attribute__((always_inline))
 int MigrationTargetManager::Migration::pullAndReplay_reapReplayRpcs()
 {
     int workDone = 0;
@@ -290,17 +289,26 @@ int MigrationTargetManager::Migration::pullAndReplay_reapReplayRpcs()
         if ((*replayRpc)->isReady()) {
             Tub<Buffer> *responseBuffer = (*replayRpc)->responseBuffer;
             Tub<SideLog> *sideLog = (*replayRpc)->sideLog;
+            Replica *replica = (*replayRpc)->replica;
             uint32_t numReplayedBytes = (*responseBuffer)->size();
             totalReplayedBytes += numReplayedBytes;
             (*responseBuffer).destroy();
             freePullBuffers.push_back(responseBuffer);
             freeSideLogs.push_back(sideLog);
 
+            if ((*replayRpc)->done) {
+                numCompletedReplicas++;
+                double time = Cycles::toSeconds(
+                    Cycles::rdtsc() - migrationStartTS);
+                RAMCLOUD_LOG(NOTICE, "replay progress: %u/%u, time: %.3lf",
+                             numCompletedReplicas, numReplicas, time);
+            } else {
+                replica->seqId += 1;
+                replicas.push_front(replica);
+            }
+
             (*replayRpc).destroy();
             freeReplayRpcs.push_back(replayRpc);
-            numCompletedReplicas++;
-            RAMCLOUD_LOG(NOTICE, "replay progress: %u/%u",
-                         numCompletedReplicas, numReplicas);
             workDone++;
         } else {
             busyReplayRpcs.push_back(replayRpc);
@@ -310,21 +318,21 @@ int MigrationTargetManager::Migration::pullAndReplay_reapReplayRpcs()
     return 0;
 }
 
-__inline __attribute__((always_inline))
+//__inline __attribute__((always_inline))
 int MigrationTargetManager::Migration::pullAndReplay_sendPullRpcs()
 {
     int workDone = 0;
     while (!freePullRpcs.empty() && !freePullBuffers.empty() &&
-           replicaIterator != replicas.end()) {
+           !replicas.empty()) {
         Tub<PullRpc> *pullRpc = freePullRpcs.front();
 
         Tub<Buffer> *responseBuffer = freePullBuffers.front();
         responseBuffer->construct();
-        pullRpc->construct(context, replicaIterator->backupId, migrationId,
-                           sourceServerId, replicaIterator->segmentId,
-                           responseBuffer);
-        RAMCLOUD_LOG(DEBUG, "fetch segment %lu", replicaIterator->segmentId);
-        replicaIterator++;
+
+        Replica *replica = replicas.front();
+        pullRpc->construct(context, migrationId, replica,
+                           sourceServerId, responseBuffer);
+        replicas.pop_front();
 
         freePullBuffers.pop_front();
         freePullRpcs.pop_front();
@@ -335,7 +343,7 @@ int MigrationTargetManager::Migration::pullAndReplay_sendPullRpcs()
     return workDone;
 }
 
-__inline __attribute__((always_inline))
+//__inline __attribute__((always_inline))
 int MigrationTargetManager::Migration::pullAndReplay_sendReplayRpcs()
 {
 
@@ -344,19 +352,20 @@ int MigrationTargetManager::Migration::pullAndReplay_sendReplayRpcs()
     while (!freeReplayRpcs.empty() && !freeReplayBuffers.empty()) {
         Tub<ReplayRpc> *replayRpc = freeReplayRpcs.front();
         Tub<SideLog> *sideLog = freeSideLogs.front();
-        Tub<Buffer> *responseBuffer = freeReplayBuffers.front();
-        void *respHdr = (*responseBuffer)->getRange(0, sizeof32(
-            WireFormat::MigrationGetData::Response));
+        auto bufferAndReplica = freeReplayBuffers.front();
+        Tub<Buffer> *responseBuffer = bufferAndReplica.first;
+        Replica *replica = bufferAndReplica.second;
+
+        auto respHdr = (*responseBuffer)->
+            getOffset<WireFormat::MigrationGetData::Response>(0);
 
         SegmentCertificate certificate =
-            (reinterpret_cast<
-                WireFormat::MigrationGetData::Response *>(
-                respHdr))->certificate;
+            respHdr->certificate;
         (*responseBuffer)->truncateFront(
             sizeof32(WireFormat::MigrationGetData::Response));
 
-        (*replayRpc).construct(responseBuffer, sideLog,
-                               localLocator, certificate);
+        (*replayRpc).construct(replica, responseBuffer, sideLog,
+                               localLocator, respHdr->done, certificate);
         context->workerManager->handleRpc(replayRpc->get());
 
         freeReplayBuffers.pop_front();
@@ -408,13 +417,11 @@ int MigrationTargetManager::Migration::sideLogCommit()
     return workDone;
 }
 
-MigrationTargetManager::Migration::Replica::Replica(
+MigrationTargetManager::Replica::Replica(
     uint64_t backupId, uint64_t segmentId)
-    : backupId(backupId), segmentId(segmentId)
+    : backupId(backupId), segmentId(segmentId), seqId(0), done(false)
 {
-
 }
-
 
 MigrationTargetManager::RealFinishNotifier::RealFinishNotifier()
     : rpc()

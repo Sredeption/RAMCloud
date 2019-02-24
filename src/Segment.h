@@ -436,7 +436,7 @@ class Segment {
     Crc32C checksum;
 
     friend class SegmentIterator;
-
+    friend class MigrationBackupManager;
     DISALLOW_COPY_AND_ASSIGN(Segment);
 };
 
