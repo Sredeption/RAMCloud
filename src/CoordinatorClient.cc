@@ -957,7 +957,6 @@ MigrationFinishedRpc::MigrationFinishedRpc(
     WireFormat::MigrationFinished::Request *reqHdr(
         allocHeader<WireFormat::MigrationFinished>());
     reqHdr->migrationId = migrationId;
-    reqHdr->targetId = targetServerId.getId();
     reqHdr->successful = successful;
     send();
 }

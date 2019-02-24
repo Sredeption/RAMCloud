@@ -424,7 +424,7 @@ MigrationTargetManager::Replica::Replica(
 }
 
 MigrationTargetManager::RealFinishNotifier::RealFinishNotifier()
-    : rpc()
+    : coordinatorRpc(), sourceRpc()
 {
 }
 
@@ -434,27 +434,33 @@ MigrationTargetManager::RealFinishNotifier::~RealFinishNotifier()
 
 void MigrationTargetManager::RealFinishNotifier::notify(Migration *migration)
 {
-    rpc.construct(migration->context, migration->migrationId,
-                  migration->targetServerId, true);
+    if (!coordinatorRpc)
+        coordinatorRpc.construct(migration->context, migration->migrationId,
+                                 migration->targetServerId, true);
+    if (!sourceRpc)
+        sourceRpc.construct(migration->context, migration->sourceServerId,
+                            migration->migrationId, true);
 }
 
 bool MigrationTargetManager::RealFinishNotifier::isSent()
 {
-    return rpc;
+    return coordinatorRpc && sourceRpc;
 }
 
 bool MigrationTargetManager::RealFinishNotifier::isReady()
 {
-    if (rpc)
-        return rpc->isReady();
+    if (coordinatorRpc && sourceRpc)
+        return coordinatorRpc->isReady() && sourceRpc->isReady();
     else
         return false;
 }
 
 bool MigrationTargetManager::RealFinishNotifier::wait()
 {
-    if (rpc)
-        return rpc->wait();
+    if (coordinatorRpc && sourceRpc) {
+        sourceRpc->wait();
+        return coordinatorRpc->wait();
+    }
     return false;
 
 }

@@ -26,6 +26,7 @@ void MigrationClient::putTablet(uint64_t tableId, const void *key,
     auto result = tableMap.emplace(
         TabletKey{tablet.tableId, tablet.startKeyHash},
         MigratingTablet(tablet, sourceId, targetId));
+    RAMCLOUD_LOG(NOTICE, "%lu to migrating", tablet.tableId);
     MigratingTablet &migratingTablet = result.first->second;
     CoordinatorClient::migrationGetLocator(
         ramcloud->clientContext,
@@ -59,6 +60,7 @@ void MigrationClient::removeTablet(uint64_t tableId, const void *key,
     ramcloud->clientContext->objectFinder->flush(tableId);
     Tablet tablet = ramcloud->clientContext->objectFinder
         ->lookupTablet(tableId, keyHash)->tablet;
+    RAMCLOUD_LOG(NOTICE, "%lu finish migrating", tablet.tableId);
 
     tableMap.erase(TabletKey{tablet.tableId, tablet.startKeyHash});
 }
@@ -132,15 +134,16 @@ void MigrationReadTask::performTask()
             success = success && targetReadRpc->wait(
                 &targetVersion, &targetObjectExists);
 
+            if (!migrating) {
+                ramcloud->migrationClient->removeTablet(tableId, key,
+                                                        keyLength);
+            }
+
             if (!success) {
                 state = INIT;
                 return;
             }
 
-            if (!migrating) {
-                ramcloud->migrationClient->removeTablet(tableId, key,
-                                                        keyLength);
-            }
             value->reset();
 
             uint64_t versionConclusion;

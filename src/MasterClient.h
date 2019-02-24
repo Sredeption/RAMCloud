@@ -262,6 +262,24 @@ class MigrationTargetStartRpc : public ServerIdRpcWrapper {
     DISALLOW_COPY_AND_ASSIGN(MigrationTargetStartRpc);
 };
 
+class MigrationSourceFinishRpc : public ServerIdRpcWrapper {
+  PUBLIC:
+
+    MigrationSourceFinishRpc(Context *context, ServerId serverId,
+                             uint64_t migrationId, bool successful);
+
+    ~MigrationSourceFinishRpc()
+    {}
+
+    void wait()
+    {
+        waitAndCheckErrors();
+    }
+
+  PRIVATE:
+    DISALLOW_COPY_AND_ASSIGN(MigrationSourceFinishRpc);
+};
+
 class MigrationIsLockedRpc : public ServerIdRpcWrapper {
   PUBLIC:
 

@@ -2251,7 +2251,7 @@ MigrationReadRpc::MigrationReadRpc(RamCloud *ramcloud, string locator,
                                    uint16_t keyLength, Buffer *value,
                                    const RejectRules *rejectRules)
     : ClientServerIdRpcWrapper(ramcloud->clientContext, locator,
-                         sizeof(WireFormat::Read::Response), value)
+                               sizeof(WireFormat::Read::Response), value)
 {
     value->reset();
     WireFormat::Read::Request *reqHdr(allocHeader<WireFormat::Read>());
@@ -2274,6 +2274,13 @@ MigrationReadRpc::wait(uint64_t *version, bool *objectExists, bool *migrating,
         getResponseHeader<WireFormat::Read>());
     if (version != NULL)
         *version = respHdr->version;
+
+    if (respHdr->common.status == STATUS_UNKNOWN_TABLET) {
+        if (migrating) {
+            *migrating = false;
+        }
+        return false;
+    }
 
     if (respHdr->common.status != STATUS_OK) {
         if (objectExists != NULL &&

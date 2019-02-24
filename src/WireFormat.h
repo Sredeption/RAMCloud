@@ -1310,7 +1310,6 @@ struct MigrationFinished {
     struct Request {
         RequestCommon common;
         uint64_t migrationId;
-        uint64_t targetId;
         bool successful;
     } __attribute__((packed));
     struct Response {
@@ -1323,9 +1322,8 @@ struct MigrationMasterFinished {
     static const Opcode opcode = MIGRATION_MASTERFINISH;
     static const ServiceType service = MASTER_SERVICE;
     struct Request {
-        RequestCommon common;
+        RequestCommonWithId common;
         uint64_t migrationId;
-        uint64_t targetId;
         bool successful;
     } __attribute__((packed));
     struct Response {

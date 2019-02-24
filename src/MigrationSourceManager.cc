@@ -192,8 +192,10 @@ void MigrationSourceManager::Migration::start()
 
 void MigrationSourceManager::Migration::finish()
 {
-    manager->masterService->tabletManager.deleteTablet(targetId, firstKeyHash,
+    RAMCLOUD_LOG(NOTICE, "migration %lu finished", migrationId);
+    manager->masterService->tabletManager.deleteTablet(tableId, firstKeyHash,
                                                        lastKeyHash);
+    manager->masterService->objectManager.removeOrphanedObjects();
 
 }
 

@@ -771,6 +771,17 @@ MigrationTargetStartRpc::MigrationTargetStartRpc(
     send();
 }
 
+MigrationSourceFinishRpc::MigrationSourceFinishRpc(
+    Context *context, ServerId serverId, uint64_t migrationId, bool successful)
+    : ServerIdRpcWrapper(context, serverId,
+                         sizeof(WireFormat::MigrationMasterFinished::Response))
+{
+    WireFormat::MigrationMasterFinished::Request *reqHdr(
+        allocHeader<WireFormat::MigrationMasterFinished>(serverId));
+    reqHdr->migrationId = migrationId;
+    reqHdr->successful = successful;
+    send();
+}
 
 bool MasterClient::migrationIsLocked(Context *context, ServerId sourceId,
                                      uint64_t migrationId, Key &key,
@@ -1227,6 +1238,7 @@ TxHintFailedRpc::TxHintFailedRpc(
                                  * participantCount);
     send();
 }
+
 
 
 }  // namespace RAMCloud
