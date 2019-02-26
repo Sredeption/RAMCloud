@@ -32,6 +32,7 @@ def backup_migrate(num_servers,
                    coordinator_args='',
                    master_args='',
                    backup_args='',
+                   dpdk_port=None,
                    master_ram=None,
                    old_master_ram=None,
                    num_removals=0,
@@ -58,6 +59,7 @@ def backup_migrate(num_servers,
     args['coordinator_host'] = getOldMasterHost()
     args['coordinator_args'] = coordinator_args
     args['share_hosts'] = True
+    args['dpdk_port'] = dpdk_port
 
     if backup_args:
         args['backup_args'] += backup_args
@@ -187,6 +189,8 @@ if __name__ == '__main__':
     parser.add_option('--trend',
                       dest='trends', action='append',
                       help='Add to dumpstr trend line (may be repeated)')
+    parser.add_option('--dpdkPort', type=int, dest='dpdk_port',
+                      help='Ethernet port that the DPDK driver should use')
     (options, args) = parser.parse_args()
     args = {}
     args['num_servers'] = options.num_servers
@@ -211,6 +215,8 @@ if __name__ == '__main__':
     args['coordinator_args'] = options.coordinator_args
     args['master_args'] = options.master_args
     args['backup_args'] = options.backup_args
+    args['dpdk_port'] = options.dpdk_port
+
     try:
         stats = backup_migrate(**args)
 
