@@ -99,7 +99,7 @@ void MigrationSourceManager::finishMigration(uint64_t migrationId)
 MigrationSourceManager::Migration *
 MigrationSourceManager::getMigration(uint64_t migrationId)
 {
-    std::lock_guard<std::mutex> guard(listLock);
+//    std::lock_guard<std::mutex> guard(listLock);
     std::unordered_map<uint64_t, Migration *>::iterator migrationPair =
         migrations.find(migrationId);
     if (migrationPair == migrations.end())

@@ -298,10 +298,13 @@ int MigrationTargetManager::Migration::pullAndReplay_reapReplayRpcs()
 
             if ((*replayRpc)->done) {
                 numCompletedReplicas++;
-                double time = Cycles::toSeconds(
-                    Cycles::rdtsc() - migrationStartTS);
-                RAMCLOUD_LOG(NOTICE, "replay progress: %u/%u, time: %.3lf",
-                             numCompletedReplicas, numReplicas, time);
+                if (numCompletedReplicas == numReplicas ||
+                    numCompletedReplicas % 10 == 0) {
+                    double time = Cycles::toSeconds(
+                        Cycles::rdtsc() - migrationStartTS);
+                    RAMCLOUD_LOG(NOTICE, "replay progress: %u/%u, time: %.3lf",
+                                 numCompletedReplicas, numReplicas, time);
+                }
             } else {
                 replica->seqId += 1;
                 replicas.push_front(replica);

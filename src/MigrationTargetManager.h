@@ -122,7 +122,7 @@ class MigrationTargetManager : public Dispatch::Poller {
 
         };
 
-        static const uint32_t MAX_PARALLEL_PULL_RPCS = 4;
+        static const uint32_t MAX_PARALLEL_PULL_RPCS = 1;
 
         Tub<PullRpc> pullRpcs[MAX_PARALLEL_PULL_RPCS];
 
@@ -194,7 +194,7 @@ class MigrationTargetManager : public Dispatch::Poller {
             DISALLOW_COPY_AND_ASSIGN(ReplayRpc);
         };
 
-        static const uint32_t MAX_PARALLEL_REPLAY_RPCS = 6;
+        static const uint32_t MAX_PARALLEL_REPLAY_RPCS = 1;
         Tub<ReplayRpc> replayRpcs[MAX_PARALLEL_REPLAY_RPCS];
         std::deque<Tub<ReplayRpc> *> freeReplayRpcs;
         std::deque<Tub<ReplayRpc> *> busyReplayRpcs;

@@ -120,6 +120,7 @@ CLIENT_SRCFILES := \
 		   src/WorkerManager.cc \
 		   src/WorkerSession.cc \
 		   src/WorkerTimer.cc \
+		   src/WorkloadGenerator.cc \
 		   src/ZooStorage.cc \
 		   $(INFINIBAND_SRCFILES) \
 		   $(SOLARFLARE_SRC) \
