@@ -31,6 +31,7 @@
 #include "PerfCounter.h"
 #include "ProtoBuf.h"
 #include "RawMetrics.h"
+#include "RocksteadyMigrationManager.h"
 #include "Segment.h"
 #include "ServerRpcPool.h"
 #include "ShortMacros.h"
@@ -249,6 +250,41 @@ MasterService::dispatch(WireFormat::Opcode opcode, Rpc* rpc)
         case WireFormat::RemoveIndexEntry::opcode:
             callHandler<WireFormat::RemoveIndexEntry, MasterService,
                         &MasterService::removeIndexEntry>(rpc);
+            break;
+        case WireFormat::RocksteadyDropSourceTablet::opcode:
+            callHandler<WireFormat::RocksteadyDropSourceTablet, MasterService,
+                        &MasterService::rocksteadyDropSourceTablet>(rpc);
+            break;
+        case WireFormat::RocksteadyMigrationPriorityHashes::opcode:
+            callHandler<WireFormat::RocksteadyMigrationPriorityHashes,
+                        MasterService,
+                        &MasterService::rocksteadyMigrationPriorityHashes>(rpc);
+            break;
+        case WireFormat::RocksteadyMigrationPullHashes::opcode:
+            callHandler<WireFormat::RocksteadyMigrationPullHashes,
+                        MasterService,
+                        &MasterService::rocksteadyMigrationPullHashes>(rpc);
+            break;
+        case WireFormat::RocksteadyPrepForMigration::opcode:
+            callHandler<WireFormat::RocksteadyPrepForMigration, MasterService,
+                        &MasterService::rocksteadyPrepForMigration>(rpc);
+            break;
+        case WireFormat::RocksteadyMigrationReplay::opcode:
+            callHandler<WireFormat::RocksteadyMigrationReplay, MasterService,
+                        &MasterService::rocksteadyMigrationReplay>(rpc);
+            break;
+        case WireFormat::RocksteadyMigrationPriorityReplay::opcode:
+            callHandler<WireFormat::RocksteadyMigrationPriorityReplay,
+                        MasterService,
+                        &MasterService::rocksteadyMigrationPriorityReplay>(rpc);
+            break;
+        case WireFormat::RocksteadyMigrateTablet::opcode:
+            callHandler<WireFormat::RocksteadyMigrateTablet, MasterService,
+                        &MasterService::rocksteadyMigrateTablet>(rpc);
+            break;
+        case WireFormat::RocksteadySideLogCommit::opcode:
+            callHandler<WireFormat::RocksteadySideLogCommit, MasterService,
+                        &MasterService::rocksteadySideLogCommit>(rpc);
             break;
         case WireFormat::SplitAndMigrateIndexlet::opcode:
             callHandler<WireFormat::SplitAndMigrateIndexlet, MasterService,
@@ -2116,6 +2152,419 @@ MasterService::requestRemoveIndexEntries(Object& object)
             rpcs[keyIndex-1]->wait();
         }
     }
+}
+
+void
+MasterService::rocksteadyDropSourceTablet(
+        const WireFormat::RocksteadyDropSourceTablet::Request* reqHdr,
+        WireFormat::RocksteadyDropSourceTablet::Response* respHdr,
+        Rpc* rpc)
+{
+    const uint64_t tableId = reqHdr->tableId;
+    const uint64_t startKeyHash = reqHdr->startKeyHash;
+    const uint64_t endKeyHash = reqHdr->endKeyHash;
+
+    TabletManager::Tablet sourceTablet;
+    bool found = tabletManager.getTablet(tableId, startKeyHash, endKeyHash,
+            &sourceTablet);
+
+    if (!found) {
+        LOG(NOTICE, "Received a rocksteady drop tablet request on a tablet"
+                " that does not exist on this master: tablet[0x%lx, 0x%lx],"
+                " tableId %lu", startKeyHash, endKeyHash, tableId);
+        respHdr->common.status = STATUS_UNKNOWN_TABLET;
+        return;
+    }
+
+    // If ROCKSTEADY_SOURCE_OWNS_TABLET is defined, the tablet was never
+    // locked for migration to begin with.
+#ifndef ROCKSTEADY_SOURCE_OWNS_TABLET
+    if (sourceTablet.state != TabletManager::LOCKED_FOR_MIGRATION) {
+        LOG(NOTICE, "Received a rocksteady drop tablet request on a tablet"
+                " that was not previously locked for migration: tablet[0x%lx,"
+                " 0x%lx], tableId %lu", startKeyHash, endKeyHash, tableId);
+        respHdr->common.status = STATUS_INTERNAL_ERROR;
+        return;
+    }
+#endif // ROCKSTEADY_SOURCE_OWNS_TABLET
+
+    bool removed = tabletManager.deleteTablet(tableId, startKeyHash,
+            endKeyHash);
+
+    if (removed) {
+        TableStats::deleteKeyHashRange(&masterTableMetadata, tableId,
+                startKeyHash, endKeyHash);
+    }
+
+    objectManager.removeOrphanedObjects();
+
+    LOG(NOTICE, "Dropping tablet[0x%lx, 0x%lx], tableId %lu. Tablet was"
+            " migrated out using the rocksteady protocol.", startKeyHash,
+            endKeyHash, tableId);
+
+    respHdr->common.status = STATUS_OK;
+    return;
+}
+
+void
+MasterService::rocksteadyMigrationPriorityHashes(
+        const WireFormat::RocksteadyMigrationPriorityHashes::Request* reqHdr,
+        WireFormat::RocksteadyMigrationPriorityHashes::Response* respHdr,
+        Rpc* rpc)
+{
+    const uint64_t tableId = reqHdr->tableId;
+    const uint64_t startKeyHash = reqHdr->startKeyHash;
+    const uint64_t endKeyHash = reqHdr->endKeyHash;
+    const uint64_t tombstoneSafeVersion = reqHdr->tombstoneSafeVersion;
+    const uint64_t numRequestedHashes = reqHdr->numRequestedHashes;
+
+    Buffer* requestedHashes = rpc->requestPayload;
+    uint32_t reqHdrSize = sizeof32(*reqHdr);
+
+    Buffer* response = rpc->replyPayload;
+    uint32_t respHdrSize = sizeof32(*respHdr);
+
+    SegmentCertificate certificate;
+    uint32_t numReturnedLogEntries = 0;
+
+    TabletManager::Tablet sourceTablet;
+    bool found = tabletManager.getTablet(tableId, startKeyHash, endKeyHash,
+            &sourceTablet);
+
+    if (!found) {
+        LOG(NOTICE, "Received a priority hashes migration request for a"
+                " tablet that does not exist on this master: tablet[0x%lx,"
+                " 0x%lx], tableId %lu", startKeyHash, endKeyHash, tableId);
+        respHdr->common.status = STATUS_UNKNOWN_TABLET;
+        return;
+    }
+
+    // If ROCKSTEADY_SOURCE_OWNS_TABLET is defined, then do not check for a
+    // locked tablet.
+#ifndef ROCKSTEADY_SOURCE_OWNS_TABLET
+    if (sourceTablet.state != TabletManager::LOCKED_FOR_MIGRATION) {
+        LOG(NOTICE, "Received a priority hashes migration request for a"
+                " tablet that was not previously locked for migration:"
+                " tablet[0x%lx, 0x%lx], tableId %lu", startKeyHash,
+                endKeyHash, tableId);
+        respHdr->common.status = STATUS_INTERNAL_ERROR;
+        return;
+    }
+#endif // ROCKSTEADY_SOURCE_OWNS_TABLET
+
+    numReturnedLogEntries = objectManager.rocksteadyMigrationPriorityHashes(
+            tableId, startKeyHash, endKeyHash, tombstoneSafeVersion,
+            numRequestedHashes, requestedHashes, reqHdrSize, response,
+            respHdrSize, &certificate);
+
+    respHdr->numReturnedLogEntries = numReturnedLogEntries;
+    respHdr->certificate = certificate;
+    respHdr->common.status = STATUS_OK;
+    return;
+}
+
+/**
+ * Top level server method to handle the ROCKSTEADY_MIGRATION_PULL_HASHES
+ * request.
+ *
+ * This method first ensures that the requested tablet is present on the
+ * master, has been locked for migration, and that the hash table buckets
+ * to be searched are bounded by the total number of hash table buckets on
+ * the master. It then invokes the object manager which populates the
+ * response payload of the rpc with log entries belonging to the tablet
+ * under migration.
+ *
+ * \copydetails Service::ping
+ */
+void
+MasterService::rocksteadyMigrationPullHashes(
+        const WireFormat::RocksteadyMigrationPullHashes::Request* reqHdr,
+        WireFormat::RocksteadyMigrationPullHashes::Response* respHdr,
+        Rpc* rpc)
+{
+    const uint64_t tableId = reqHdr->tableId;
+    const uint64_t startKeyHash = reqHdr->startKeyHash;
+    const uint64_t endKeyHash = reqHdr->endKeyHash;
+    const uint64_t currentHTBucket = reqHdr->currentHTBucket;
+    const uint64_t currentHTBucketEntry = reqHdr->currentHTBucketEntry;
+    const uint64_t endHTBucket = reqHdr->endHTBucket;
+    const uint32_t numRequestedBytes = reqHdr->numRequestedBytes;
+
+    uint64_t nextHTBucket = 0;
+    uint64_t nextHTBucketEntry = 0;
+    uint32_t numReturnedBytes = 0;
+    Buffer* response = rpc->replyPayload;
+    SegmentCertificate certificate;
+
+    // TODO: A spinlock is acquired inside getTablet. Can/Should this call be
+    // elliminated?
+    //
+    // Since the destination now owns the tablet, the next two checks can be
+    // performed only once before walking the hash table (unlike
+    // ObjectManager::readHashes). Requests to delete this tablet should be
+    // handled by the destination.
+    //
+    // Performing these checks here rather than before every hash table lookup
+    // helps avoid contention between multiple in progress pull hashes rpcs.
+
+    // Check to ensure that the requested tablet is present on this master.
+    TabletManager::Tablet sourceTablet;
+    bool found = tabletManager.getTablet(tableId, startKeyHash, endKeyHash,
+                         &sourceTablet);
+    if (!found) {
+        LOG(WARNING, "Migration Pull Hashes request for a tablet this master"
+                " does not posses: requested region [0x%lx, 0x%lx], table %lu,"
+                " and hash table bucket %lu.", startKeyHash, endKeyHash,
+                tableId, currentHTBucket);
+        respHdr->common.status = STATUS_UNKNOWN_TABLET;
+        return;
+    }
+
+#ifndef ROCKSTEADY_SOURCE_OWNS_TABLET
+    // Check if the tablet was previously locked for migration only if
+    // ROCKSTEADY_SOURCE_OWNS_TABLET is not defined.
+    if (sourceTablet.state != TabletManager::LOCKED_FOR_MIGRATION) {
+        LOG(WARNING, "Migration Pull Hashes request for a tablet that was"
+                " not previously locked for migration: requested region"
+                " [0x%lx, 0x%lx], table %lu, and hash table bucket %lu",
+                startKeyHash, endKeyHash, tableId, currentHTBucket);
+        respHdr->common.status = STATUS_INTERNAL_ERROR;
+        return;
+    }
+#endif // ROCKSTEADY_SOURCE_OWNS_TABLET
+
+    // Check to ensure that the set of hash table buckets to be scanned
+    // will not overflow this master's hash table.
+    uint64_t numHTBuckets = objectManager.getNumHashTableBuckets();
+    if (currentHTBucket >= numHTBuckets || endHTBucket >= numHTBuckets) {
+        LOG(WARNING, "Migration Pull Hashes request on an out of bounds"
+                " hash table bucket: currentHTBucket %lu, endHTBucket"
+                " %lu, and numHTBuckets %lu", currentHTBucket, endHTBucket,
+                numHTBuckets);
+        respHdr->common.status = STATUS_INTERNAL_ERROR;
+        return;
+    }
+
+    uint32_t respHdrSize = sizeof32(*respHdr);
+    numReturnedBytes = objectManager.rocksteadyMigrationPullHashes(
+                            tableId, startKeyHash, endKeyHash, currentHTBucket,
+                            currentHTBucketEntry, endHTBucket, respHdrSize,
+                            numRequestedBytes, response, &nextHTBucket,
+                            &nextHTBucketEntry, &certificate);
+
+    respHdr->nextHTBucket = nextHTBucket;
+    respHdr->nextHTBucketEntry = nextHTBucketEntry;
+    respHdr->numReturnedBytes = numReturnedBytes;
+    respHdr->certificate = certificate;
+    respHdr->common.status = STATUS_OK;
+
+    return;
+}
+
+void
+MasterService::rocksteadyMigrationReplay(
+        const WireFormat::RocksteadyMigrationReplay::Request* reqHdr,
+        WireFormat::RocksteadyMigrationReplay::Response* respHdr,
+        Rpc* rpc)
+{
+    Tub<Buffer>* replayBuffer =
+            reinterpret_cast<Tub<Buffer>*>(reqHdr->bufferPtr);
+    Tub<SideLog>* replaySideLog =
+            reinterpret_cast<Tub<SideLog>*>(reqHdr->sideLogPtr);
+    SegmentCertificate certificate = reqHdr->certificate;
+
+    const uint32_t bufferLength = (*replayBuffer)->size();
+    void* bufferMemory = (*replayBuffer)->getRange(0, bufferLength);
+
+    SegmentIterator segmentIt(bufferMemory, bufferLength, certificate);
+    segmentIt.checkMetadataIntegrity();
+
+    objectManager.replaySegment(replaySideLog->get(), segmentIt);
+
+    // If the source owns the tablet during migration, synchronize this
+    // sidelog with backups.
+#ifdef ROCKSTEADY_SOURCE_OWNS_TABLET
+    (*replaySideLog)->commit();
+#endif
+
+    respHdr->numReplayedBytes = bufferLength;
+    respHdr->common.status = STATUS_OK;
+    return;
+}
+
+void
+MasterService::rocksteadyMigrationPriorityReplay(
+        const WireFormat::RocksteadyMigrationPriorityReplay::Request* reqHdr,
+        WireFormat::RocksteadyMigrationPriorityReplay::Response* respHdr,
+        Rpc* rpc)
+{
+    Tub<Buffer>* replayBuffer =
+            reinterpret_cast<Tub<Buffer>*>(reqHdr->bufferPtr);
+    Tub<SideLog>* replaySideLog =
+            reinterpret_cast<Tub<SideLog>*>(reqHdr->sideLogPtr);
+    SegmentCertificate certificate = reqHdr->certificate;
+
+    const uint32_t bufferLength = (*replayBuffer)->size();
+    void* bufferMemory = (*replayBuffer)->getRange(0, bufferLength);
+
+    SegmentIterator segmentIt(bufferMemory, bufferLength, certificate);
+    segmentIt.checkMetadataIntegrity();
+
+    objectManager.replaySegment(replaySideLog->get(), segmentIt);
+
+    respHdr->numReplayedBytes = bufferLength;
+    respHdr->common.status = STATUS_OK;
+    return;
+}
+
+void
+MasterService::rocksteadyMigrateTablet(
+        const WireFormat::RocksteadyMigrateTablet::Request* reqHdr,
+        WireFormat::RocksteadyMigrateTablet::Response* respHdr,
+        Rpc* rpc)
+{
+    const uint64_t tableId = reqHdr->tableId;
+    const uint64_t startKeyHash = reqHdr->startKeyHash;
+    const uint64_t endKeyHash = reqHdr->endKeyHash;
+    const ServerId sourceServerId(reqHdr->sourceServerId);
+
+    // Ignore requests to migrate data to self.
+    if (serverId == sourceServerId) {
+        LOG(WARNING, "Ignoring request to migrate tablet[0x%lx, 0x%lx] in"
+                " table %lu to self.", startKeyHash, endKeyHash, tableId);
+
+        respHdr->migrationStarted = false;
+        respHdr->common.status = STATUS_REQUEST_FORMAT_ERROR;
+        return;
+    }
+
+    bool tabletExists = tabletManager.getTablet(tableId, startKeyHash,
+                            endKeyHash);
+
+    // Ignore requests on tablets that this master already owns.
+    if (tabletExists) {
+        LOG(WARNING, "Ignoring request to migrate tablet[0x%lx, 0x%lx] in table"
+                " %lu from master %lu already owned by this master,",
+                startKeyHash, endKeyHash, tableId, sourceServerId.getId());
+
+        respHdr->migrationStarted = false;
+        respHdr->common.status = STATUS_INTERNAL_ERROR;
+        return;
+    }
+
+    bool migrationStarted = false;
+    {
+        Dispatch::Lock(context->dispatch);
+        migrationStarted = context->rocksteadyMigrationManager->startMigration(
+                sourceServerId, tableId, startKeyHash, endKeyHash);
+    }
+
+    if (migrationStarted) {
+        LOG(NOTICE, "Started migration of tablet[0x%lx, 0x%lx] in table %lu"
+                " from master %lu.", startKeyHash, endKeyHash, tableId,
+                sourceServerId.getId());
+
+        respHdr->migrationStarted = migrationStarted;
+        respHdr->common.status = STATUS_OK;
+    } else {
+        LOG(NOTICE, "Failed to start migration of tablet[0x%lx, 0x%lx] in"
+                " table %lu from master %lu.", startKeyHash, endKeyHash,
+                tableId, sourceServerId.getId());
+
+        respHdr->migrationStarted = migrationStarted;
+        respHdr->common.status = STATUS_INTERNAL_ERROR;
+    }
+
+    return;
+}
+
+/**
+ * Top level server method to handle the ROCKSTEADY_PREP_FOR_MIGRATION request.
+ *
+ * This method first checks to see if it owns the requested tablet. If it
+ * does, it locks the tablet for migration, allows any pending writes on the
+ * tablet to complete, and returns the safe version number and number of hash
+ * table buckets on the source.
+ *
+ * \copydetails Service::ping
+ */
+void
+MasterService::rocksteadyPrepForMigration(
+        const WireFormat::RocksteadyPrepForMigration::Request* reqHdr,
+        WireFormat::RocksteadyPrepForMigration::Response* respHdr,
+        Rpc* rpc)
+{
+    const uint64_t tableId = reqHdr->tableId;
+    const uint64_t startKeyHash = reqHdr->startKeyHash;
+    const uint64_t endKeyHash = reqHdr->endKeyHash;
+
+    LOG(NOTICE, "Received a prepare-for-migration request on"
+            " tablet[0x%lx, 0x%lx] in tablet %lu.", startKeyHash, endKeyHash,
+            tableId);
+
+    // Mark this rpc as read-only to avoid deadlock while waiting for appends
+    // to complete below.
+    rpc->worker->rpc->activities = Transport::ServerRpc::READ_ACTIVITY;
+
+    // First check if this server owns the tablet being requested for.
+    bool found = tabletManager.getTablet(tableId, startKeyHash,
+                         endKeyHash, NULL);
+    if (!found) {
+        LOG(WARNING, "Migration request for a tablet this master does not own:"
+                " tablet [0x%lx, 0x%lx] in table %lu", startKeyHash,
+                endKeyHash, tableId);
+        respHdr->common.status = STATUS_UNKNOWN_TABLET;
+        return;
+    }
+
+    // Lock the tablet for migration and allow any in progress writes on it
+    // to complete. If ROCKSTEADY_SOURCE_OWNS_TABLET is defined, then do not
+    // lock because ownership needs to be retained untill the end of migration.
+    // TODO: What happens if the tablet is already locked for migration?
+#ifndef ROCKSTEADY_SOURCE_OWNS_TABLET
+    bool changedState = tabletManager.changeState(tableId, startKeyHash,
+                                endKeyHash, TabletManager::NORMAL,
+                                TabletManager::LOCKED_FOR_MIGRATION);
+    if (!changedState) {
+        LOG(WARNING, "Failed to lock tablet for migration: "
+                "tablet [0x%lx, 0x%lx] in table %lu", startKeyHash,
+                endKeyHash, tableId);
+        respHdr->common.status = STATUS_INTERNAL_ERROR;
+        return;
+    }
+#endif // ROCKSTEADY_SOURCE_OWNS_TABLET
+
+    LogProtector::wait(context, Transport::ServerRpc::APPEND_ACTIVITY);
+
+    // Return the safe version number so that the destination may serve
+    // writes on objects that have not been migrated yet.
+    respHdr->safeVersion = objectManager.getSafeVersion();
+
+    // Return the number of hash table buckets so that the destination can
+    // pull tablet entries in parallel.
+    respHdr->numHTBuckets = objectManager.getNumHashTableBuckets();
+
+    LOG(NOTICE, "Successfully serviced a prepare-for-migration request on"
+            " tablet[0x%lx, 0x%lx] in tablet %lu.", startKeyHash, endKeyHash,
+            tableId);
+
+    respHdr->common.status = STATUS_OK;
+    return;
+}
+
+void
+MasterService::rocksteadySideLogCommit(
+        const WireFormat::RocksteadySideLogCommit::Request* reqHdr,
+        WireFormat::RocksteadySideLogCommit::Response* respHdr,
+        Rpc* rpc)
+{
+    Tub<SideLog>* sideLog =
+            reinterpret_cast<Tub<SideLog>*>(reqHdr->sideLogPtr);
+
+    (*sideLog)->commit();
+
+    respHdr->common.status = STATUS_OK;
+    return;
 }
 
 /**

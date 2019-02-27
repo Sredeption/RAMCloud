@@ -42,6 +42,7 @@ class MigrationTargetManager;
 class MockContextMember;
 class ObjectFinder;
 class PortAlarmTimer;
+class RocksteadyMigrationManager;
 class Service;
 class WorkerManager;
 class SessionAlarmTimer;
@@ -145,6 +146,9 @@ class Context {
 
     MigrationBackupManager *migrationBackupManager;
     MigrationTargetManager *migrationTargetManager;
+
+    RocksteadyMigrationManager* rocksteadyMigrationManager;
+
     // On masters, it points to a permanently mapped region of read-only
     // memory that can be used as zero-copy source buffer for transmission;
     // its size is guaranteed to be large enough to hold the largest

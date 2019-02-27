@@ -2449,6 +2449,42 @@ RemoveRpc::RemoveRpc(RamCloud* ramcloud, uint64_t tableId,
     send();
 }
 
+bool
+RamCloud::rocksteadyMigrateTablet(uint64_t tableId, uint64_t startKeyHash,
+        uint64_t endKeyHash, ServerId sourceServerId,
+        ServerId destinationServerId)
+{
+    RocksteadyMigrateTabletRpc rpc(this, tableId, startKeyHash, endKeyHash,
+            sourceServerId, destinationServerId);
+    return rpc.wait();
+}
+
+RocksteadyMigrateTabletRpc::RocksteadyMigrateTabletRpc(RamCloud* ramcloud,
+        uint64_t tableId, uint64_t startKeyHash, uint64_t endKeyHash,
+        ServerId sourceServerId, ServerId destinationServerId)
+    : ServerIdRpcWrapper(ramcloud->clientContext, destinationServerId,
+            sizeof(WireFormat::RocksteadyMigrateTablet::Response))
+{
+    WireFormat::RocksteadyMigrateTablet::Request* reqHdr(
+            allocHeader<WireFormat::RocksteadyMigrateTablet>(
+            destinationServerId));
+    reqHdr->tableId = tableId;
+    reqHdr->startKeyHash = startKeyHash;
+    reqHdr->endKeyHash = endKeyHash;
+    reqHdr->sourceServerId = sourceServerId.getId();
+    send();
+}
+
+bool
+RocksteadyMigrateTabletRpc::wait()
+{
+    waitAndCheckErrors();
+    const WireFormat::RocksteadyMigrateTablet::Response* respHdr(
+            getResponseHeader<WireFormat::RocksteadyMigrateTablet>());
+
+    return respHdr->migrationStarted;
+}
+
 /**
  * Wait for a remove RPC to complete, and return the same results as
  * #RamCloud::remove.

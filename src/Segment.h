@@ -244,7 +244,11 @@ class Segment {
 
         LogEntryType getEntry(SegletAllocator* allocator,
                               Buffer* buffer,
-                              uint32_t* lengthWithMetadata = NULL);
+                              uint32_t* lengthWithMetadata = NULL,
+                              bool zeroCopy = false,
+                              uint32_t* entryLength = NULL,
+                              bool includeHeader = false,
+                              uint32_t* headerLength = NULL);
 
         /**
          * Compare references for equality. Returns true if equal, else false.
@@ -437,6 +441,7 @@ class Segment {
 
     friend class SegmentIterator;
     friend class MigrationBackupManager;
+    friend class RocksteadyBufferCertificate;
     DISALLOW_COPY_AND_ASSIGN(Segment);
 };
 

@@ -92,6 +92,7 @@ Context::Context(bool hasDedicatedDispatchThread,
     , migrationManager(NULL)
     , migrationBackupManager(NULL)
     , migrationTargetManager(NULL)
+    , rocksteadyMigrationManager(NULL)
 #if HOMA_BENCHMARK
     , masterZeroCopyRegion(NULL)
 #else

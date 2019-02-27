@@ -959,7 +959,11 @@ Segment::getReference(uint32_t offset)
 LogEntryType
 Segment::Reference::getEntry(SegletAllocator* allocator,
                              Buffer* buffer,
-                             uint32_t* lengthWithMetadata)
+                             uint32_t* lengthWithMetadata,
+                             bool zeroCopy,
+                             uint32_t* entryLength,
+                             bool includeHeader,
+                             uint32_t* headerLength)
 {
     uint32_t segletSize = allocator->getSegletSize();
 
@@ -996,12 +1000,34 @@ Segment::Reference::getEntry(SegletAllocator* allocator,
                     prefetch(
                         reinterpret_cast<void*>(reference + fullHeaderLength),
                             dataLength);
-                buffer->append(
-                    reinterpret_cast<void*>(reference + fullHeaderLength),
-                    dataLength);
+                if (!zeroCopy) {
+                    if (!includeHeader) {
+                        buffer->append(
+                            reinterpret_cast<void*>(reference +
+                            fullHeaderLength), dataLength);
+                    } else {
+                        buffer->append(
+                            reinterpret_cast<void*>(reference), fullLength);
+                    }
+                } else {
+                    if (!includeHeader) {
+                        buffer->appendExternal(
+                            reinterpret_cast<void*>(reference +
+                            fullHeaderLength), dataLength);
+                    } else {
+                        buffer->appendExternal(
+                            reinterpret_cast<void*>(reference), fullLength);
+                    }
+                }
             }
             if (lengthWithMetadata != NULL)
                 *lengthWithMetadata = fullLength;
+
+            if (entryLength != NULL)
+                *entryLength = dataLength;
+
+            if (headerLength != NULL)
+                *headerLength = fullHeaderLength;
             return header->getType();
         }
     }

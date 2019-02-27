@@ -19,6 +19,7 @@
 #include "WorkerManager.h"
 #include "MigrationTargetManager.h"
 #include "MigrationBackupManager.h"
+#include "RocksteadyMigrationManager.h"
 
 namespace RAMCloud {
 /**
@@ -52,6 +53,8 @@ Server::Server(Context* context, const ServerConfig* config)
     context->migrationTargetManager = new MigrationTargetManager(context);
     context->migrationBackupManager = new MigrationBackupManager(
         context, config->localLocator, config->segmentSize);
+    context->rocksteadyMigrationManager =
+        new RocksteadyMigrationManager(context, config->localLocator);
 }
 
 /**

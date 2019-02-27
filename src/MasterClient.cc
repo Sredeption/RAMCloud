@@ -886,6 +886,275 @@ RemoveIndexEntryRpc::handleIndexDoesntExist()
     response->emplaceAppend<WireFormat::ResponseCommon>()->status = STATUS_OK;
 }
 
+void
+MasterClient::rocksteadyDropSourceTablet(Context* context,
+        ServerId sourceServerId, uint64_t tableId, uint64_t startKeyHash,
+        uint64_t endKeyHash)
+{
+    RocksteadyDropSourceTabletRpc rpc(context, sourceServerId, tableId,
+            startKeyHash, endKeyHash);
+    rpc.wait();
+}
+
+RocksteadyDropSourceTabletRpc::RocksteadyDropSourceTabletRpc(
+        Context* context, ServerId sourceServerId, uint64_t tableId,
+        uint64_t startKeyHash, uint64_t endKeyHash)
+    : ServerIdRpcWrapper(context, sourceServerId,
+            sizeof(WireFormat::RocksteadyDropSourceTablet::Response))
+{
+    WireFormat::RocksteadyDropSourceTablet::Request* reqHdr(
+            allocHeader<WireFormat::RocksteadyDropSourceTablet>(
+            sourceServerId));
+    reqHdr->tableId = tableId;
+    reqHdr->startKeyHash = startKeyHash;
+    reqHdr->endKeyHash = endKeyHash;
+    send();
+}
+
+uint32_t
+MasterClient::rocksteadyMigrationPriorityHashes(Context* context,
+        ServerId sourceServerId, uint64_t tableId, uint64_t startKeyHash,
+        uint64_t endKeyHash, uint64_t tombstoneSafeVersion,
+        uint64_t numRequestedHashes, Buffer* requestedPriorityHashes,
+        Buffer* response, SegmentCertificate* certificate)
+{
+    RocksteadyMigrationPriorityHashesRpc rpc(context, sourceServerId,
+            tableId, startKeyHash, endKeyHash, tombstoneSafeVersion,
+            numRequestedHashes, requestedPriorityHashes, response);
+    return rpc.wait(certificate);
+}
+
+RocksteadyMigrationPriorityHashesRpc::RocksteadyMigrationPriorityHashesRpc(
+        Context* context, ServerId sourceServerId, uint64_t tableId,
+        uint64_t startKeyHash, uint64_t endKeyHash,
+        uint64_t tombstoneSafeVersion, uint64_t numRequestedHashes,
+        Buffer* requestedPriorityHashes, Buffer* response)
+    : ServerIdRpcWrapper(context, sourceServerId,
+            sizeof(WireFormat::RocksteadyMigrationPriorityHashes::Response),
+            response)
+{
+    WireFormat::RocksteadyMigrationPriorityHashes::Request* reqHdr(
+            allocHeader<WireFormat::RocksteadyMigrationPriorityHashes>(
+            sourceServerId));
+    reqHdr->tableId = tableId;
+    reqHdr->startKeyHash = startKeyHash;
+    reqHdr->endKeyHash = endKeyHash;
+    reqHdr->tombstoneSafeVersion = tombstoneSafeVersion;
+    reqHdr->numRequestedHashes = numRequestedHashes;
+    request.append(requestedPriorityHashes, 0, requestedPriorityHashes->size());
+    send();
+}
+
+uint32_t
+RocksteadyMigrationPriorityHashesRpc::wait(SegmentCertificate* certificate)
+{
+    waitAndCheckErrors();
+    const WireFormat::RocksteadyMigrationPriorityHashes::Response* respHdr(
+            getResponseHeader<WireFormat::RocksteadyMigrationPriorityHashes>());
+    if (certificate != NULL) {
+        *certificate = respHdr->certificate;
+    }
+    return respHdr->numReturnedLogEntries;
+}
+
+/**
+ * Request that a master migrate a fraction of a tablet.
+ *
+ * \param context
+ *      Overall information about this RAMCloud server.
+ * \param sourceServerId
+ *      Identifier of the source of the migration.
+ * \param tableId
+ *      Identifier of the table the tablet under migration is part of.
+ * \param startKeyHash
+ *      Lowest key hash in the hash range to be migrated.
+ * \param endKeyHash
+ *      Highest key hash in the hash range to be migrated.
+ * \param currentHTBucket
+ *      Hash table bucket the migration source should start scanning from.
+ * \param currentHTBucketEntry
+ *      Entry within currentHTBucket the migration source should start
+ *      scanning from.
+ * \param endHTBucket
+ *      Hash table bucket the migration source should stop scanning at
+ *      provided the amount of data in the response is < numRequestedBytes.
+ * \param numRequestedBytes
+ *      The number of bytes that the migration source should reply with.
+ *
+ * \param[out] nextHTBucket
+ *      The value of currentHTBucket to be used on the next such request.
+ * \param[out] nextHTBucketEntry
+ *      The value of currentHTBucketEntry to be used on the next such
+ *      request.
+ * \param[out] response
+ *      The buffer to append the rpc reply to.
+ * \param[out] certificate
+ *      A certificate for the set of log entries returned by the request.
+ *
+ * \return
+ *      The number of bytes returned by the source of the migration.
+ */
+uint32_t
+MasterClient::rocksteadyMigrationPullHashes(
+        Context* context, ServerId sourceServerId, uint64_t tableId,
+        uint64_t startKeyHash, uint64_t endKeyHash, uint64_t currentHTBucket,
+        uint64_t currentHTBucketEntry, uint64_t endHTBucket,
+        uint32_t numRequestedBytes, uint64_t* nextHTBucket,
+        uint64_t* nextHTBucketEntry, Buffer* response,
+        SegmentCertificate* certificate)
+{
+    RocksteadyMigrationPullHashesRpc rpc(context, sourceServerId, tableId,
+            startKeyHash, endKeyHash, currentHTBucket, currentHTBucketEntry,
+            endHTBucket, numRequestedBytes, response);
+    return rpc.wait(nextHTBucket, nextHTBucketEntry, certificate);
+}
+
+/**
+ * Constructor for RocksteadyMigrationPullHashesRpc: initiates an RPC in the
+ * same way as #MasterClient::rocksteadyMigrationPullHashes, but returns
+ * immediately once the RPC has been initiated without waiting for it to
+ * complete.
+ */
+RocksteadyMigrationPullHashesRpc::RocksteadyMigrationPullHashesRpc(
+        Context* context, ServerId sourceServerId, uint64_t tableId,
+        uint64_t startKeyHash, uint64_t endKeyHash, uint64_t currentHTBucket,
+        uint64_t currentHTBucketEntry, uint64_t endHTBucket,
+        uint32_t numRequestedBytes, Buffer* response)
+    : ServerIdRpcWrapper(context, sourceServerId,
+            sizeof(WireFormat::RocksteadyMigrationPullHashes::Response),
+            response)
+{
+    WireFormat::RocksteadyMigrationPullHashes::Request* reqHdr(
+            allocHeader<WireFormat::RocksteadyMigrationPullHashes>(
+                    sourceServerId));
+    reqHdr->tableId = tableId;
+    reqHdr->startKeyHash = startKeyHash;
+    reqHdr->endKeyHash = endKeyHash;
+    reqHdr->currentHTBucket = currentHTBucket;
+    reqHdr->currentHTBucketEntry = currentHTBucketEntry;
+    reqHdr->endHTBucket = endHTBucket;
+    reqHdr->numRequestedBytes = numRequestedBytes;
+    send();
+}
+
+/**
+ * Wait for a rocksteadyMigrationPullHashes RPC to complete.
+ *
+ * \param[out] nextHTBucket
+ *      The value of currentHTBucket to be used on the next
+ *      rocksteadyMigrationPullHashes RPC.
+ * \param[out] nextHTBucketEntry
+ *      The value of currentHTBucketEntry to be used on the next
+ *      rocksteadyMigrationPullHashes RPC.
+ *
+ * \return
+ *      The number of bytes returned by the recipient of the RPC.
+ *
+ * \throw UnknownTabletException
+ *      The recipient does not own the requested tablet.
+ * \throw InternalError
+ *      The tablet is not locked for migration on the recipient, or
+ *      the source has fewer buckets than currentHTBucket or
+ *      endHTBucket.
+ */
+uint32_t
+RocksteadyMigrationPullHashesRpc::wait(uint64_t* nextHTBucket,
+        uint64_t* nextHTBucketEntry, SegmentCertificate* certificate)
+{
+    waitAndCheckErrors();
+    const WireFormat::RocksteadyMigrationPullHashes::Response* respHdr(
+            getResponseHeader<WireFormat::RocksteadyMigrationPullHashes>());
+    *nextHTBucket = respHdr->nextHTBucket;
+    *nextHTBucketEntry = respHdr->nextHTBucketEntry;
+
+    if(certificate != NULL) {
+        *certificate = respHdr->certificate;
+    }
+
+    return respHdr->numReturnedBytes;
+}
+
+/**
+ * Request that a master check if it can migrate a given tablet to the caller,
+ * and return state required by the caller to service writes on the tablet
+ * under migration.
+ *
+ * \param context
+ *      Overall information about this RAMCloud server.
+ * \param sourceServerId
+ *      Identifier of the source of the migration.
+ * \param tableId
+ *      Identifier of the table the tablet under migration is part of.
+ * \param startKeyHash
+ *      Lowest key hash in the tablet range to be migrated.
+ * \param endKeyHash
+ *      Highest key hash in the tablet range to be migrated.
+ *
+ * \param[out] numHTBuckets
+ *      The number of hash table buckets on the recipient.
+ *
+ * \return
+ *      The safe version number on the source after it has locked the tablet
+ *      for migration and allowed any in-progress writes on the tablet to
+ *      complete. With this, the destination can serve writes on objects
+ *      that have not been migrated yet.
+ */
+uint64_t
+MasterClient::rocksteadyPrepForMigration(
+        Context* context, ServerId sourceServerId, uint64_t tableId,
+        uint64_t startKeyHash, uint64_t endKeyHash, uint64_t* numHTBuckets)
+{
+    RocksteadyPrepForMigrationRpc rpc(context, sourceServerId, tableId,
+            startKeyHash, endKeyHash);
+    return rpc.wait(numHTBuckets);
+}
+
+/**
+ * Constructor for RocksteadyPrepForMigrationRpc: initiates an RPC in the same
+ * way as #MasterClient::rocksteadyPrepForMigration, but returns immediately
+ * once the RPC has been initiated without waiting for it to complete.
+ */
+RocksteadyPrepForMigrationRpc::RocksteadyPrepForMigrationRpc(
+        Context* context, ServerId sourceServerId, uint64_t tableId,
+        uint64_t startKeyHash, uint64_t endKeyHash)
+    : ServerIdRpcWrapper(context, sourceServerId,
+            sizeof(WireFormat::RocksteadyPrepForMigration::Response))
+{
+    WireFormat::RocksteadyPrepForMigration::Request* reqHdr(
+            allocHeader<WireFormat::RocksteadyPrepForMigration>(
+                    sourceServerId));
+    reqHdr->tableId = tableId;
+    reqHdr->startKeyHash = startKeyHash;
+    reqHdr->endKeyHash = endKeyHash;
+    send();
+}
+
+/**
+ * Wait for a rocksteadyPrepForMigration RPC to complete.
+ *
+ * \param[out] numHTBuckets
+ *      The number of hash table buckets on the recipient.
+ *
+ * \return
+ *      The safe version number that the caller can use to safely service
+ *      writes on objects belonging to the tablet under migration that
+ *      have not been migrated yet.
+ *
+ * \throw UnknownTabletException
+ *      The source does not own the tablet requested for.
+ * \throw InternalError
+ *      The source failed to lock the tablet for migration.
+ */
+uint64_t
+RocksteadyPrepForMigrationRpc::wait(uint64_t* numHTBuckets)
+{
+    waitAndCheckErrors();
+    const WireFormat::RocksteadyPrepForMigration::Response* respHdr(
+            getResponseHeader<WireFormat::RocksteadyPrepForMigration>());
+    *numHTBuckets = respHdr->numHTBuckets;
+    return respHdr->safeVersion;
+}
+
 /**
  * Request that a master (with id currentOwnerId) split a given indexlet at
  * splitKey and migrate the second indexlet resulting from this split to server

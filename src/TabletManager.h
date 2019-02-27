@@ -61,7 +61,8 @@ class TabletManager {
         LOCKED_FOR_MIGRATION = 2,
         MIGRATION_SOURCE_PREP = 3,
         MIGRATION_SOURCE = 4,
-        MIGRATION_TARGET = 5
+        MIGRATION_TARGET = 5,
+        ROCKSTEADY_MIGRATING = 6
     };
 
     /**

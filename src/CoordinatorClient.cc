@@ -687,6 +687,35 @@ RenewLeaseRpc::RenewLeaseRpc(Context* context, uint64_t leaseId)
     send();
 }
 
+void
+CoordinatorClient::rocksteadyTakeTabletOwnership(Context* context,
+        uint64_t tableId, uint64_t startKeyHash, uint64_t endKeyHash,
+        ServerId newOwnerId, uint64_t ctimeSegmentId,
+        uint64_t ctimeSegmentOffset)
+{
+    RocksteadyTakeTabletOwnershipRpc rpc(context, tableId, startKeyHash,
+            endKeyHash, newOwnerId, ctimeSegmentId, ctimeSegmentOffset);
+    rpc.wait();
+}
+
+RocksteadyTakeTabletOwnershipRpc::RocksteadyTakeTabletOwnershipRpc(
+        Context* context, uint64_t tableId, uint64_t startKeyHash,
+        uint64_t endKeyHash, ServerId newOwnerId, uint64_t ctimeSegmentId,
+        uint64_t ctimeSegmentOffset)
+    : CoordinatorRpcWrapper(context,
+            sizeof(WireFormat::RocksteadyTakeTabletOwnership::Response))
+{
+    WireFormat::RocksteadyTakeTabletOwnership::Request* reqHdr(
+            allocHeader<WireFormat::RocksteadyTakeTabletOwnership>());
+    reqHdr->tableId = tableId;
+    reqHdr->startKeyHash = startKeyHash;
+    reqHdr->endKeyHash = endKeyHash;
+    reqHdr->newOwnerId = newOwnerId.getId();
+    reqHdr->ctimeSegmentId = ctimeSegmentId;
+    reqHdr->ctimeSegmentOffset = ctimeSegmentOffset;
+    send();
+}
+
 /**
  * Wait for a renewLease RPC to complete, and return the same results as
  * #CoordinatorClient::renewLease.

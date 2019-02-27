@@ -23,6 +23,7 @@
 #include "ObjectManager.h"
 #include "Object.h"
 #include "PerfStats.h"
+#include "RocksteadyMigrationManager.h"
 #include "ShortMacros.h"
 #include "RawMetrics.h"
 #include "Tub.h"
@@ -333,17 +334,87 @@ ObjectManager::readObject(Key& key, Buffer* outBuffer,
     objectMap.prefetchBucket(key.getHash());
     HashTableBucketLock lock(*this, key);
 
+    // Indicator for whether this read is on a tablet under migration by the
+    // rocksteady protocol.
+    bool isRocksteady = false;
+
     // If the tablet doesn't exist in the NORMAL state, we must plead ignorance.
-    if (!tabletManager->checkAndIncrementReadCount(key, tablet))
-        return STATUS_UNKNOWN_TABLET;
+    if (!tabletManager->checkAndIncrementReadCount(key, tablet)) {
+        // Check if the key belongs to a tablet under migration by the
+        // rocksteady migration protocol.
+        TabletManager::Tablet t;
+        bool tabletExists = tabletManager->getTablet(key, &t);
+
+        // If the tablet does not exist, return an error to the client.
+        if (!tabletExists) {
+            return STATUS_UNKNOWN_TABLET;
+        }
+
+        // If the tablet exists, check it's state.
+        if (t.state == TabletManager::ROCKSTEADY_MIGRATING) {
+            // The tablet is currently under migration. Set an indicator flag.
+            // While it is possible for the tablet to change state to NORMAL
+            // before the end of this method, setting this flag allows us to
+            // increment this key's read count correctly if the read is
+            // successfull.
+            isRocksteady = true;
+        } else if (t.state == TabletManager::NORMAL) {
+            // The tablet is in the NORMAL state. This is possible if the
+            // tablet changed state from ROCKSTEADY_MIGRATION to NORMAL in
+            // between the call to checkAndIncrementReadCount() and getTablet.
+            // Increment the read count in this case.
+            tabletManager->incrementReadCount(key);
+        } else {
+            // The tablet is neither in the ROCKSTEADY_MIGRATION state nor is
+            // it in the NORMAL state. Return an error to the client.
+            return STATUS_UNKNOWN_TABLET;
+        }
+    }
 
     Buffer buffer;
     LogEntryType type;
     uint64_t version;
     Log::Reference reference;
     bool found = lookup(lock, key, type, buffer, &version, &reference);
-    if (!found || type != LOG_ENTRY_TYPE_OBJ)
-        return STATUS_OBJECT_DOESNT_EXIST;
+    if (!found || type != LOG_ENTRY_TYPE_OBJ) {
+        // Check if the key was marked as belonging to a tablet under migration
+        // using rocksteady.
+        if (!found && isRocksteady) {
+            TabletManager::Tablet t;
+            bool tabletExists = tabletManager->getTablet(key, &t);
+
+            // Check the current state of the tablet the key belongs to.
+            if (tabletExists && t.state ==
+                                TabletManager::ROCKSTEADY_MIGRATING) {
+                {
+                    // The tablet is still under migration. Request for a priority
+                    // migration and ask the client to retry after some time.
+                    context->rocksteadyMigrationManager->requestPriorityHash(
+                        t.tableId, t.startKeyHash, t.endKeyHash,
+                        key.getHash());
+                }
+
+                throw RetryException(HERE, 50, 100,
+                                     "Tablet is currently under migration by Rocksteady!");
+            } else if (tabletExists && t.state == TabletManager::NORMAL) {
+                // The tablet is not under migration anymore. Increment the
+                // read count on the key. Reaching here means that this key
+                // does not belong to the tablet that was migrated.
+                tabletManager->incrementReadCount(key);
+
+                // It is safe to return an error to the client here. Since
+                // the HashTableBucketLock was never released, this object
+                // could not have been inserted between the calls to found()
+                // getTablet().
+                return STATUS_OBJECT_DOESNT_EXIST;
+            } else {
+                return STATUS_OBJECT_DOESNT_EXIST;
+            }
+        } else {
+            // This is the normal case for when a lookup failed.
+            return STATUS_OBJECT_DOESNT_EXIST;
+        }
+    }
 
     if (outVersion != NULL)
         *outVersion = version;
@@ -356,6 +427,12 @@ ObjectManager::readObject(Key& key, Buffer* outBuffer,
 
     // Ensure the object being read is replicated durably.
     log.syncTo(reference);
+
+    // Increment the read count if the tablet was under migration using
+    // rocksteady when it's state was looked up.
+    if (isRocksteady) {
+        tabletManager->incrementReadCount(key);
+    }
 
     Object object(buffer);
     if (valueOnly) {
@@ -3908,6 +3985,225 @@ bool ObjectManager::raiseSafeVersion(uint64_t minimum)
 bool ObjectManager::isLocked(Key &key)
 {
     return lockTable.isLockAcquired(key);
+}
+
+uint64_t
+ObjectManager::getSafeVersion()
+{
+    return segmentManager.getSafeVersion();
+}
+
+uint64_t
+ObjectManager::getNumHashTableBuckets()
+{
+    return objectMap.getNumBuckets();
+}
+
+void
+ObjectManager::rocksteadyMigrationScanEntry(
+                uint64_t reference, void* cookie)
+{
+    RocksteadyPullHashesParameters* rocksteadyParams =
+            reinterpret_cast<RocksteadyPullHashesParameters*>(cookie);
+
+    if (rocksteadyParams->responseFull) {
+        return;
+    }
+
+    if (rocksteadyParams->nextBucketEntry <
+        rocksteadyParams->startBucketEntry) {
+        rocksteadyParams->nextBucketEntry++;
+        return;
+    }
+
+    bool zeroCopy = rocksteadyParams->zeroCopy;
+    uint64_t tableId = rocksteadyParams->tableId;
+    uint64_t startKeyHash = rocksteadyParams->startKeyHash;
+    uint64_t endKeyHash = rocksteadyParams->endKeyHash;
+    uint64_t numRequestedBytes = rocksteadyParams->numRequestedBytes;
+
+    RocksteadyBufferCertificate* certificate = rocksteadyParams->certificate;
+
+    ObjectManager* objectManager = rocksteadyParams->objectManager;
+
+    bool includeHeader = true;
+    uint32_t headerLength = 0;
+    uint32_t logEntryLength = 0;
+
+    Log::Reference logEntryReference(reference);
+    LogEntryType type = objectManager->log.getEntry(logEntryReference,
+            *(rocksteadyParams->response), zeroCopy, &logEntryLength,
+            includeHeader, &headerLength);
+
+    if (type != LOG_ENTRY_TYPE_OBJ) {
+        (rocksteadyParams->response)->truncate(
+                rocksteadyParams->numBytesInResponse);
+        rocksteadyParams->nextBucketEntry++;
+        return;
+    }
+
+    Object object(*(rocksteadyParams->response),
+            rocksteadyParams->numBytesInResponse + headerLength, // Offset within buffer
+            logEntryLength);
+
+    uint64_t objectPKHash = object.getPKHash();
+    if (objectPKHash < startKeyHash || objectPKHash > endKeyHash ||
+        object.getTableId() != tableId) {
+        (rocksteadyParams->response)->truncate(
+                rocksteadyParams->numBytesInResponse);
+        rocksteadyParams->nextBucketEntry++;
+        return;
+    }
+
+    certificate->updateChecksum(type, logEntryLength);
+    rocksteadyParams->numBytesInResponse += headerLength + logEntryLength;
+
+    // This check includes the size of the response header.
+    if (rocksteadyParams->numBytesInResponse > numRequestedBytes) {
+        rocksteadyParams->responseFull = true;
+        // throw RocksteadyResponseFullException(HERE);
+    }
+
+    rocksteadyParams->nextBucketEntry++;
+    return;
+}
+
+uint32_t
+ObjectManager::rocksteadyMigrationPullHashes(uint64_t tableId,
+                uint64_t startKeyHash, uint64_t endKeyHash,
+                uint64_t currentHTBucket, uint64_t currentHTBucketEntry,
+                uint64_t endHTBucket, uint32_t respHdrSize,
+                uint32_t numRequestedBytes, Buffer* response,
+                uint64_t* nextHTBucket, uint64_t* nextHTBucketEntry,
+                SegmentCertificate* certificate)
+{
+    bool zeroCopy = true;
+    uint32_t numReturnedBytes = 0;
+    uint32_t numBytesInResponse = respHdrSize;
+    uint64_t startBucketEntry = currentHTBucketEntry;
+
+    RocksteadyBufferCertificate bufferCertificate;
+
+    for (uint64_t bucketIndex = currentHTBucket;
+        bucketIndex <= endHTBucket; bucketIndex++) {
+        // In the current implementation of the hash table, a key that
+        // hashes to bucketIndex will also fall in bucket bucketIndex. Can't
+        // overload because prefetchBucket() currently takes an argument of
+        // type KeyHash which is basically a uint64_t.
+        objectMap.prefetchBucket(bucketIndex);
+        HashTableBucketLock lock(*this, bucketIndex);
+        RocksteadyPullHashesParameters rocksteadyParams(zeroCopy,
+            tableId, startKeyHash, endKeyHash, startBucketEntry,
+            numBytesInResponse, numRequestedBytes, response,
+            &bufferCertificate, &lock, this);
+
+        // try {
+
+        objectMap.forEachInBucket(
+                ObjectManager::rocksteadyMigrationScanEntry,
+                reinterpret_cast<void*>(&rocksteadyParams), bucketIndex);
+
+        // } catch (RocksteadyResponseFullException &e) {
+
+        if (rocksteadyParams.responseFull) {
+            numBytesInResponse = rocksteadyParams.numBytesInResponse;
+
+            // TODO: As a result of these return values, consecutive rpcs on
+            // the same portion/chunk of the hash table might overlap over a
+            // few entries - entries are never retransmitted though. A hash
+            // table bucket iterator will have to be implemented to fix this.
+            *nextHTBucket = bucketIndex;
+            *nextHTBucketEntry = rocksteadyParams.nextBucketEntry;
+
+            bufferCertificate.createSegmentCertificate(
+                    numBytesInResponse - respHdrSize, certificate);
+
+            return numReturnedBytes = numBytesInResponse - respHdrSize;
+        }
+
+        // }
+
+        startBucketEntry = 0;
+        numBytesInResponse = rocksteadyParams.numBytesInResponse;
+    }
+
+    *nextHTBucket = endHTBucket + 1;
+    *nextHTBucketEntry = 0;
+
+    bufferCertificate.createSegmentCertificate(
+            numBytesInResponse - respHdrSize, certificate);
+
+    return numReturnedBytes = numBytesInResponse - respHdrSize;
+}
+
+uint32_t
+ObjectManager::rocksteadyMigrationPriorityHashes(uint64_t tableId,
+        uint64_t startKeyHash, uint64_t endKeyHash,
+        uint64_t tombstoneSafeVersion, uint64_t numRequestedHashes,
+        Buffer* requestedHashes, uint32_t reqHdrSize, Buffer* response,
+        uint32_t respHdrSize, SegmentCertificate* certificate)
+{
+    const bool zeroCopy = true;
+    const bool includeLogEntryHeader = true;
+
+    uint32_t requestOffset = reqHdrSize;
+
+    uint32_t numReturnedLogEntries = 0;
+    uint32_t numBytesInResponse = respHdrSize;
+    const uint32_t maxBytesInResponse = 10 * 1024;
+
+    RocksteadyBufferCertificate bufferCertificate;
+
+    for (uint64_t i = 0; i < numRequestedHashes; i++) {
+        uint64_t* currentHash = reinterpret_cast<uint64_t*>(
+                requestedHashes->getRange(requestOffset, sizeof32(uint64_t)));
+        requestOffset += sizeof32(uint64_t);
+
+        objectMap.prefetchBucket(*currentHash);
+        HashTableBucketLock lock(*this, *currentHash);
+
+        HashTable::Candidates candidates;
+        objectMap.lookup(*currentHash, candidates);
+
+        if (candidates.isDone()) {
+            // TODO: Add a tombstone to the response here.
+            continue;
+        }
+
+        for (; !candidates.isDone(); candidates.next()) {
+            uint32_t entryLength = 0;
+            uint32_t headerLength = 0;
+
+            Log::Reference reference(candidates.getReference());
+            LogEntryType type = log.getEntry(reference, *response, zeroCopy,
+                    &entryLength, includeLogEntryHeader, &headerLength);
+
+            if (type != LOG_ENTRY_TYPE_OBJ) {
+                continue;
+            }
+
+            Object object(*response, numBytesInResponse + headerLength,
+                    entryLength);
+
+            if (object.getTableId() == tableId &&
+                    object.getPKHash() == *currentHash) {
+                numBytesInResponse += headerLength + entryLength;
+                numReturnedLogEntries++;
+                bufferCertificate.updateChecksum(type, entryLength);
+            } else {
+                response->truncate(numBytesInResponse);
+            }
+        }
+
+        if (numBytesInResponse >= maxBytesInResponse) {
+            break;
+        }
+    }
+
+    bufferCertificate.createSegmentCertificate(
+            numBytesInResponse - respHdrSize, certificate);
+
+    return numReturnedLogEntries;
 }
 
 } //enamespace RAMCloud

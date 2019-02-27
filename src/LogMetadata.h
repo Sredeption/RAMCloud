@@ -124,6 +124,7 @@ class SegmentCertificate {
     friend class Segment;
     friend class SegmentIterator;
     friend class MigrationBackupManager;
+    friend class RocksteadyBufferCertificate;
 } __attribute__((__packed__));
 static_assert(sizeof(SegmentCertificate) == 8,
               "Unexpected padding in SegmentCertificate");

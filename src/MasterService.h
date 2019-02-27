@@ -267,6 +267,43 @@ class MasterService : public Service {
                 Rpc* rpc);
     void requestInsertIndexEntries(Object& object);
     void requestRemoveIndexEntries(Object& object);
+    void rocksteadyDropSourceTablet(
+        const WireFormat::RocksteadyDropSourceTablet::Request *reqHdr,
+        WireFormat::RocksteadyDropSourceTablet::Response *respHdr,
+        Rpc *rpc);
+    void rocksteadyMigrationPriorityHashes(
+                const WireFormat::RocksteadyMigrationPriorityHashes::Request*
+                reqHdr,
+                WireFormat::RocksteadyMigrationPriorityHashes::Response*
+                respHdr,
+                Rpc* rpc);
+    void rocksteadyMigrationPullHashes(
+                const WireFormat::RocksteadyMigrationPullHashes::Request*
+                reqHdr,
+                WireFormat::RocksteadyMigrationPullHashes::Response* respHdr,
+                Rpc* rpc);
+    void rocksteadyMigrationReplay(
+                const WireFormat::RocksteadyMigrationReplay::Request* reqHdr,
+                WireFormat::RocksteadyMigrationReplay::Response* respHdr,
+                Rpc* rpc);
+    void rocksteadyMigrationPriorityReplay(
+                const WireFormat::RocksteadyMigrationPriorityReplay::Request*
+                reqHdr,
+                WireFormat::RocksteadyMigrationPriorityReplay::Response*
+                respHdr,
+                Rpc* rpc);
+    void rocksteadyMigrateTablet(
+                const WireFormat::RocksteadyMigrateTablet::Request* reqHdr,
+                WireFormat::RocksteadyMigrateTablet::Response* respHdr,
+                Rpc* rpc);
+    void rocksteadyPrepForMigration(
+                const WireFormat::RocksteadyPrepForMigration::Request* reqHdr,
+                WireFormat::RocksteadyPrepForMigration::Response* respHdr,
+                Rpc* rpc);
+    void rocksteadySideLogCommit(
+                const WireFormat::RocksteadySideLogCommit::Request* reqHdr,
+                WireFormat::RocksteadySideLogCommit::Response* respHdr,
+                Rpc* rpc);
     void splitAndMigrateIndexlet(
                 const WireFormat::SplitAndMigrateIndexlet::Request* reqHdr,
                 WireFormat::SplitAndMigrateIndexlet::Response* respHdr,

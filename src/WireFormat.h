@@ -146,7 +146,16 @@ enum Opcode {
     MIGRATION_FILTER            = 94,
     MIGRATION_LOAD              = 95,
     CREATE_TABLE_TOSERVER       = 96,
-    ILLEGAL_RPC_TYPE            = 97, // 1 + the highest legitimate Opcode
+    ROCKSTEADY_PREP_FOR_MIGRATION = 97,
+    ROCKSTEADY_MIGRATION_PULL_HASHES = 98,
+    ROCKSTEADY_MIGRATION_REPLAY = 99,
+    ROCKSTEADY_MIGRATE_TABLET = 100,
+    ROCKSTEADY_SIDELOG_COMMIT = 101,
+    ROCKSTEADY_TAKE_TABLET_OWNERSHIP = 102,
+    ROCKSTEADY_MIGRATION_PRIORITY_HASHES = 103,
+    ROCKSTEADY_DROP_SOURCE_TABLET = 104,
+    ROCKSTEADY_MIGRATION_PRIORITY_REPLAY = 105,
+    ILLEGAL_RPC_TYPE            = 106, // 1 + the highest legitimate Opcode
 };
 
 /**
@@ -1811,6 +1820,185 @@ struct RenewLease {
     struct Response {
         ResponseCommon common;
         ClientLease lease;
+    } __attribute__((packed));
+};
+
+struct RocksteadyDropSourceTablet {
+    static const Opcode opcode = ROCKSTEADY_DROP_SOURCE_TABLET;
+    static const ServiceType service = MASTER_SERVICE;
+    struct Request {
+        RequestCommonWithId common;
+        uint64_t tableId;
+        uint64_t startKeyHash;
+        uint64_t endKeyHash;
+    } __attribute__((packed));
+    struct Response {
+        ResponseCommon common;
+    } __attribute__((packed));
+};
+
+struct RocksteadyMigrationPriorityHashes {
+    static const Opcode opcode = ROCKSTEADY_MIGRATION_PRIORITY_HASHES;
+    static const ServiceType service = MASTER_SERVICE;
+    struct Request {
+        RequestCommonWithId common;
+        uint64_t tableId;
+        uint64_t startKeyHash;
+        uint64_t endKeyHash;
+        uint64_t tombstoneSafeVersion;
+        uint64_t numRequestedHashes;
+    } __attribute__((packed));
+    struct Response {
+        ResponseCommon common;
+        uint32_t numReturnedLogEntries;
+        SegmentCertificate certificate;
+
+        Response()
+            : common()
+            , numReturnedLogEntries()
+            , certificate()
+        {}
+    } __attribute__((packed));
+};
+
+struct RocksteadyMigrationPullHashes {
+    static const Opcode opcode = ROCKSTEADY_MIGRATION_PULL_HASHES;
+    static const ServiceType service = MASTER_SERVICE;
+    struct Request {
+        RequestCommonWithId common;
+        uint64_t tableId;               // Table that the tablet belongs to.
+        uint64_t startKeyHash;          // Start of tablet's hash space.
+        uint64_t endKeyHash;            // End of tablet's hash space.
+        uint64_t currentHTBucket;       // Hash table bucket that the recipient
+                                        // should start iterating from.
+        uint64_t currentHTBucketEntry;  // Entry within above bucket that the
+                                        // recipient should start iterating
+                                        // from.
+        uint64_t endHTBucket;           // Hash table bucket at which the
+                                        // recipient should stop iterating at
+                                        // provided the number of bytes in the
+                                        // response is <= numRequestedBytes.
+        uint32_t numRequestedBytes;     // Maximum number of bytes that the
+                                        // recipient should return.
+    } __attribute__((packed));
+    struct Response {
+        ResponseCommon common;
+        uint64_t nextHTBucket;          // The value of currentHTBucket to be
+                                        // sent on the next request.
+        uint64_t nextHTBucketEntry;     // The value of currentHTBucketEntry to
+                                        // be sent on the next request.
+        uint32_t numReturnedBytes;      // Number of bytes returned by the
+                                        // recipient.
+        SegmentCertificate certificate; // A certificate for the transmitted
+                                        // data.
+        Response()
+            : common()
+            , nextHTBucket()
+            , nextHTBucketEntry()
+            , numReturnedBytes()
+            , certificate()
+        {}
+    } __attribute__((packed));
+};
+
+struct RocksteadyPrepForMigration {
+    static const Opcode opcode = ROCKSTEADY_PREP_FOR_MIGRATION;
+    static const ServiceType service = MASTER_SERVICE;
+    struct Request {
+        RequestCommonWithId common;
+        uint64_t tableId;      // Table that the tablet belongs to.
+        uint64_t startKeyHash; // Lower bound on the tablet's hash space.
+        uint64_t endKeyHash;   // Upper bound on the tablet's hash space.
+    } __attribute__((packed));
+    struct Response {
+        ResponseCommon common;
+        uint64_t safeVersion;  // Safe version on the recipient after the tablet
+                               // was locked for migration.
+        uint64_t numHTBuckets; // Number of hash table buckets on the recipient.
+    } __attribute__((packed));
+};
+
+struct RocksteadyMigrationReplay {
+    static const Opcode opcode = ROCKSTEADY_MIGRATION_REPLAY;
+    static const ServiceType service = MASTER_SERVICE;
+    struct Request {
+        Request() : common(), bufferPtr(), sideLogPtr(), certificate() {}
+
+        RequestCommon common;
+        uintptr_t bufferPtr;
+        uintptr_t sideLogPtr;
+        SegmentCertificate certificate;
+    } __attribute__((packed));
+    struct Response {
+        ResponseCommon common;
+        uint64_t numReplayedBytes;
+    } __attribute__((packed));
+};
+
+struct RocksteadyMigrationPriorityReplay {
+    static const Opcode opcode = ROCKSTEADY_MIGRATION_PRIORITY_REPLAY;
+    static const ServiceType service = MASTER_SERVICE;
+    struct Request {
+        Request() : common(), bufferPtr(), sideLogPtr(), certificate() {}
+
+        RequestCommon common;
+        uintptr_t bufferPtr;
+        uintptr_t sideLogPtr;
+        SegmentCertificate certificate;
+    } __attribute__((packed));
+    struct Response {
+        ResponseCommon common;
+        uint64_t numReplayedBytes;
+    } __attribute__((packed));
+};
+
+struct RocksteadyMigrateTablet {
+    static const Opcode opcode = ROCKSTEADY_MIGRATE_TABLET;
+    static const ServiceType service = MASTER_SERVICE;
+    struct Request {
+        RequestCommonWithId common;
+        uint64_t tableId;
+        uint64_t startKeyHash;
+        uint64_t endKeyHash;
+        uint64_t sourceServerId;
+    } __attribute__((packed));
+    struct Response {
+        ResponseCommon common;
+        bool migrationStarted;
+    } __attribute__((packed));
+};
+
+struct RocksteadySideLogCommit {
+    static const Opcode opcode = ROCKSTEADY_SIDELOG_COMMIT;
+    static const ServiceType service = MASTER_SERVICE;
+    struct Request {
+        Request()
+            : common()
+            , sideLogPtr()
+        {}
+
+        RequestCommon common;
+        uintptr_t sideLogPtr;
+    } __attribute__((packed));
+    struct Response {
+        ResponseCommon common;
+    } __attribute__((packed));
+};
+
+struct RocksteadyTakeTabletOwnership {
+    static const Opcode opcode = ROCKSTEADY_TAKE_TABLET_OWNERSHIP;
+    static const ServiceType service = COORDINATOR_SERVICE;
+    struct Request {
+        RequestCommon common;
+        uint64_t tableId;
+        uint64_t startKeyHash;
+        uint64_t endKeyHash;
+        uint64_t newOwnerId;
+        uint64_t ctimeSegmentId;
+        uint64_t ctimeSegmentOffset;
+    } __attribute__((packed));
+    struct Response {
+        ResponseCommon common;
     } __attribute__((packed));
 };
 
