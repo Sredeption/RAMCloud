@@ -21,6 +21,7 @@ import cluster
 import log
 from optparse import OptionParser
 import recoverymetrics
+from config import hosts
 
 
 def backup_migrate(num_servers,
@@ -60,6 +61,7 @@ def backup_migrate(num_servers,
     args['coordinator_args'] = coordinator_args
     args['share_hosts'] = True
     args['dpdk_port'] = dpdk_port
+    args['client_hosts'] = hosts[:num_clients]
 
     if backup_args:
         args['backup_args'] += backup_args
@@ -69,7 +71,7 @@ def backup_migrate(num_servers,
     # Allocate enough memory on recovery masters to handle several
     # recovery partitions (most recoveries will only have one recovery
     # partition per master, which is about 500 MB).
-    args['master_args'] = '-d -D -t 5000'
+    args['master_args'] = '-d -D -t 18000 --segmentFrames 8192'
     if master_args:
         args['master_args'] += ' ' + master_args;
     args['client'] = ('%s -l %s' %

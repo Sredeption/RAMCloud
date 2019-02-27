@@ -131,7 +131,7 @@ class BasicClient : public RAMCloud::WorkloadGenerator::Client {
                             statusValue.getRange(0, statusValue.size())),
                         statusValue.size());
 
-                    RAMCLOUD_CLOG(WARNING, "status:%s", currentStatus.c_str());
+                    RAMCLOUD_LOG(WARNING, "status:%s", currentStatus.c_str());
                     if (currentStatus == filling)
                         break;
                 }
@@ -195,6 +195,7 @@ class BasicClient : public RAMCloud::WorkloadGenerator::Client {
                                     static_cast<uint16_t>(status.length()),
                                     ending.c_str(),
                                     static_cast<uint32_t>(ending.length()));
+                    RAMCLOUD_LOG(NOTICE, "migration finish");
                     return true;
                 } else {
                     return false;
@@ -252,7 +253,10 @@ void basic()
     RAMCloud::WorkloadGenerator workloadGenerator(
         "YCSB-B", 100000, objectCount, objectSize, &basicClient);
 
-    workloadGenerator.run(true);
+    bool issueMigration = false;
+    if (clientIndex == 0)
+        issueMigration = true;
+    workloadGenerator.run(issueMigration);
 
     std::vector<RAMCloud::WorkloadGenerator::TimeDist> result;
     std::vector<RAMCloud::WorkloadGenerator::TimeDist> readResult;
@@ -261,7 +265,7 @@ void basic()
     workloadGenerator.statistics(readResult, RAMCloud::WorkloadGenerator::READ);
     workloadGenerator.statistics(writeResult,
                                  RAMCloud::WorkloadGenerator::WRITE);
-    RAMCLOUD_LOG(NOTICE,
+    RAMCLOUD_LOG(WARNING,
                  "time: all median, 99th | read median, 99th | write median, 99th");
     for (uint64_t i = 0; i < result.size(); i++) {
         RAMCLOUD_LOG(NOTICE,

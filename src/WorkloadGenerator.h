@@ -117,44 +117,49 @@ class WorkloadGenerator {
     {
         int count = static_cast<int>(times.size());
         std::sort(times.begin(), times.end());
-        dist->min = Cycles::toMicroseconds(times[0]);
+        dist->min = 0;
+        uint64_t last = 0;
+        if (count > 0){
+            dist->min = Cycles::toMicroseconds(times[0]);
+            last= times.back();
+        }
 
         dist->bandwidth = times.size();
         int index = count / 2;
         if (index < count) {
             dist->p50 = Cycles::toMicroseconds(times.at(index));
         } else {
-            dist->p50 = 0;
+            dist->p50 = last;
         }
         index = count - (count + 5) / 10;
         if (index < count) {
             dist->p90 = Cycles::toMicroseconds(times.at(index));
         } else {
-            dist->p90 = 0;
+            dist->p90 = last;
         }
         index = count - (count + 50) / 100;
         if (index < count) {
             dist->p99 = Cycles::toMicroseconds(times.at(index));
         } else {
-            dist->p99 = 0;
+            dist->p99 = last;
         }
         index = count - (count + 500) / 1000;
         if (index < count) {
             dist->p999 = Cycles::toMicroseconds(times.at(index));
         } else {
-            dist->p999 = 0;
+            dist->p999 = last;
         }
         index = count - (count + 5000) / 10000;
         if (index < count) {
             dist->p9999 = Cycles::toMicroseconds(times.at(index));
         } else {
-            dist->p9999 = 0;
+            dist->p9999 = last;
         }
         index = count - (count + 50000) / 100000;
         if (index < count) {
             dist->p99999 = Cycles::toMicroseconds(times.at(index));
         } else {
-            dist->p99999 = 0;
+            dist->p99999 = last;
         }
     }
 
