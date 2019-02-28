@@ -287,7 +287,6 @@ bool
 RocksteadyMigration::addPriorityHash(uint64_t priorityHash)
 {
     SpinLock::Guard lock(priorityLock);
-    RAMCLOUD_LOG(WARNING, "key:%lu", priorityHash);
 
     // First, check if this hash is already part of an in progress priority
     // request. If this is the case, return immediately as this hash should

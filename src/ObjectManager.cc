@@ -379,7 +379,6 @@ ObjectManager::readObject(Key& key, Buffer* outBuffer,
     if (!found || type != LOG_ENTRY_TYPE_OBJ) {
         // Check if the key was marked as belonging to a tablet under migration
         // using rocksteady.
-        RAMCLOUD_LOG(WARNING, "key:%s", key.toString().c_str());
         if (!found && isRocksteady) {
             TabletManager::Tablet t;
             bool tabletExists = tabletManager->getTablet(key, &t);
