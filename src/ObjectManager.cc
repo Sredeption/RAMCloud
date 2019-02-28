@@ -379,6 +379,7 @@ ObjectManager::readObject(Key& key, Buffer* outBuffer,
     if (!found || type != LOG_ENTRY_TYPE_OBJ) {
         // Check if the key was marked as belonging to a tablet under migration
         // using rocksteady.
+        RAMCLOUD_LOG(WARNING, "key:%s", key.toString().c_str());
         if (!found && isRocksteady) {
             TabletManager::Tablet t;
             bool tabletExists = tabletManager->getTablet(key, &t);
@@ -1830,7 +1831,8 @@ ObjectManager::writeObject(Object& newObject, RejectRules* rejectRules,
         if (tablet.state == TabletManager::LOCKED_FOR_MIGRATION)
             throw RetryException(HERE, 1000, 2000,
                                  "Tablet is currently locked for migration!");
-        return STATUS_UNKNOWN_TABLET;
+        if (tablet.state != TabletManager::ROCKSTEADY_MIGRATING)
+            return STATUS_UNKNOWN_TABLET;
     }
 
     // If key is locked due to an in-progress transaction, we must wait.

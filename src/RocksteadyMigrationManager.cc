@@ -19,6 +19,7 @@ RocksteadyMigrationManager::RocksteadyMigrationManager(Context* context,
     , tombstoneProtector()
     , localLocator(localLocator)
     , migrationsInProgress()
+    , active(false)
 {
     ;
 }
@@ -57,6 +58,9 @@ int
 RocksteadyMigrationManager::poll()
 {
     int workPerformed = 0;
+    if (active)
+        return 0;
+    active = true;
 
     // Check to see if a tombstone protector is required.
     if (migrationsInProgress.size() == 0) {
@@ -89,6 +93,8 @@ RocksteadyMigrationManager::poll()
             migration++;
         }
     }
+
+    active = false;
 
     return workPerformed == 0 ? 0 : 1;
 }
@@ -281,6 +287,7 @@ bool
 RocksteadyMigration::addPriorityHash(uint64_t priorityHash)
 {
     SpinLock::Guard lock(priorityLock);
+    RAMCLOUD_LOG(WARNING, "key:%lu", priorityHash);
 
     // First, check if this hash is already part of an in progress priority
     // request. If this is the case, return immediately as this hash should
@@ -392,33 +399,6 @@ RocksteadyMigration::prepare()
                     " in preparation for migrating tablet[0x%lx, 0x%lx] in"
                     " table %lu from master %lu.", *sourceSafeVersion,
                     startKeyHash, endKeyHash, tableId, sourceServerId.getId());
-
-            // If ROCKSTEADY_SOURCE_OWNS_TABLET is defined, then do not prepare
-            // the source. Instead, just create the set of partitions and tell
-            // the manager to start migrating data.
-#ifdef ROCKSTEADY_SOURCE_OWNS_TABLET
-            for (uint32_t i = 0; i < MAX_NUM_PARTITIONS; i++) {
-                uint64_t partitionStartHTBucket =
-                        i * (sourceNumHTBuckets / MAX_NUM_PARTITIONS);
-                uint64_t partitionEndHTBucket =
-                        ((i + 1) * (sourceNumHTBuckets /
-                        MAX_NUM_PARTITIONS)) - 1;
-
-                partitions[i].construct(partitionStartHTBucket,
-                        partitionEndHTBucket);
-
-                RAMCLOUD_LOG(ll, "Created hash table partition from"
-                        " bucket %lu to bucket %lu (Migrating tablet [0x%lx,"
-                        " 0x%lx], tableId %lu).", partitionStartHTBucket,
-                        partitionEndHTBucket, startKeyHash, endKeyHash,
-                        tableId);
-            }
-
-            // The destination can now start migrating data.
-            phase = MIGRATING_DATA;
-
-            return 1;
-#endif // ROCKSTEADY_SOURCE_OWNS_TABLET
 
             // Obtain the head of this master's log in order to initiate
             // ownership transfer.
@@ -657,25 +637,10 @@ RocksteadyMigration::pullAndReplay_reapPullRpcs()
                         startKeyHash, endKeyHash, tableId);
             }
 
-#ifdef ROCKSTEADY_NO_REPLAY
-            // If ROCKSTEADY_NO_REPLAY has been defined, then drop the received
-            // data immediately. Nothing is scheduled for replay.
-            (*((*pullRpc)->responseBuffer)).destroy();
-            (*partition)->freePullBuffers.push_back(
-                    (*pullRpc)->responseBuffer);
-            (*partition)->pullRpcInProgress = false;
-
-            if ((*partition)->allDataPulled) {
-                (*partition).destroy();
-                numCompletedPartitions++;
-            }
-#else  // ROCKSTEADY_NO_REPLAY
             // The response buffer is now eligible for replay.
             (*partition)->freeReplayBuffers.push_back(
                     (*pullRpc)->responseBuffer);
             (*partition)->pullRpcInProgress = false;
-#endif // ROCKSTEADY_NO_REPLAY
-
             // Add this rpc to the free list.
             (*pullRpc).destroy();
             freePullRpcs.push_back(pullRpc);

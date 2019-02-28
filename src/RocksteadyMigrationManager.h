@@ -70,6 +70,8 @@ class RocksteadyMigrationManager : Dispatch::Poller {
     // is the destination.
     std::vector<RocksteadyMigration*> migrationsInProgress;
 
+    bool active;
+
     DISALLOW_COPY_AND_ASSIGN(RocksteadyMigrationManager);
 };
 

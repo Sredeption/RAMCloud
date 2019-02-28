@@ -24,7 +24,7 @@ WorkloadGenerator::WorkloadGenerator(
         throw std::runtime_error("unknown workload type");
     }
 
-    generator= new ZipfianGenerator(objectCount);
+    generator = new ZipfianGenerator(objectCount);
 }
 
 std::string WorkloadGenerator::debugString() const
@@ -71,16 +71,15 @@ void WorkloadGenerator::run(bool issueMigration)
     while (true) {
 
         memset(key, 0, keyLen);
-        std::string("workload").copy(key, 8);
-        *reinterpret_cast<uint64_t *>(key + 8) = generator->nextNumber();
+        string keyStr = std::to_string(generator->nextNumber());
         SampleType type;
         uint64_t start = Cycles::rdtsc();
         if (rand() <= readThreshold) {
-            client->read(key, keyLen);
+            client->read(keyStr.c_str(), keyStr.length());
             readCount++;
             type = READ;
         } else {
-            client->write(key, keyLen, value, objectSize);
+            client->write(keyStr.c_str(), keyStr.length(), value, objectSize);
             writeCount++;
             type = WRITE;
         }

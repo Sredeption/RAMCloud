@@ -93,20 +93,6 @@ def backup_migrate(num_servers,
         args['old_master_args'] = '-d -D -t %d' % old_master_ram
     migration_logs = cluster.run(**args)
 
-    # Collect metrics information.
-    stats = {}
-    stats['metrics'] = recoverymetrics.parseRecovery(migration_logs)
-    report = recoverymetrics.makeReport(stats['metrics']).jsonable()
-    f = open('%s/metrics' % migration_logs, 'w')
-    getDumpstr().print_report(report, file=f)
-    f.close()
-    stats['run'] = migration_logs
-    stats['count'] = num_objects
-    stats['size'] = object_size
-    stats['ns'] = stats['metrics'].client.recoveryNs
-    stats['report'] = report
-    return stats
-
 
 def insist(*args, **kwargs):
     """Keep trying recoveries until the damn thing succeeds"""

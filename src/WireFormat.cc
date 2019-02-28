@@ -134,6 +134,21 @@ opcodeSymbol(uint32_t opcode)
         case MIGRATION_GETLOCATOR:         return "MIGRATION_GET_LOCATOR";
         case MIGRATION_REPLAY:             return "MIGRATION_REPLAY";
         case MIGRATION_SIDELOGCOMMIT:      return "MIGRATION_SIDE_LOG_COMMIT";
+        case ROCKSTEADY_PREP_FOR_MIGRATION:
+                                    return "ROCKSTEADY_PREP_FOR_MIGRATION";
+        case ROCKSTEADY_MIGRATION_PULL_HASHES:
+                                    return "ROCKSTEADY_MIGRATION_PULL_HASHES";
+        case ROCKSTEADY_MIGRATION_REPLAY:  return "ROCKSTEADY_MIGRATION_REPLAY";
+        case ROCKSTEADY_MIGRATE_TABLET:    return "ROCKSTEADY_MIGRATE_TABLET";
+        case ROCKSTEADY_SIDELOG_COMMIT:    return "ROCKSTEADY_SIDELOG_COMMIT";
+        case ROCKSTEADY_TAKE_TABLET_OWNERSHIP:
+                                    return "ROCKSTEADY_TAKE_TABLET_OWNERSHIP";
+        case ROCKSTEADY_MIGRATION_PRIORITY_HASHES:
+                                return "ROCKSTEADY_MIGRATION_PRIORITY_HASHES";
+        case ROCKSTEADY_DROP_SOURCE_TABLET:
+                                    return "ROCKSTEADY_DROP_SOURCE_TABLET";
+        case ROCKSTEADY_MIGRATION_PRIORITY_REPLAY:
+                                return "ROCKSTEADY_MIGRATION_PRIORITY_REPLAY";
         case ILLEGAL_RPC_TYPE:             return "ILLEGAL_RPC_TYPE";
     }
 

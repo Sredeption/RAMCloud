@@ -220,6 +220,12 @@ RpcWrapper::isReady() {
                         session->serviceLocator.c_str(),
                         WireFormat::opcodeSymbol(&request),
                         message);
+
+                if (message != NULL && !strcmp(message,
+                        "Tablet is currently locked for migration!")) {
+                    checkStatus();
+                }
+
             } else {
                 RAMCLOUD_CLOG(NOTICE,
                         "Server %s returned STATUS_RETRY from %s request",

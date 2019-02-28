@@ -92,7 +92,7 @@ TabletManager::checkAndIncrementReadCount(Key& key, Tablet* outTablet) {
         it->second.state != MIGRATION_SOURCE_PREP &&
         it->second.state != MIGRATION_TARGET) {
         if (it->second.state == TabletManager::LOCKED_FOR_MIGRATION)
-            throw RetryException(HERE, 1000, 2000,
+            throw RetryException(HERE, 50, 100,
                     "Tablet is currently locked for migration!");
         return false;
     }

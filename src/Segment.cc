@@ -379,7 +379,8 @@ uint64_t bufferAppendCount;
  *      Offset+length must not exceed the current size of the segment.
  */
 void
-Segment::appendToBuffer(Buffer& buffer, uint32_t offset, uint32_t length) const
+Segment::appendToBuffer(Buffer &buffer, uint32_t offset, uint32_t length,
+                        bool zeroCopy) const
 {
     uint32_t currentOffset = offset;
     uint32_t currentLength = length;
@@ -395,7 +396,11 @@ Segment::appendToBuffer(Buffer& buffer, uint32_t offset, uint32_t length) const
                     segletSize * segletBlocks.size(), currentOffset);
         }
 
-        buffer.append(contigPointer, contigBytes);
+        if (!zeroCopy) {
+            buffer.append(contigPointer, contigBytes);
+        } else {
+            buffer.appendExternal(contigPointer, contigBytes);
+        }
 
         currentOffset += contigBytes;
         currentLength -= contigBytes;
@@ -482,7 +487,9 @@ Segment::getOffset(Reference reference)
  *      The entry's type as specified when it was appended (LogEntryType).
  */
 LogEntryType
-Segment::getEntry(uint32_t offset, Buffer* buffer, uint32_t* lengthWithMetadata)
+Segment::getEntry(uint32_t offset, Buffer *buffer, uint32_t *lengthWithMetadata,
+                  bool zeroCopy, uint32_t *entryLength, bool includeHeader,
+                  uint32_t *headerLength)
 {
     EntryHeader header = getEntryHeader(offset);
     uint32_t entryDataOffset = offset +
@@ -493,13 +500,28 @@ Segment::getEntry(uint32_t offset, Buffer* buffer, uint32_t* lengthWithMetadata)
     copyOut(offset + sizeof32(header), &entryDataLength,
         header.getLengthBytes());
 
-    if (buffer != NULL)
-        appendToBuffer(*buffer, entryDataOffset, entryDataLength);
+    if (buffer != NULL) {
+        if (!includeHeader) {
+            appendToBuffer(*buffer, entryDataOffset, entryDataLength, zeroCopy);
+        } else {
+            uint32_t fullLength = sizeof32(header) + header.getLengthBytes() +
+                                  entryDataLength;
+            appendToBuffer(*buffer, offset, fullLength, zeroCopy);
+        }
+    }
 
     if (lengthWithMetadata != NULL) {
         *lengthWithMetadata = entryDataLength +
                               sizeof32(header) +
                               header.getLengthBytes();
+    }
+
+    if (entryLength != NULL) {
+        *entryLength = entryDataLength;
+    }
+
+    if (headerLength != NULL) {
+        *headerLength = sizeof32(header) + header.getLengthBytes();
     }
 
     return header.getType();
@@ -526,9 +548,14 @@ Segment::getEntry(uint32_t offset, Buffer* buffer, uint32_t* lengthWithMetadata)
 LogEntryType
 Segment::getEntry(Reference reference,
                   Buffer* buffer,
-                  uint32_t* lengthWithMetadata)
+                  uint32_t* lengthWithMetadata,
+                  bool zeroCopy,
+                  uint32_t* entryLength,
+                  bool includeHeader,
+                  uint32_t* headerLength)
 {
-    return getEntry(getOffset(reference), buffer, lengthWithMetadata);
+    return getEntry(getOffset(reference), buffer, lengthWithMetadata,
+        zeroCopy, entryLength, includeHeader, headerLength);
 }
 
 /**
@@ -793,6 +820,29 @@ Segment::checkMetadataIntegrity(const SegmentCertificate& certificate)
     if (certificate.checksum != currentChecksum.getResult()) {
         LOG(WARNING, "segment corrupt: bad checksum (expected 0x%08x, "
             "was 0x%08x)", certificate.checksum, currentChecksum.getResult());
+        offset = 0;
+
+        unused = NULL;
+        while (offset < certificate.segmentLength &&
+               peek(offset, &unused) > 0) {
+            EntryHeader header = getEntryHeader(offset);
+            currentChecksum.update(&header, sizeof(header));
+
+            uint32_t length = 0;
+            RAMCLOUD_LOG(NOTICE, "<%u, %u>", sizeof32(header) +header.getLengthBytes(), length);
+            copyOut(offset + sizeof32(header), &length,
+                    header.getLengthBytes());
+
+            offset += (sizeof32(header) + header.getLengthBytes() + length);
+            size_t segmentSize = segletBlocks.size() * segletSize;
+            if (offset > segmentSize) {
+                LOG(WARNING, "segment corrupt: entries run off past "
+                             "allocated segment size (segment size %lu, next entry would "
+                             "have started at %u)",
+                    segmentSize, offset);
+                break;
+            }
+        }
         return false;
     }
 
@@ -1038,7 +1088,8 @@ Segment::Reference::getEntry(SegletAllocator* allocator,
     TEST_LOG("Discontiguous entry");
     LogSegment* segment = allocator->getOwnerSegment(
         reinterpret_cast<void*>(reference));
-    return segment->getEntry(*this, buffer, lengthWithMetadata);
+    return segment->getEntry(*this, buffer, lengthWithMetadata, zeroCopy,
+                             entryLength, includeHeader, headerLength);
 }
 
 } // namespace

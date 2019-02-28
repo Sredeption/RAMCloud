@@ -24,10 +24,10 @@ class WorkloadGenerator {
 
         virtual void setup(uint32_t objectCount, uint32_t objectSize) = 0;
 
-        virtual void read(char *key, uint16_t keyLen) = 0;
+        virtual void read(const char *key, uint64_t keyLen) = 0;
 
         virtual void
-        write(char *key, uint16_t keyLen, char *value, uint32_t valueLen) = 0;
+        write(const char *key, uint64_t keyLen, char *value, uint32_t valueLen) = 0;
 
         virtual void startMigration() = 0;
 
