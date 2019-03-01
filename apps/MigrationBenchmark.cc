@@ -147,7 +147,8 @@ class BasicClient : public RAMCloud::WorkloadGenerator::Client {
     {
         Buffer value;
         bool exists;
-        ramcloud->readMigrating(pressTableId, key, keyLength, &value,
+        ramcloud->readMigrating(pressTableId, key,
+                                static_cast<uint16_t>(keyLen), &value,
                                 NULL, NULL, &exists);
         if (!exists) {
             RAMCLOUD_CLOG(WARNING, "......");
@@ -156,8 +157,8 @@ class BasicClient : public RAMCloud::WorkloadGenerator::Client {
 
     void write(const char *key, uint64_t keyLen, char *value, uint32_t valueLen)
     {
-        ramcloud->write(pressTableId, key, keyLength, value, valueLength,
-                        NULL, NULL, true);
+        ramcloud->write(pressTableId, key, static_cast<uint16_t>(keyLen), value,
+                        valueLen);
     }
 
     void startMigration()
@@ -616,7 +617,8 @@ try
     ServerList serverList(&context);
     serverList.applyServerList(protoServerList);
 
-    rocksteadyBasic();
+//    rocksteadyBasic();
+    basic();
 
     return 0;
 } catch (ClientException &e) {

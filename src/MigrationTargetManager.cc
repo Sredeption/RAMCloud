@@ -16,7 +16,7 @@ void
 MigrationTargetManager::startMigration(uint64_t migrationId, Buffer *payload)
 {
     Migration *migration = new Migration(
-        context, payload, finishNotifier->clone());
+        this, payload, finishNotifier->clone());
     migrations[migrationId] = migration;
     migrationsInProgress.push_back(migration);
     RAMCLOUD_LOG(NOTICE, "Start migration %lu in Target", migrationId);
@@ -82,8 +82,9 @@ int MigrationTargetManager::poll()
 }
 
 MigrationTargetManager::Migration::Migration(
-    Context *context, Buffer *payload, FinishNotifier *finishNotifier)
-    : context(context), localLocator(), migrationId(), replicas(),
+    MigrationTargetManager *manager, Buffer *payload,
+    FinishNotifier *finishNotifier)
+    : context(manager->context), localLocator(), migrationId(), replicas(),
       rangeList(), tableId(), firstKeyHash(), lastKeyHash(), sourceServerId(),
       targetServerId(), tabletManager(), objectManager(), phase(SETUP),
       freePullBuffers(), freeReplayBuffers(), freePullRpcs(), busyPullRpcs(),
@@ -91,7 +92,8 @@ MigrationTargetManager::Migration::Migration(
       totalReplayedBytes(0), numReplicas(), numCompletedReplicas(0),
       migrationStartTS(), migrationEndTS(), migratedMegaBytes(),
       sideLogCommitStartTS(), sideLogCommitEndTS(),
-      finishNotifier(finishNotifier), tombstoneProtector()
+      finishNotifier(finishNotifier), finishNotified(false),
+      tombstoneProtector()
 {
     WireFormat::MigrationTargetStart::Request *reqHdr =
         payload->getOffset<WireFormat::MigrationTargetStart::Request>(0);
@@ -144,7 +146,7 @@ MigrationTargetManager::Migration::Migration(
     }
 
     for (uint32_t i = 0; i < MAX_PARALLEL_REPLAY_RPCS; i++) {
-        sideLogs[i].construct(objectManager->getLog());
+        sideLogs[i].construct(objectManager->getLog(), manager);
     }
 
     // To begin with, all sidelogs are free.
@@ -385,18 +387,17 @@ int MigrationTargetManager::Migration::sideLogCommit()
 
     int workDone = 0;
 
-    if (finishNotifier->isSent()) {
-        if (finishNotifier->isReady()) {
+    if (!finishNotified) {
+        if (!finishNotifier->isSent()) {
+            finishNotifier->notify(this);
+        } else if (finishNotifier->isReady()) {
             finishNotifier->wait();
-            if (tombstoneProtector)
-                tombstoneProtector.destroy();
-            RAMCLOUD_LOG(WARNING, "SideLog commit finish, migration %lu "
-                                  "is over", migrationId);
-            phase = COMPLETED;
+            finishNotified = true;
+            RAMCLOUD_LOG(WARNING, "migration %lu finished", migrationId);
             return 1;
         }
-        return 0;
     }
+
 
     if (sideLogCommitRpc) {
         if (sideLogCommitRpc->isReady()) {
@@ -408,8 +409,12 @@ int MigrationTargetManager::Migration::sideLogCommit()
     if (!sideLogCommitRpc) {
         if (freeSideLogs.empty()) {
             sideLogCommitEndTS = Cycles::rdtsc();
-            finishNotifier->notify(this);
-            RAMCLOUD_LOG(WARNING, "SideLog commit finish, notifying");
+            if (tombstoneProtector)
+                tombstoneProtector.destroy();
+            if (finishNotified){
+                phase = COMPLETED;
+                RAMCLOUD_LOG(WARNING, "SideLog commit finish, notifying");
+            }
         } else {
             sideLogCommitRpc.construct(freeSideLogs.front(), localLocator);
             context->workerManager->handleRpc(sideLogCommitRpc.get());

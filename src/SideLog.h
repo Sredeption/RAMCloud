@@ -69,6 +69,7 @@ class SideLog : public AbstractLog {
     explicit SideLog(Log* log);
     SideLog(Log* log, LogCleaner* cleaner);
     SideLog(Log* log, RocksteadyMigrationManager* manager);
+    SideLog(Log* log, MigrationTargetManager* manager);
     ~SideLog();
     void commit();
 

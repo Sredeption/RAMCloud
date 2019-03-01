@@ -78,6 +78,20 @@ SideLog::SideLog(Log* log, RocksteadyMigrationManager* manager)
 {
 }
 
+SideLog::SideLog(Log* log, MigrationTargetManager* manager)
+    : AbstractLog(log->entryHandlers,
+                  log->segmentManager,
+                  log->replicaManager,
+                  log->segmentSize),
+      log(log),
+      segmentManager(log->segmentManager),
+      replicaManager(log->replicaManager),
+      segments(),
+      forCleaner(false),
+      isRocksteady(true)
+{
+}
+
 /*
  * Destroy this object. Any appends made after the last commit() method call
  * will be implicitly aborted (removed from the in-memory and on-disk logs).
