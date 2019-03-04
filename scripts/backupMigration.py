@@ -57,40 +57,26 @@ def backup_migrate(num_servers,
     args['transport'] = transport
     args['verbose'] = verbose
     args['debug'] = debug
-    args['coordinator_host'] = getOldMasterHost()
+    # args['coordinator_host'] = getOldMasterHost()
     args['coordinator_args'] = coordinator_args
     args['share_hosts'] = True
     args['dpdk_port'] = dpdk_port
-    args['client_hosts'] = hosts[:num_clients]
+    args['client_hosts'] = hosts[2:2 + num_clients]
 
     if backup_args:
         args['backup_args'] += backup_args
     else:
-        args['backup_args'] = '--maxNonVolatileBuffers 1000'
+        args['backup_args'] = '--maxNonVolatileBuffers 2000'
 
     # Allocate enough memory on recovery masters to handle several
     # recovery partitions (most recoveries will only have one recovery
     # partition per master, which is about 500 MB).
-    args['master_args'] = '-d -D -t 18000 --segmentFrames 8192'
+    args['master_args'] = '-t 18000 --segmentFrames 8192'
     if master_args:
         args['master_args'] += ' ' + master_args;
     args['client'] = ('%s -l %s' %
                       (client_binary, log_level))
 
-    args['old_master_host'] = getOldMasterHost()
-    if old_master_ram:
-        args['old_master_args'] = '-d -t %d' % old_master_ram
-    else:
-        # Estimate how much log space the old master will need to hold
-        # all of the data.
-        old_master_ram = (
-                200 + (1.3 * num_objects / object_size * num_overwrites))
-        if args['coordinator_host'][0] == 'rcmaster' and old_master_ram > 42000:
-            print('Warning: pushing the limits of rcmaster; '
-                  'limiting RAM to 42000 MB to avoid knocking it over; '
-                  'use rcmonster if you need more')
-            old_master_ram = 42000
-        args['old_master_args'] = '-d -D -t %d' % old_master_ram
     migration_logs = cluster.run(**args)
 
 
@@ -206,27 +192,8 @@ if __name__ == '__main__':
     args['dpdk_port'] = options.dpdk_port
 
     try:
-        stats = backup_migrate(**args)
+        backup_migrate(**args)
 
-        # set up trend points for dumpstr
-        trends = ['recovery']
-        if options.trends is not None:
-            for trend in options.trends:
-                if trend not in trends:
-                    trends.append(trend)
-        trends = zip(trends,
-                     [stats['ns'] / 1e9] * len(trends))
-
-        # print and upload dumpstr report
-        dumpstr = getDumpstr()
-        dumpstr.print_report(stats['report'])
-        s = dumpstr.upload_report('recovery', stats['report'], trends=trends)
-        print('You can view your report at %s' % s['url'])
-
-        # write the dumpstr URL to the metrics log file
-        f = open('%s/metrics' % stats['run'], 'a')
-        print('You can view your report at %s' % s['url'], file=f)
-        f.close()
 
     finally:
         log_info = log.scan("%s/latest" % (options.log_dir),

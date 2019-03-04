@@ -19,7 +19,11 @@ MigrationBackupManager::Replica::Replica(const BackupStorage::FrameRef &frame,
       refCount(0),
       fetchCount(0),
       head(NULL),
-      ackId(0)
+      ackId(0),
+      data(NULL),
+      currentOffset(0),
+      done(false),
+      startTime(0)
 {
 
 }
@@ -43,75 +47,14 @@ void MigrationBackupManager::Replica::load()
 
 void MigrationBackupManager::Replica::filter()
 {
-    recoveryException.reset();
-    uint64_t start = Cycles::rdtsc();
-    void *replicaData = NULL;
-    if (head)
-        replicaData = head;
-    else
-        replicaData = frame->load();
-
     try {
-        Chunk *chunk = new Chunk();
-
-        SegmentIterator it(replicaData, migration->segmentSize,
-                           metadata->certificate);
-        it.checkMetadataIntegrity();
-
-        Buffer headerBuffer;
-        const SegmentHeader *header = NULL;
-        for (; !it.isDone(); it.next()) {
-            LogEntryType type = it.getType();
-            if (type == LOG_ENTRY_TYPE_SEGHEADER) {
-                it.appendToBuffer(headerBuffer);
-                header = headerBuffer.getStart<SegmentHeader>();
-                continue;
-            }
-            if (type != LOG_ENTRY_TYPE_OBJ && type != LOG_ENTRY_TYPE_OBJTOMB)
-                continue;
-
-            if (header == NULL) {
-                RAMCLOUD_DIE("Found log entry before header while "
-                             "building recovery segments");
-            }
-
-            Buffer entryBuffer;
-            uint64_t tableId;
-            KeyHash keyHash;
-
-            it.appendToBuffer(entryBuffer);
-            if (type == LOG_ENTRY_TYPE_OBJ) {
-                Object object(entryBuffer);
-                tableId = object.getTableId();
-                keyHash = Key::getHash(tableId,
-                                       object.getKey(), object.getKeyLength());
-            } else if (type == LOG_ENTRY_TYPE_OBJTOMB) {
-                ObjectTombstone tomb(entryBuffer);
-                tableId = tomb.getTableId();
-                keyHash = Key::getHash(tableId,
-                                       tomb.getKey(), tomb.getKeyLength());
-            } else {
-                    LOG(WARNING, "Unknown LogEntry (id=%u)", type);
-                throw SegmentRecoveryFailedException(HERE);
-            }
-            if (!(tableId == migration->tableId &&
-                  migration->firstKeyHash <= keyHash &&
-                  keyHash <= migration->lastKeyHash)) {
-                continue;
-            }
-
-            uint32_t length = entryBuffer.size();
-
-            if (chunk->size() + length > Migration::MAX_BATCH_SIZE) {
-                chunks.push_back(chunk);
-                chunk = new Chunk();
-            }
-
-            chunk->append(type, length, entryBuffer);
+        if (data == NULL) {
+            filter_prepare();
+        } else if (!done) {
+            filter_scan();
+        } else if (!built) {
+            filter_finish();
         }
-
-        chunks.push_back(chunk);
-
     } catch (const Exception &e) {
         // Can throw SegmentIteratorException or SegmentRecoveryFailedException.
         // Exception is a little broad, but it catches them both; hopefully we
@@ -124,11 +67,84 @@ void MigrationBackupManager::Replica::filter()
             new SegmentRecoveryFailedException(HERE));
         built = true;
     }
+}
+
+void MigrationBackupManager::Replica::filter_prepare()
+{
+    recoveryException.reset();
+    startTime = Cycles::rdtsc();
+    if (head)
+        data = head;
+    else
+        data = frame->load();
+    SegmentIterator it(data, migration->segmentSize,
+                       metadata->certificate);
+    it.checkMetadataIntegrity();
+    chunks.push_back(new Chunk());
+}
+
+void MigrationBackupManager::Replica::filter_scan()
+{
+    SegmentIterator it(data, migration->segmentSize,
+                       metadata->certificate);
+    it.setOffset(currentOffset);
+
+    Chunk *chunk = chunks.back();
+    for (; !it.isDone(); it.next()) {
+
+        if (it.getOffset() - currentOffset > Migration::MAX_SCAN_SIZE) {
+            currentOffset = it.getOffset();
+            break;
+        }
+        LogEntryType type = it.getType();
+        if (type != LOG_ENTRY_TYPE_OBJ && type != LOG_ENTRY_TYPE_OBJTOMB)
+            continue;
+
+        Buffer entryBuffer;
+        uint64_t tableId;
+        KeyHash keyHash;
+
+        it.appendToBuffer(entryBuffer);
+        if (type == LOG_ENTRY_TYPE_OBJ) {
+            Object object(entryBuffer);
+            tableId = object.getTableId();
+            keyHash = Key::getHash(tableId,
+                                   object.getKey(), object.getKeyLength());
+        } else if (type == LOG_ENTRY_TYPE_OBJTOMB) {
+            ObjectTombstone tomb(entryBuffer);
+            tableId = tomb.getTableId();
+            keyHash = Key::getHash(tableId,
+                                   tomb.getKey(), tomb.getKeyLength());
+        } else {
+                LOG(WARNING, "Unknown LogEntry (id=%u)", type);
+            throw SegmentRecoveryFailedException(HERE);
+        }
+        if (!(tableId == migration->tableId &&
+              migration->firstKeyHash <= keyHash &&
+              keyHash <= migration->lastKeyHash)) {
+            continue;
+        }
+
+        uint32_t length = entryBuffer.size();
+
+        if (chunk->size() + length > Migration::MAX_BATCH_SIZE) {
+            chunk = new Chunk();
+            chunks.push_back(chunk);
+        }
+
+        chunk->append(type, length, entryBuffer);
+
+    }
+    done = it.isDone();
+}
+
+void MigrationBackupManager::Replica::filter_finish()
+{
     RAMCLOUD_LOG(NOTICE,
                  "<%s,%lu> migration  segments took %lu us to construct.",
                  migration->sourceServerId.toString().c_str(),
                  metadata->segmentId,
-                 Cycles::toNanoseconds(Cycles::rdtsc() - start) / 1000);
+                 Cycles::toNanoseconds(Cycles::rdtsc() - startTime) / 1000);
     Fence::sfence();
     built = true;
     lastAccessTime = Cycles::rdtsc();
@@ -220,9 +236,9 @@ bool MigrationBackupManager::Migration::getSegment(
 
     auto replicaIt = segmentIdToReplica.find(segmentId);
     if (replicaIt == segmentIdToReplica.end()) {
-        RAMCLOUD_LOG(NOTICE,
-                     "Asked for a recovery segment for segment <%s,%lu> "
-                     "which isn't part of this recovery",
+        RAMCLOUD_LOG(WARNING,
+                     "Asked for segment <%s,%lu> "
+                     "which isn't part of this migration",
                      sourceServerId.toString().c_str(), segmentId);
         throw BackupBadSegmentIdException(HERE);
     }
@@ -320,12 +336,17 @@ int MigrationBackupManager::Migration::loadAndFilter_reapFilterRpcs()
 
             Replica *replica = (*filterRpc)->replica;
 
-            RAMCLOUD_LOG(DEBUG, "filter segmented %lu in memory",
-                         replica->metadata->segmentId);
+            if (replica->built) {
+                RAMCLOUD_LOG(DEBUG, "filter segmented %lu in memory",
+                             replica->metadata->segmentId);
+                completedReplicaNum++;
+            } else {
+                replicaToFilter.push_front(replica);
+            }
+
             (*filterRpc).destroy();
-            completedReplicaNum++;
-            workPerformed++;
             freeFilterRpcs.push_back(filterRpc);
+            workPerformed++;
         } else {
             busyFilterRpcs.push_back(filterRpc);
         }

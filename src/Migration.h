@@ -234,6 +234,8 @@ class Migration : public Task {
 
     bool skipMaster;
 
+    uint64_t backupStartTime;
+
     friend class MigrationInternal::BackupStartTask;
 
     friend class MigrationInternal::BackupStartPartitionTask;

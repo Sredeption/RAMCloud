@@ -305,6 +305,7 @@ class MigrationTargetManager : public Dispatch::Poller {
 
     Migration *getMigration(uint64_t migrationId);
 
+    bool anyMigration();
 
     class RealFinishNotifier : public FinishNotifier {
 

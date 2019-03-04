@@ -63,6 +63,11 @@ class MigrationBackupManager : public Dispatch::Poller {
 
         uint32_t ackId;
 
+        void *data;
+        uint32_t currentOffset;
+        bool done;
+        uint64_t startTime;
+
         explicit Replica(const BackupStorage::FrameRef &frame,
                          Migration *migration);
 
@@ -71,6 +76,12 @@ class MigrationBackupManager : public Dispatch::Poller {
         void load();
 
         void filter();
+
+        void filter_prepare();
+
+        void filter_scan();
+
+        void filter_finish();
 
         DISALLOW_COPY_AND_ASSIGN(Replica);
     };
@@ -106,7 +117,8 @@ class MigrationBackupManager : public Dispatch::Poller {
         uint32_t replicaNum;
         uint32_t completedReplicaNum;
 
-        static const uint32_t MAX_BATCH_SIZE = 100 * 1024;
+        static const uint32_t MAX_BATCH_SIZE = 10 * 1024;
+        static const uint32_t MAX_SCAN_SIZE = 10 * 1024;
 
         class LoadRpc : public Transport::ServerRpc {
           PRIVATE:

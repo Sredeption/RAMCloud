@@ -81,6 +81,11 @@ int MigrationTargetManager::poll()
     return workPerformed == 0 ? 0 : 1;
 }
 
+bool MigrationTargetManager::anyMigration()
+{
+    return !migrationsInProgress.empty();
+}
+
 MigrationTargetManager::Migration::Migration(
     MigrationTargetManager *manager, Buffer *payload,
     FinishNotifier *finishNotifier)
@@ -125,12 +130,11 @@ MigrationTargetManager::Migration::Migration(
 
     RAMCLOUD_LOG(WARNING, "replicas number: %u", numReplicas);
     //TODO: handle log head
-    RAMCLOUD_CLOG(WARNING, "skip segment %lu", replicas.front()->segmentId);
-    replicas.pop_front();
-    numReplicas--;
-    RAMCLOUD_CLOG(WARNING, "skip segment %lu", replicas.front()->segmentId);
-    replicas.pop_front();
-    numReplicas--;
+    for (int i = 0; i < 3; i++) {
+        RAMCLOUD_CLOG(WARNING, "skip segment %lu", replicas.front()->segmentId);
+        replicas.pop_front();
+        numReplicas--;
+    }
 
     for (uint32_t i = 0; i < PIPELINE_DEPTH; i++) {
         freePullBuffers.push_back(&(rpcBuffers[i]));
@@ -260,16 +264,30 @@ int MigrationTargetManager::Migration::pullAndReplay_reapPullRpcs()
 
     for (size_t i = 0; i < numBusyPullRpcs; i++) {
         Tub<PullRpc> *pullRpc = busyPullRpcs.front();
+        Replica *replica = (*pullRpc)->replica;
         if ((*pullRpc)->isReady()) {
-            bool done = (*pullRpc)->wait();
-            Replica *replica = (*pullRpc)->replica;
+            try {
+                bool done = (*pullRpc)->wait();
 
-            replica->done = done;
-            freeReplayBuffers.emplace_back((*pullRpc)->responseBuffer, replica);
+                replica->done = done;
+                freeReplayBuffers.emplace_back((*pullRpc)->responseBuffer,
+                                               replica);
+                workDone++;
+            } catch (SegmentRecoveryFailedException &e) {
+                RAMCLOUD_LOG(ERROR, "skip a failed segment:%lu",
+                             replica->segmentId);
+                replica->done = true;
+                numCompletedReplicas++;
+                Tub<Buffer> *responseBuffer = (*pullRpc)->responseBuffer;
+                (*responseBuffer).destroy();
+                freePullBuffers.push_back(responseBuffer);
+                workDone++;
+            }
+
             (*pullRpc).destroy();
 
             freePullRpcs.push_back(pullRpc);
-            workDone++;
+
         } else {
             busyPullRpcs.push_back(pullRpc);
         }
@@ -329,12 +347,12 @@ int MigrationTargetManager::Migration::pullAndReplay_sendPullRpcs()
     int workDone = 0;
     while (!freePullRpcs.empty() && !freePullBuffers.empty() &&
            !replicas.empty()) {
+        Replica *replica = replicas.front();
         Tub<PullRpc> *pullRpc = freePullRpcs.front();
 
         Tub<Buffer> *responseBuffer = freePullBuffers.front();
         responseBuffer->construct();
 
-        Replica *replica = replicas.front();
         pullRpc->construct(context, migrationId, replica,
                            sourceServerId, responseBuffer);
         replicas.pop_front();
@@ -411,7 +429,7 @@ int MigrationTargetManager::Migration::sideLogCommit()
             sideLogCommitEndTS = Cycles::rdtsc();
             if (tombstoneProtector)
                 tombstoneProtector.destroy();
-            if (finishNotified){
+            if (finishNotified) {
                 phase = COMPLETED;
                 RAMCLOUD_LOG(WARNING, "SideLog commit finish, notifying");
             }

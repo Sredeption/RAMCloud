@@ -150,9 +150,6 @@ class BasicClient : public RAMCloud::WorkloadGenerator::Client {
         ramcloud->readMigrating(pressTableId, key,
                                 static_cast<uint16_t>(keyLen), &value,
                                 NULL, NULL, &exists);
-        if (!exists) {
-            RAMCLOUD_CLOG(WARNING, "......");
-        }
     }
 
     void write(const char *key, uint64_t keyLen, char *value, uint32_t valueLen)
@@ -270,7 +267,7 @@ void basic()
     workloadGenerator.statistics(readResult, RAMCloud::WorkloadGenerator::READ);
     workloadGenerator.statistics(writeResult,
                                  RAMCloud::WorkloadGenerator::WRITE);
-    RAMCLOUD_LOG(WARNING,
+    RAMCLOUD_LOG(NOTICE,
                  "time: all median, 99th | read median, 99th | write median, 99th");
     for (uint64_t i = 0; i < result.size(); i++) {
         RAMCLOUD_LOG(NOTICE,

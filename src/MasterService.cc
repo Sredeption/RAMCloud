@@ -4530,12 +4530,15 @@ void MasterService::migrationSourceStart(
     Service::Rpc *rpc)
 {
 
-    migrationSourceManager.startMigration(reqHdr->migrationId,
-                                          reqHdr->tableId,
-                                          reqHdr->firstKeyHash,
-                                          reqHdr->lastKeyHash,
-                                          reqHdr->sourceServerId,
-                                          reqHdr->targetServerId);
+    {
+        Dispatch::Lock(context->dispatch);
+        migrationSourceManager.startMigration(reqHdr->migrationId,
+                                              reqHdr->tableId,
+                                              reqHdr->firstKeyHash,
+                                              reqHdr->lastKeyHash,
+                                              reqHdr->sourceServerId,
+                                              reqHdr->targetServerId);
+    }
 
     tabletManager.migrateTablet(reqHdr->tableId, reqHdr->firstKeyHash,
                                 reqHdr->lastKeyHash, reqHdr->migrationId,

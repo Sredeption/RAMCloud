@@ -441,6 +441,10 @@ ReplicatedSegment::sync(uint32_t offset, SegmentCertificate* certificate)
             dumpProgress();
             syncStartTicks = Cycles::rdtsc();
         }
+        uint64_t interval = Cycles::toMicroseconds(
+            Cycles::rdtsc() - syncStartTicks);
+        if (interval > 20)
+            return;
         lock.construct(dataMutex);
     }
 }

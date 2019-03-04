@@ -603,10 +603,15 @@ void BackupService::migrationStartReading(
             break;
         framesForRecovery.emplace_back(it->second);
     }
-    migrationBackupManager->start(reqHdr->migrationId,
-                                  reqHdr->sourceId, reqHdr->targetId,
-                                  reqHdr->tableId, reqHdr->firstKeyHash,
-                                  reqHdr->lastKeyHash, framesForRecovery);
+
+    {
+        Dispatch::Lock(context->dispatch);
+        migrationBackupManager->start(reqHdr->migrationId,
+                                      reqHdr->sourceId, reqHdr->targetId,
+                                      reqHdr->tableId, reqHdr->firstKeyHash,
+                                      reqHdr->lastKeyHash, framesForRecovery);
+    }
+
     metrics->backup.storageType = uint64_t(storage->storageType);
 }
 

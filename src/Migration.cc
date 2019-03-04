@@ -49,7 +49,8 @@ Migration::Migration(Context *context, TaskQueue &taskQueue,
       testingMasterStartTaskSendCallback(),
       testingBackupEndTaskSendCallback(),
       testingFailRecoveryMasters(),
-      skipMaster(false)
+      skipMaster(false),
+      backupStartTime(0)
 {
 }
 
@@ -419,7 +420,7 @@ struct MasterStartTask {
 
     void send()
     {
-        RAMCLOUD_LOG(NOTICE, "Starting migration %lu on recovery master %s",
+        RAMCLOUD_LOG(NOTICE, "Starting migration %lu on master %s",
                      migration.migrationId, serverId.toString().c_str());
 
         (*migration.tracker)[serverId] = &migration;
@@ -553,6 +554,7 @@ void Migration::startBackups()
     /* Broadcast 1: start reading replicas from disk and verify log integrity */
     parallelRun(backupStartTasks.get(), backups.size(), maxActiveBackupHosts);
 
+    backupStartTime = Cycles::rdtsc();
     status = START_RECOVERY_MASTERS;
     schedule();
 }

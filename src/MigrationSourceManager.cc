@@ -71,7 +71,6 @@ void MigrationSourceManager::startMigration(
     uint64_t lastKeyHash, uint64_t sourceId, uint64_t targetId)
 {
     {
-        std::lock_guard<std::mutex> guard(listLock);
         Migration *migration = new Migration(this, migrationId, tableId,
                                              firstKeyHash,
                                              lastKeyHash, sourceId,
