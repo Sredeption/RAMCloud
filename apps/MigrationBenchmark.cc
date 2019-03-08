@@ -23,6 +23,7 @@
 #include "RamCloud.h"
 #include "ShortMacros.h"
 #include "WorkloadGenerator.h"
+#include "TpcC.h"
 
 using namespace RAMCloud;
 
@@ -34,6 +35,7 @@ string testControlHub = "testControlHub";
 
 int clientIndex;
 int numClients;
+uint64_t targetOps;
 
 string tableName;
 uint64_t firstKey;
@@ -252,8 +254,9 @@ void basic()
                                      ServerId(newOwnerMasterId, 0), false);
     BasicClient basicClient(client.get(), clientIndex, &migration,
                             keyLength, valueLength, objectCount);
+
     RAMCloud::WorkloadGenerator workloadGenerator(
-        "YCSB-B", 100000, objectCount, objectSize, &basicClient);
+        "YCSB-B", targetOps, objectCount, objectSize, &basicClient);
 
     bool issueMigration = false;
     if (clientIndex == 0)
@@ -460,6 +463,329 @@ class RocksteadyClient : public RAMCloud::WorkloadGenerator::Client {
     DISALLOW_COPY_AND_ASSIGN(RocksteadyClient)
 };
 
+TPCC::TpccStat
+tpcc_oneClient(double runSeconds, TPCC::Driver *driver,
+               bool latencyTest = false)
+{
+    TPCC::TpccStat stat;
+    uint64_t total = 0;
+    double totalLatency = 0;
+
+    uint64_t runCycles = Cycles::fromSeconds(runSeconds);
+    uint64_t start = Cycles::rdtsc();
+
+    uint32_t W_ID = clientIndex % (driver->getContext()->numWarehouse) + 1;
+    while (true) {
+        if (Cycles::rdtsc() - start > runCycles) {
+            break;
+        }
+        bool outcome = false;
+        int randNum = rand() % 100;
+        if (latencyTest) {
+            randNum = 99;
+        }
+        double latency = 0;
+        int txType;
+        try {
+            if (randNum < 43) {
+                txType = 0;
+                latency = driver->txPayment(W_ID, &outcome);
+            } else if (randNum < 47) {
+                txType = 1;
+                latency = driver->txOrderStatus(W_ID, &outcome);
+            } else if (randNum < 51) {
+                txType = 2;
+                for (uint32_t D_ID = 1; D_ID <= 10; D_ID++) {
+                    latency += driver->txDelivery(W_ID, D_ID, &outcome);
+                }
+            } else if (randNum < 55) {
+                txType = 3;
+                latency = driver->txStockLevel(W_ID, 1U /*fixed D_ID*/,
+                                               &outcome);
+            } else {
+                txType = 4;
+                latency = driver->txNewOrder(W_ID, &outcome);
+            }
+            if (outcome) {
+                stat.cumulativeLatency[txType] += latency;
+                stat.txPerformedCount[txType]++;
+                total++;
+                totalLatency += latency;
+            } else {
+                stat.txAbortCount[txType]++;
+            }
+        } catch (std::exception e) {
+            RAMCLOUD_LOG(NOTICE, "exception thrown TX job, type=%d.", txType);
+            throw e;
+        }
+
+        if (latencyTest) {
+            Cycles::sleep(100);
+        }
+    }
+
+    double interval = Cycles::toSeconds(Cycles::rdtsc() - start);
+    double tput = (double) total / interval;
+    double avgLatency = totalLatency / (double) total;
+
+    RAMCLOUD_LOG(NOTICE, "%.2lf, %.2lf", tput, avgLatency);
+    return stat;
+}
+
+class TpccClient {
+
+  PRIVATE:
+
+    string
+    keyVal(int client, const char *name)
+    {
+        return format("%d:%s", client, name);
+    }
+
+    void
+    setSlaveState(const char *state)
+    {
+        string key = keyVal(clientIndex, "state");
+        ramcloud->write(controlTable, key.c_str(),
+                        downCast<uint16_t>(key.length()),
+                        state);
+    }
+
+    char *
+    readObject(uint64_t tableId, const void *key, uint16_t keyLength,
+               char *value, uint32_t size)
+    {
+        Buffer buffer;
+        ramcloud->read(tableId, key, keyLength, &buffer);
+        uint32_t actual = buffer.size();
+        if (size <= actual) {
+            actual = size - 1;
+        }
+        buffer.copy(0, size, value);
+        value[actual] = 0;
+        return value;
+    }
+
+    void
+    waitForObject(uint64_t tableId, const void *key, uint16_t keyLength,
+                  const char *desired, Buffer &value, double timeout = 1.0)
+    {
+        uint64_t start = Cycles::rdtsc();
+        size_t length = desired ? strlen(desired) : -1;
+        while (true) {
+            try {
+                ramcloud->read(tableId, key, keyLength, &value);
+                if (desired == NULL) {
+                    return;
+                }
+                const char *actual = value.getStart<char>();
+                if ((length == value.size()) &&
+                    (memcmp(actual, desired, length) == 0)) {
+                    return;
+                }
+                double elapsed = Cycles::toSeconds(Cycles::rdtsc() - start);
+                if (elapsed > timeout) {
+                    // Slave is taking too long; time out.
+                    throw Exception(HERE, format(
+                        "Object <%lu, %.*s> didn't reach desired state '%s' "
+                        "(actual: '%.*s')",
+                        tableId, keyLength, reinterpret_cast<const char *>(key),
+                        desired, downCast<int>(value.size()),
+                        actual));
+                    exit(1);
+                }
+            }
+            catch (TableDoesntExistException &e) {
+            }
+            catch (ObjectDoesntExistException &e) {
+            }
+        }
+    }
+
+    void
+    waitSlave(int slave, const char *state, double timeout = 1.0)
+    {
+        Buffer value;
+        string key = keyVal(slave, "state");
+        waitForObject(controlTable, key.c_str(),
+                      downCast<uint16_t>(key.length()),
+                      state, value, timeout);
+    }
+
+    const char *
+    getCommand(char *buffer, uint32_t size, bool remove = true)
+    {
+        while (true) {
+            try {
+                string key = keyVal(clientIndex, "command");
+                readObject(controlTable, key.c_str(),
+                           downCast<uint16_t>(key.length()), buffer, size);
+                if (strcmp(buffer, "idle") != 0) {
+                    if (remove) {
+                        // Delete the command value so we don't process the same
+                        // command twice.
+                        ramcloud->remove(controlTable, key.c_str(),
+                                         downCast<uint16_t>(key.length()));
+                    }
+                    return buffer;
+                }
+            }
+            catch (TableDoesntExistException &e) {
+            }
+            catch (ObjectDoesntExistException &e) {
+            }
+            Cycles::sleep(10000);
+        }
+    }
+
+    void
+    sendCommand(const char *command, const char *state, int firstSlave,
+                int numSlaves = 1)
+    {
+        if (command != NULL) {
+            for (int i = 0; i < numSlaves; i++) {
+                string key = keyVal(firstSlave + i, "command");
+                ramcloud->write(controlTable, key.c_str(),
+                                downCast<uint16_t>(key.length()), command);
+            }
+        }
+        if (state != NULL) {
+            for (int i = 0; i < numSlaves; i++) {
+                waitSlave(firstSlave + i, state);
+            }
+        }
+    }
+
+    void setup()
+    {
+
+    }
+
+  PUBLIC:
+
+    struct Migration {
+        uint64_t tableId;
+        uint64_t firstKey;
+        uint64_t lastKey;
+        ServerId targetServerId;
+        bool skipMaster;
+
+        Migration(uint64_t tableId, uint64_t firstKey,
+                  uint64_t lastKey, ServerId targetServerId, bool skipMaster)
+            : tableId(tableId), firstKey(firstKey), lastKey(lastKey),
+              targetServerId(targetServerId), skipMaster(skipMaster)
+        {
+        }
+    };
+
+    TpccClient(RamCloud *ramcloud, uint64_t controlTable)
+        : ramcloud(ramcloud), controlTable(controlTable)
+    {
+
+    };
+
+    void run()
+    {
+        ServerId server1 = ServerId(1u, 0u);
+//        ServerId server2 = ServerId(2u, 0u);
+        ServerId server3 = ServerId(3u, 0u);
+        uint64_t lastKeyHash = (~0lu) / 5 * 4;
+        uint64_t firstKeyHash = lastKeyHash / 2;
+        TPCC::Driver driver(client.get());
+        if (clientIndex == 0) {
+            driver.initTables(server1, server3,
+                              firstKeyHash, lastKeyHash);
+            sendCommand("init", "initializing", 1, numClients - 1);
+        } else {
+            char command[20];
+            while (true) {
+                getCommand(command, sizeof(command), false);
+                if (strcmp(command, "init") == 0) {
+                    setSlaveState("initializing");
+                    break;
+                }
+            }
+
+        }
+        for (uint32_t i = static_cast<uint32_t>(clientIndex + 1);
+             i <= driver.getContext()->numWarehouse; i += numClients) {
+            driver.initBenchmark(i);
+        }
+
+        if (clientIndex == 0) {
+            for (int slave = 1; slave < numClients; ++slave) {
+                waitSlave(slave, "ready", 60.0);
+            }
+            sendCommand("run", "running", 1, numClients - 1);
+            for (int k = 0; k < 50; k++) {
+                tpcc_oneClient(0.1, &driver, true);
+            }
+
+//            uint64_t migrationId = ramcloud->backupMigrate(
+//                driver.getTableId(1), firstKey, lastKey, server2, false);
+//            while (true) {
+//                tpcc_oneClient(0.1, &driver, true);
+//                bool isFinished = ramcloud->migrationQuery(migrationId);
+//                if (isFinished)
+//                    break;
+//            }
+
+            for (int k = 0; k < 50; k++) {
+                tpcc_oneClient(0.1, &driver, true);
+            }
+
+            try {
+                sendCommand("done", "done", 1, numClients - 1);
+            } catch (Exception &e) {
+                RAMCLOUD_LOG(ERROR, "%s", e.what());
+            }
+        } else {
+            bool running = false;
+            setSlaveState("ready");
+            char command[20];
+            while (true) {
+                getCommand(command, sizeof(command), false);
+                if (strcmp(command, "run") == 0) {
+                    if (!running) {
+                        setSlaveState("running");
+                        running = true;
+                        RAMCLOUD_LOG(NOTICE,
+                                     "Starting TPC-C benchmark");
+                    }
+
+                    tpcc_oneClient(0.5, &driver, true);
+
+                } else if (strcmp(command, "done") == 0) {
+                    //Save result to data table.
+                    setSlaveState("done");
+                    RAMCLOUD_LOG(NOTICE, "Ending TPC-C benchmark");
+                    return;
+                } else if (strcmp(command, "init") == 0) {
+                    continue;
+                } else {
+                    RAMCLOUD_LOG(ERROR, "unknown command %s", command);
+                    return;
+                }
+            }
+        }
+    };
+
+  PRIVATE:
+    RamCloud *ramcloud;
+    uint64_t controlTable;
+};
+
+
+void basic_tpcc()
+{
+    uint64_t controlTable;
+    ServerId server3 = ServerId(3u, 0u);
+    controlTable = client->createTableToServer(testControlHub.c_str(),
+                                               server3);
+    TpccClient tpccClient(client.get(), controlTable);
+    tpccClient.run();
+}
+
 void rocksteadyBasic()
 {
     uint64_t tableId = 0;
@@ -472,7 +798,7 @@ void rocksteadyBasic()
     RocksteadyClient basicClient(client.get(), clientIndex, &migration,
                                  keyLength, valueLength, objectCount, 7);
     RAMCloud::WorkloadGenerator workloadGenerator(
-        "YCSB-B", 100000, objectCount, objectSize, &basicClient);
+        "YCSB-B", targetOps, objectCount, objectSize, &basicClient);
 
     bool issueMigration = false;
     if (clientIndex == 0)
@@ -483,7 +809,8 @@ void rocksteadyBasic()
     std::vector<RAMCloud::WorkloadGenerator::TimeDist> readResult;
     std::vector<RAMCloud::WorkloadGenerator::TimeDist> writeResult;
     workloadGenerator.statistics(result, RAMCloud::WorkloadGenerator::ALL);
-    workloadGenerator.statistics(readResult, RAMCloud::WorkloadGenerator::READ);
+    workloadGenerator.statistics(readResult,
+                                 RAMCloud::WorkloadGenerator::READ);
     workloadGenerator.statistics(writeResult,
                                  RAMCloud::WorkloadGenerator::WRITE);
     RAMCLOUD_LOG(WARNING,
@@ -499,42 +826,6 @@ void rocksteadyBasic()
                      static_cast<double>(writeResult[i].bandwidth) / 100.);
     }
 }
-//void backupEvaluation()
-//{
-//    string migrationTableName = "mt";
-//    uint64_t migrationTableId = 0;
-//    string pressTableName = "pt";
-//    uint64_t pressTableId = 0;
-//    if (clientIndex == 0) {
-//        ServerId server1 = ServerId(1u, 0u);
-//        ServerId server2 = ServerId(2u, 0u);
-//        ServerId server3 = ServerId(3u, 0u);
-//        migrationTableId = client->createTableToServer(
-//            migrationTableName.c_str(), server1);
-//
-//        controlHubId = client->createTableToServer(testControlHub.c_str(),
-//                                                   server3);
-//        client->testingFill(migrationTableId, "", 0, objectCount, objectSize);
-//
-//        client->splitTablet(migrationTableName.c_str(), lastKey + 1);
-//
-//        pressTableId = client->createTableToServer(
-//            pressTableName.c_str(), server2);
-//
-//        client->write(controlHubId, status.c_str(),
-//                      static_cast<uint16_t>(status.length()),
-//                      filling.c_str(), static_cast<uint32_t>(filling.length()));
-//        RAMCLOUD_LOG(WARNING, "write status to %lu", controlHubId);
-//
-//    } else {
-//
-//    }
-//
-//    const uint16_t keyLength = 30;
-//    const uint32_t valueLength = objectSize;
-//    BasicClient::Migration migration(migrationTableId, firstKey, lastKey,
-//                                     ServerId(newOwnerMasterId, 0), true);
-//}
 
 struct BenchmarkInfo {
     const char *name;
@@ -603,6 +894,7 @@ try
         exit(1);
     }
 
+    targetOps = 100000;
     string coordinatorLocator = optionParser.options.getCoordinatorLocator();
     RAMCLOUD_LOG(NOTICE, "client: Connecting to coordinator %s",
                  coordinatorLocator.c_str());
@@ -615,7 +907,8 @@ try
     serverList.applyServerList(protoServerList);
 
 //    rocksteadyBasic();
-    basic();
+//    basic();
+    basic_tpcc();
 
     return 0;
 } catch (ClientException &e) {

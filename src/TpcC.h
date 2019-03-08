@@ -20,25 +20,37 @@
 #include "Buffer.h"
 #include "RamCloud.h"
 
-namespace RAMCloud { namespace TPCC {
+namespace RAMCloud {
+namespace TPCC {
 
-extern uint64_t tableId[100];
+extern uint64_t tableId;
 
-void genLastName(char* target, int rand);
+void genLastName(char *target, int rand);
+
 uint32_t random(uint32_t x, uint32_t y);
+
 uint16_t random16(uint32_t x, uint32_t y);
+
 uint8_t random8(uint32_t x, uint32_t y);
+
 uint32_t NURand(uint32_t A, uint32_t x, uint32_t y);
 
 class Row {
   public:
-    virtual ~Row() {}
+    virtual ~Row()
+    {}
+
     virtual uint64_t tid() = 0;
-    virtual const void* pKey() = 0;
+
+    virtual const void *pKey() = 0;
+
     virtual uint16_t pKeyLength() = 0;
-    virtual const void* value() = 0;
+
+    virtual const void *value() = 0;
+
     virtual uint32_t valueLength() = 0;
-    virtual void parseBuffer(Buffer& buf) = 0;
+
+    virtual void parseBuffer(Buffer &buf) = 0;
 };
 
 class Warehouse : public Row {
@@ -48,7 +60,8 @@ class Warehouse : public Row {
         uint8_t type;
         uint32_t W_ID;
 
-        Key(uint32_t W_ID) : type(1), W_ID(W_ID) {}
+        Key(uint32_t W_ID) : type(1), W_ID(W_ID)
+        {}
     } __attribute__((__packed__)); //We don't reference individual members.
     Key key;
 
@@ -68,14 +81,26 @@ class Warehouse : public Row {
     /**
      * Constructor only with primary key.
      */
-    explicit Warehouse(uint32_t W_ID) : key(W_ID), data() {}
+    explicit Warehouse(uint32_t W_ID) : key(W_ID), data()
+    {}
 
-    virtual uint64_t tid() { return tableId[key.W_ID]; }
-    virtual const void* pKey() { return &key; }
-    virtual uint16_t pKeyLength() { return sizeof(key); }
-    virtual const void* value() { return &data; }
-    virtual uint32_t valueLength() { return sizeof(data); }
-    virtual void parseBuffer(Buffer& buf) { data = *buf.getStart<Data>(); }
+    virtual uint64_t tid()
+    { return tableId; }
+
+    virtual const void *pKey()
+    { return &key; }
+
+    virtual uint16_t pKeyLength()
+    { return sizeof(key); }
+
+    virtual const void *value()
+    { return &data; }
+
+    virtual uint32_t valueLength()
+    { return sizeof(data); }
+
+    virtual void parseBuffer(Buffer &buf)
+    { data = *buf.getStart<Data>(); }
 };
 
 class District : public Row {
@@ -87,7 +112,8 @@ class District : public Row {
         uint32_t D_W_ID; //foreign key
 
         Key(uint32_t D_ID, uint32_t D_W_ID)
-        : type(2), D_ID(D_ID), D_W_ID(D_W_ID) {}
+            : type(2), D_ID(D_ID), D_W_ID(D_W_ID)
+        {}
     } __attribute__((__packed__)); //We don't reference individual members.
     Key key;
 
@@ -110,14 +136,26 @@ class District : public Row {
      * Constructor only with primary key.
      */
     explicit District(uint32_t D_ID, uint32_t D_W_ID)
-        : key(D_ID, D_W_ID), data() {}
+        : key(D_ID, D_W_ID), data()
+    {}
 
-    virtual uint64_t tid() { return tableId[key.D_W_ID]; }
-    virtual const void* pKey() { return &key; }
-    virtual uint16_t pKeyLength() { return sizeof(key); }
-    virtual const void* value() { return &data; }
-    virtual uint32_t valueLength() { return sizeof(data); }
-    virtual void parseBuffer(Buffer& buf) { data = *buf.getStart<Data>(); }
+    virtual uint64_t tid()
+    { return tableId; }
+
+    virtual const void *pKey()
+    { return &key; }
+
+    virtual uint16_t pKeyLength()
+    { return sizeof(key); }
+
+    virtual const void *value()
+    { return &data; }
+
+    virtual uint32_t valueLength()
+    { return sizeof(data); }
+
+    virtual void parseBuffer(Buffer &buf)
+    { data = *buf.getStart<Data>(); }
 };
 
 class Customer : public Row {
@@ -129,10 +167,11 @@ class Customer : public Row {
         uint32_t C_D_ID;
         uint32_t C_W_ID; //foreign key
         uint8_t feature; //cLastOid table. Included in key for cLastOid.
-                          // TODO: rewrite the comment.
+        // TODO: rewrite the comment.
 
         Key(uint32_t C_ID, uint32_t C_D_ID, uint32_t C_W_ID)
-        : type(3), C_ID(C_ID), C_D_ID(C_D_ID), C_W_ID(C_W_ID), feature(1) {}
+            : type(3), C_ID(C_ID), C_D_ID(C_D_ID), C_W_ID(C_W_ID), feature(1)
+        {}
     } __attribute__((__packed__)); //We don't reference individual members.
     Key key;
 
@@ -163,15 +202,29 @@ class Customer : public Row {
      * Constructor only with primary key.
      */
     explicit Customer(uint32_t C_ID, uint32_t C_D_ID, uint32_t C_W_ID)
-        : key(C_ID, C_D_ID, C_W_ID), data() {}
+        : key(C_ID, C_D_ID, C_W_ID), data()
+    {}
 
-    virtual uint64_t tid() { return tableId[key.C_W_ID]; }
-    virtual const void* pKey() { return &key; }
-    virtual uint16_t pKeyLength() { return sizeof(key) - 1; }
-    virtual uint16_t lastOidKeyLength() { return sizeof(key); }
-    virtual const void* value() { return &data; }
-    virtual uint32_t valueLength() { return sizeof(data); }
-    virtual void parseBuffer(Buffer& buf) { data = *buf.getStart<Data>(); }
+    virtual uint64_t tid()
+    { return tableId; }
+
+    virtual const void *pKey()
+    { return &key; }
+
+    virtual uint16_t pKeyLength()
+    { return sizeof(key) - 1; }
+
+    virtual uint16_t lastOidKeyLength()
+    { return sizeof(key); }
+
+    virtual const void *value()
+    { return &data; }
+
+    virtual uint32_t valueLength()
+    { return sizeof(data); }
+
+    virtual void parseBuffer(Buffer &buf)
+    { data = *buf.getStart<Data>(); }
 };
 
 class History : public Row {
@@ -184,7 +237,8 @@ class History : public Row {
         uint32_t H_C_W_ID; //foreign key
 
         Key(uint32_t H_C_ID, uint32_t H_C_D_ID, uint32_t H_C_W_ID)
-        : type(4), H_C_ID(H_C_ID), H_C_D_ID(H_C_D_ID), H_C_W_ID(H_C_W_ID) {}
+            : type(4), H_C_ID(H_C_ID), H_C_D_ID(H_C_D_ID), H_C_W_ID(H_C_W_ID)
+        {}
     } __attribute__((__packed__)); //We don't reference individual members.
     Key key;
 
@@ -202,14 +256,26 @@ class History : public Row {
      * Constructor only with primary key.
      */
     explicit History(uint32_t H_C_ID, uint32_t H_C_D_ID, uint32_t H_C_W_ID)
-        : key(H_C_ID, H_C_D_ID, H_C_W_ID), data() {}
+        : key(H_C_ID, H_C_D_ID, H_C_W_ID), data()
+    {}
 
-    virtual uint64_t tid() { return tableId[key.H_C_W_ID]; }
-    virtual const void* pKey() { return &key; }
-    virtual uint16_t pKeyLength() { return sizeof(key); }
-    virtual const void* value() { return &data; }
-    virtual uint32_t valueLength() { return sizeof(data); }
-    virtual void parseBuffer(Buffer& buf) { data = *buf.getStart<Data>(); }
+    virtual uint64_t tid()
+    { return tableId; }
+
+    virtual const void *pKey()
+    { return &key; }
+
+    virtual uint16_t pKeyLength()
+    { return sizeof(key); }
+
+    virtual const void *value()
+    { return &data; }
+
+    virtual uint32_t valueLength()
+    { return sizeof(data); }
+
+    virtual void parseBuffer(Buffer &buf)
+    { data = *buf.getStart<Data>(); }
 };
 
 class NewOrder : public Row {
@@ -222,7 +288,8 @@ class NewOrder : public Row {
         uint32_t NO_W_ID; //foreign key
 
         Key(uint32_t NO_O_ID, uint32_t NO_D_ID, uint32_t NO_W_ID)
-        : type(5), NO_O_ID(NO_O_ID), NO_D_ID(NO_D_ID), NO_W_ID(NO_W_ID) {}
+            : type(5), NO_O_ID(NO_O_ID), NO_D_ID(NO_D_ID), NO_W_ID(NO_W_ID)
+        {}
     } __attribute__((__packed__)); //We don't reference individual members.
     Key key;
 
@@ -235,14 +302,26 @@ class NewOrder : public Row {
      * Constructor only with primary key.
      */
     explicit NewOrder(uint32_t NO_O_ID, uint32_t NO_D_ID, uint32_t NO_W_ID)
-        : key(NO_O_ID, NO_D_ID, NO_W_ID), data() {}
+        : key(NO_O_ID, NO_D_ID, NO_W_ID), data()
+    {}
 
-    virtual uint64_t tid() { return tableId[key.NO_W_ID]; }
-    virtual const void* pKey() { return &key; }
-    virtual uint16_t pKeyLength() { return sizeof(key); }
-    virtual const void* value() { return &data; }
-    virtual uint32_t valueLength() { return sizeof(data); }
-    virtual void parseBuffer(Buffer& buf) { data = *buf.getStart<Data>(); }
+    virtual uint64_t tid()
+    { return tableId; }
+
+    virtual const void *pKey()
+    { return &key; }
+
+    virtual uint16_t pKeyLength()
+    { return sizeof(key); }
+
+    virtual const void *value()
+    { return &data; }
+
+    virtual uint32_t valueLength()
+    { return sizeof(data); }
+
+    virtual void parseBuffer(Buffer &buf)
+    { data = *buf.getStart<Data>(); }
 };
 
 class Order : public Row {
@@ -255,7 +334,8 @@ class Order : public Row {
         uint32_t O_W_ID; //foreign key
 
         Key(uint32_t O_ID, uint32_t O_D_ID, uint32_t O_W_ID)
-        : type(6), O_ID(O_ID), O_D_ID(O_D_ID), O_W_ID(O_W_ID) {}
+            : type(6), O_ID(O_ID), O_D_ID(O_D_ID), O_W_ID(O_W_ID)
+        {}
     } __attribute__((__packed__)); //We don't reference individual members.
     Key key;
 
@@ -273,14 +353,26 @@ class Order : public Row {
      * Constructor only with primary key.
      */
     explicit Order(uint32_t O_ID, uint32_t O_D_ID, uint32_t O_W_ID)
-        : key(O_ID, O_D_ID, O_W_ID), data() {}
+        : key(O_ID, O_D_ID, O_W_ID), data()
+    {}
 
-    virtual uint64_t tid() { return tableId[key.O_W_ID]; }
-    virtual const void* pKey() { return &key; }
-    virtual uint16_t pKeyLength() { return sizeof(key); }
-    virtual const void* value() { return &data; }
-    virtual uint32_t valueLength() { return sizeof(data); }
-    virtual void parseBuffer(Buffer& buf) { data = *buf.getStart<Data>(); }
+    virtual uint64_t tid()
+    { return tableId; }
+
+    virtual const void *pKey()
+    { return &key; }
+
+    virtual uint16_t pKeyLength()
+    { return sizeof(key); }
+
+    virtual const void *value()
+    { return &data; }
+
+    virtual uint32_t valueLength()
+    { return sizeof(data); }
+
+    virtual void parseBuffer(Buffer &buf)
+    { data = *buf.getStart<Data>(); }
 };
 
 class OrderLine : public Row {
@@ -295,8 +387,9 @@ class OrderLine : public Row {
 
         Key(uint32_t OL_O_ID, uint32_t OL_D_ID, uint32_t OL_W_ID,
             uint8_t OL_NUMBER)
-        : type(7), OL_O_ID(OL_O_ID), OL_D_ID(OL_D_ID), OL_W_ID(OL_W_ID),
-          OL_NUMBER(OL_NUMBER) {}
+            : type(7), OL_O_ID(OL_O_ID), OL_D_ID(OL_D_ID), OL_W_ID(OL_W_ID),
+              OL_NUMBER(OL_NUMBER)
+        {}
     } __attribute__((__packed__)); //We don't reference individual members.
     Key key;
 
@@ -316,14 +409,26 @@ class OrderLine : public Row {
      */
     explicit OrderLine(uint32_t OL_O_ID, uint32_t OL_D_ID, uint32_t OL_W_ID,
                        uint8_t OL_NUMBER)
-        : key(OL_O_ID, OL_D_ID, OL_W_ID, OL_NUMBER), data() {}
+        : key(OL_O_ID, OL_D_ID, OL_W_ID, OL_NUMBER), data()
+    {}
 
-    virtual uint64_t tid() { return tableId[key.OL_W_ID]; }
-    virtual const void* pKey() { return &key; }
-    virtual uint16_t pKeyLength() { return sizeof(key); }
-    virtual const void* value() { return &data; }
-    virtual uint32_t valueLength() { return sizeof(data); }
-    virtual void parseBuffer(Buffer& buf) { data = *buf.getStart<Data>(); }
+    virtual uint64_t tid()
+    { return tableId; }
+
+    virtual const void *pKey()
+    { return &key; }
+
+    virtual uint16_t pKeyLength()
+    { return sizeof(key); }
+
+    virtual const void *value()
+    { return &data; }
+
+    virtual uint32_t valueLength()
+    { return sizeof(data); }
+
+    virtual void parseBuffer(Buffer &buf)
+    { data = *buf.getStart<Data>(); }
 };
 
 class Item : public Row {
@@ -333,7 +438,8 @@ class Item : public Row {
         uint8_t type;
         uint32_t I_ID;
 
-        Key(uint32_t I_ID) : type(8), I_ID(I_ID) {}
+        Key(uint32_t I_ID) : type(8), I_ID(I_ID)
+        {}
     } __attribute__((__packed__)); //We don't reference individual members.
     Key key;
 
@@ -352,14 +458,26 @@ class Item : public Row {
      * Constructor only with primary key.
      */
     explicit Item(uint32_t I_ID, uint32_t W_ID)
-        : key(I_ID), data(), W_ID(W_ID) {}
+        : key(I_ID), data(), W_ID(W_ID)
+    {}
 
-    virtual uint64_t tid() { return tableId[W_ID]; }
-    virtual const void* pKey() { return &key; }
-    virtual uint16_t pKeyLength() { return sizeof(key); }
-    virtual const void* value() { return &data; }
-    virtual uint32_t valueLength() { return sizeof(data); }
-    virtual void parseBuffer(Buffer& buf) { data = *buf.getStart<Data>(); }
+    virtual uint64_t tid()
+    { return tableId; }
+
+    virtual const void *pKey()
+    { return &key; }
+
+    virtual uint16_t pKeyLength()
+    { return sizeof(key); }
+
+    virtual const void *value()
+    { return &data; }
+
+    virtual uint32_t valueLength()
+    { return sizeof(data); }
+
+    virtual void parseBuffer(Buffer &buf)
+    { data = *buf.getStart<Data>(); }
 };
 
 class Stock : public Row {
@@ -371,7 +489,8 @@ class Stock : public Row {
         uint32_t S_W_ID;
 
         Key(uint32_t S_I_ID, uint32_t S_W_ID)
-            : type(9), S_I_ID(S_I_ID), S_W_ID(S_W_ID) {}
+            : type(9), S_I_ID(S_I_ID), S_W_ID(S_W_ID)
+        {}
     } __attribute__((__packed__)); //We don't reference individual members.
     Key key;
 
@@ -390,19 +509,32 @@ class Stock : public Row {
      * Constructor only with primary key.
      */
     explicit Stock(uint32_t S_I_ID, uint32_t S_W_ID)
-        : key(S_I_ID, S_W_ID), data() {}
+        : key(S_I_ID, S_W_ID), data()
+    {}
 
-    virtual uint64_t tid() { return tableId[key.S_W_ID]; }
-    virtual const void* pKey() { return &key; }
-    virtual uint16_t pKeyLength() { return sizeof(key); }
-    virtual const void* value() { return &data; }
-    virtual uint32_t valueLength() { return sizeof(data); }
-    virtual void parseBuffer(Buffer& buf) { data = *buf.getStart<Data>(); }
+    virtual uint64_t tid()
+    { return tableId; }
+
+    virtual const void *pKey()
+    { return &key; }
+
+    virtual uint16_t pKeyLength()
+    { return sizeof(key); }
+
+    virtual const void *value()
+    { return &data; }
+
+    virtual uint32_t valueLength()
+    { return sizeof(data); }
+
+    virtual void parseBuffer(Buffer &buf)
+    { data = *buf.getStart<Data>(); }
 };
 
 class cNameKey {
   public:
-    explicit cNameKey() : typeLastName(11), lastName() {}
+    explicit cNameKey() : typeLastName(11), lastName()
+    {}
 
     uint32_t typeLastName;
     char lastName[17];
@@ -413,12 +545,13 @@ struct TpccStat {
     // .cc file but it will be harder to read.
     // static const char* const[] txTypeIndexToName =
     //   {"payment", "orderStatus", "delivery", "stockLevel", "newOrder"};
-    
+
     double cumulativeLatency[5];
     int txPerformedCount[5];
     int txAbortCount[5];
 
-    TpccStat() {
+    TpccStat()
+    {
         for (int i = 0; i < 5; ++i) {
             cumulativeLatency[i] = 0;
             txAbortCount[i] = 0;
@@ -426,7 +559,8 @@ struct TpccStat {
         }
     }
 
-    TpccStat& operator+=(const TpccStat& rhs) {
+    TpccStat &operator+=(const TpccStat &rhs)
+    {
         for (int i = 0; i < 5; ++i) {
             cumulativeLatency[i] += rhs.cumulativeLatency[i];
             txAbortCount[i] += rhs.txAbortCount[i];
@@ -435,7 +569,8 @@ struct TpccStat {
         return *this;
     }
 
-    friend TpccStat operator+(TpccStat lhs, const TpccStat& rhs) {
+    friend TpccStat operator+(TpccStat lhs, const TpccStat &rhs)
+    {
         lhs += rhs;
         return lhs;
     }
@@ -477,13 +612,15 @@ struct InputOrderStatus {
 struct InputDelivery {
     uint8_t O_CARRIER_ID;
 
-    void generate() { O_CARRIER_ID = random8(1, 10); }
+    void generate()
+    { O_CARRIER_ID = random8(1, 10); }
 };
 
 struct InputStockLevel {
     uint16_t threshold;
 
-    void generate() { threshold = random16(10, 20); }
+    void generate()
+    { threshold = random16(10, 20); }
 };
 
 /**
@@ -498,49 +635,81 @@ class Driver {
         TpccContext(uint32_t numWarehouses, int serverSpan) :
             initialized(false),
             numWarehouse(numWarehouses),
-            serverSpan(serverSpan) {}
+            serverSpan(serverSpan)
+        {}
 
         bool initialized;
         uint32_t numWarehouse;
         int serverSpan;
     };
 
-    explicit Driver(RamCloud* ramcloud, uint32_t numWarehouse, int serverSpan);
-    Driver(RamCloud* ramcloud, TpccContext& c);
+    explicit Driver(RamCloud *ramcloud, uint32_t numWarehouse, int serverSpan);
+
+    Driver(RamCloud *ramcloud, TpccContext &c);
+
+    Driver(RamCloud *ramcloud);
+
+    void initTables(ServerId server1, ServerId server3,
+                    uint64_t firstKey, uint64_t lastKey);
 
     void initBenchmark();
+
     void initBenchmark(uint32_t W_ID);
-    TpccContext* getContext() { return &context; }
+
+    TpccContext *getContext()
+    { return &context; }
 
     // returns latency.
-    double txNewOrder(uint32_t W_ID, bool* outcome, InputNewOrder* in = NULL);
-    double txPayment(uint32_t W_ID, bool* outcome, InputPayment* in = NULL);
-    double txOrderStatus(uint32_t W_ID, bool* outcome, InputOrderStatus* in = NULL);
-    double txDelivery(uint32_t W_ID, uint32_t D_ID, bool* outcome, InputDelivery *in = NULL);
-    double txStockLevel(uint32_t W_ID, uint32_t D_ID, bool* outcome, InputStockLevel *in = NULL);
+    double txNewOrder(uint32_t W_ID, bool *outcome, InputNewOrder *in = NULL);
+
+    double txPayment(uint32_t W_ID, bool *outcome, InputPayment *in = NULL);
+
+    double
+    txOrderStatus(uint32_t W_ID, bool *outcome, InputOrderStatus *in = NULL);
+
+    double txDelivery(uint32_t W_ID, uint32_t D_ID, bool *outcome,
+                      InputDelivery *in = NULL);
+
+    double txStockLevel(uint32_t W_ID, uint32_t D_ID, bool *outcome,
+                        InputStockLevel *in = NULL);
+
+    uint64_t getTableId(uint64_t W_ID);
 
   PRIVATE:
+
     void createTables();
+
     void createTable(uint32_t W_ID);
-    void write(uint64_t tid, Row& r);
-    void read(Row* row);
-    MultiWriteObject* multiWrite(uint64_t tid, Row& r);
+
+    void write(Row &r);
+
+    void read(Row *row);
+
+    MultiWriteObject *multiWrite(uint64_t tid, Row &r);
 
     void addItem(uint32_t I_ID, uint32_t W_ID);
+
     void addWarehouse(uint32_t W_ID);
+
     void addStock(uint32_t I_ID, uint32_t W_ID);
+
     void addDistrict(uint32_t D_ID, uint32_t W_ID);
+
     void addCustomer(uint32_t C_ID, uint32_t D_ID, uint32_t W_ID,
-                     std::string* lastName);
+                     std::string *lastName);
+
     void addHistory(uint32_t C_ID, uint32_t D_ID, uint32_t W_ID);
+
     void addOrder(uint32_t O_ID, uint32_t D_ID, uint32_t W_ID, uint32_t C_ID);
+
     void addNewOrder(uint32_t O_ID, uint32_t D_ID, uint32_t W_ID);
 
-    RamCloud* ramcloud;
+    RamCloud *ramcloud;
 
     TpccContext context;
 };
 
-}} // namespace TPCC namespace RAMCloud
+}
+} // namespace TPCC namespace RAMCloud
 
 #endif // RAMCLOUD_TPCC_H

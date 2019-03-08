@@ -416,6 +416,17 @@ ObjectManager::readObject(Key& key, Buffer* outBuffer,
         }
     }
 
+    if (tablet != NULL) {
+        MigrationTargetManager::Migration *migration =
+            migrationTargetManager->getMigration(tablet->migrationId);
+
+        if (migration != NULL &&
+            tablet->state == TabletManager::MIGRATION_TARGET &&
+            version <= migration->getSafeVersion()) {
+            return STATUS_OBJECT_DOESNT_EXIST;
+        }
+    }
+
     if (outVersion != NULL)
         *outVersion = version;
 

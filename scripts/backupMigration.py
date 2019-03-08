@@ -77,7 +77,7 @@ def backup_migrate(num_servers,
     args['client'] = ('%s -l %s' %
                       (client_binary, log_level))
 
-    migration_logs = cluster.run(**args)
+    cluster.run(**args)
 
 
 def insist(*args, **kwargs):
@@ -125,7 +125,7 @@ if __name__ == '__main__':
     parser.add_option('-r', '--replicas', type=int, default=3,
                       metavar='N',
                       help='Number of disk backup copies for each segment')
-    parser.add_option('--servers', type=int, default=7,
+    parser.add_option('--servers', type=int, default=8,
                       metavar='N', dest='num_servers',
                       help='Number of hosts on which to run servers for use '
                            "as recovery masters; doesn't include crashed server")

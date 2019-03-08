@@ -120,7 +120,7 @@ class NoOpClusterHooks:
 
     def cluster_exit(self):
         pass
-    
+
     def get_remote_wd(self):
         return os.getcwd()
 

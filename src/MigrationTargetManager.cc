@@ -91,14 +91,16 @@ MigrationTargetManager::Migration::Migration(
     FinishNotifier *finishNotifier)
     : context(manager->context), localLocator(), migrationId(), replicas(),
       rangeList(), tableId(), firstKeyHash(), lastKeyHash(), sourceServerId(),
-      targetServerId(), tabletManager(), objectManager(), phase(SETUP),
+      targetServerId(), tabletManager(), objectManager(), safeVersion(),
+      phase(SETUP),
       freePullBuffers(), freeReplayBuffers(), freePullRpcs(), busyPullRpcs(),
       freeReplayRpcs(), busyReplayRpcs(), freeSideLogs(), sideLogCommitRpc(),
       totalReplayedBytes(0), numReplicas(), numCompletedReplicas(0),
       migrationStartTS(), migrationEndTS(), migratedMegaBytes(),
       sideLogCommitStartTS(), sideLogCommitEndTS(),
       finishNotifier(finishNotifier), finishNotified(false),
-      tombstoneProtector()
+      tombstoneProtector(), timestamp(0), lastTime(0), inputBandwidth(0),
+      outputBandwidth(0), lastReplayedBytes(0), bandwidthSamples(), print(false)
 {
     WireFormat::MigrationTargetStart::Request *reqHdr =
         payload->getOffset<WireFormat::MigrationTargetStart::Request>(0);
@@ -114,8 +116,9 @@ MigrationTargetManager::Migration::Migration(
     MasterService *masterService = context->getMasterService();
     tabletManager = &(masterService->tabletManager);
     objectManager = &(masterService->objectManager);
-    tabletManager->raiseSafeVersion(reqHdr->safeVersion);
-    objectManager->raiseSafeVersion(reqHdr->safeVersion);
+    safeVersion = reqHdr->safeVersion;
+    tabletManager->raiseSafeVersion(safeVersion);
+    objectManager->raiseSafeVersion(safeVersion);
     localLocator = masterService->config->localLocator;
 
     uint32_t offset = sizeof32(WireFormat::MigrationTargetStart::Request);
@@ -163,13 +166,47 @@ MigrationTargetManager::Migration::Migration(
 
 int MigrationTargetManager::Migration::poll()
 {
+    uint64_t stop = Cycles::rdtsc();
+    if (Cycles::toMicroseconds(stop - lastTime) > 100000) {
+        uint64_t currentInput = metrics->transport.receive.byteCount;
+        uint64_t currentOutput = metrics->transport.transmit.byteCount;
+
+        timestamp++;
+
+        bandwidthSamples.emplace_back(
+            static_cast<double>(currentInput -
+                                inputBandwidth) / 1024 / 102,
+            static_cast<double>(currentOutput -
+                                outputBandwidth) / 1024 / 102,
+            static_cast<double>(totalReplayedBytes -
+                                lastReplayedBytes) / 1024 /
+            102
+        );
+
+        inputBandwidth = currentInput;
+        outputBandwidth = currentOutput;
+        lastReplayedBytes = totalReplayedBytes;
+        lastTime = stop;
+    }
+    if (!print && migrationEndTS != 0 &&
+        Cycles::toSeconds(stop - migrationEndTS) > 2) {
+        print = true;
+        int i = 0;
+        for (BandwidthSample &sample: bandwidthSamples) {
+            i++;
+            RAMCLOUD_LOG(NOTICE, "%d, %lf, %lf, %lf",
+                         i, sample.inputBandwidth,
+                         sample.migrationBandwidth,
+                         sample.outputBandwidth);
+        }
+    }
+
     switch (phase) {
         case SETUP :
             return prepare();
 
         case MIGRATING_DATA :
             return pullAndReplay_main();
-
         case SIDE_LOG_COMMIT :
             return sideLogCommit();
 
@@ -179,6 +216,17 @@ int MigrationTargetManager::Migration::poll()
         default :
             return 0;
     }
+}
+
+
+uint64_t MigrationTargetManager::Migration::getSafeVersion()
+{
+    return safeVersion;
+}
+
+bool MigrationTargetManager::Migration::isFinished()
+{
+    return phase > MIGRATING_DATA;
 }
 
 int MigrationTargetManager::Migration::prepare()
@@ -204,6 +252,11 @@ int MigrationTargetManager::Migration::prepare()
     phase = MIGRATING_DATA;
     if (!tombstoneProtector)
         tombstoneProtector.construct(objectManager);
+
+    lastTime = Cycles::rdtsc();
+    inputBandwidth = metrics->transport.receive.byteCount;
+    outputBandwidth = metrics->transport.transmit.byteCount;
+    lastReplayedBytes = totalReplayedBytes;
 
     RAMCLOUD_LOG(NOTICE, "Migration %lu start serving at Target",
                  migrationId);

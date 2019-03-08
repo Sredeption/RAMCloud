@@ -54,6 +54,10 @@ class MigrationTargetManager : public Dispatch::Poller {
 
         int poll();
 
+        uint64_t getSafeVersion();
+
+        bool isFinished();
+
       PRIVATE:
         Context *context;
         string localLocator;
@@ -67,6 +71,7 @@ class MigrationTargetManager : public Dispatch::Poller {
         ServerId targetServerId;
         TabletManager *tabletManager;
         ObjectManager *objectManager;
+        uint64_t safeVersion;
 
         enum MigrationPhase {
             SETUP,
@@ -122,7 +127,7 @@ class MigrationTargetManager : public Dispatch::Poller {
 
         };
 
-        static const uint32_t MAX_PARALLEL_PULL_RPCS = 6;
+        static const uint32_t MAX_PARALLEL_PULL_RPCS = 8;
 
         Tub<PullRpc> pullRpcs[MAX_PARALLEL_PULL_RPCS];
 
@@ -194,7 +199,7 @@ class MigrationTargetManager : public Dispatch::Poller {
             DISALLOW_COPY_AND_ASSIGN(ReplayRpc);
         };
 
-        static const uint32_t MAX_PARALLEL_REPLAY_RPCS = 4;
+        static const uint32_t MAX_PARALLEL_REPLAY_RPCS = 6;
         Tub<ReplayRpc> replayRpcs[MAX_PARALLEL_REPLAY_RPCS];
         std::deque<Tub<ReplayRpc> *> freeReplayRpcs;
         std::deque<Tub<ReplayRpc> *> busyReplayRpcs;
@@ -264,6 +269,31 @@ class MigrationTargetManager : public Dispatch::Poller {
         bool finishNotified;
 
         Tub<ObjectManager::TombstoneProtector> tombstoneProtector;
+
+        uint64_t timestamp;
+        uint64_t lastTime;
+        uint64_t inputBandwidth;
+        uint64_t outputBandwidth;
+        uint64_t lastReplayedBytes;
+
+        struct BandwidthSample {
+            double inputBandwidth;
+            double outputBandwidth;
+            double migrationBandwidth;
+
+            BandwidthSample(double inputBandwidth,
+                            double outputBandwidth,
+                            double migrationBandwidth)
+                : inputBandwidth(inputBandwidth),
+                  outputBandwidth(outputBandwidth),
+                  migrationBandwidth(migrationBandwidth)
+            {
+
+            }
+        };
+
+        vector<BandwidthSample> bandwidthSamples;
+        bool print;
 
         int prepare();
 

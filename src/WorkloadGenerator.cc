@@ -1,6 +1,7 @@
 #include <cstring>
 #include <string>
 #include "WorkloadGenerator.h"
+#include "RawMetrics.h"
 
 namespace RAMCloud {
 
@@ -67,6 +68,10 @@ void WorkloadGenerator::run(bool issueMigration)
     uint64_t stop = 0;
     uint64_t nextStop = 0;
     experimentStartTime = Cycles::rdtsc();
+    uint64_t timestamp = 0;
+    uint64_t lastTime = experimentStartTime;
+    uint64_t incomingBandwidth = metrics->transport.receive.byteCount;
+    uint64_t outcomingBandwidth = metrics->transport.transmit.byteCount;
 
     while (true) {
 
@@ -85,6 +90,22 @@ void WorkloadGenerator::run(bool issueMigration)
         }
         opCount++;
         stop = Cycles::rdtsc();
+        if (Cycles::toMicroseconds(stop - lastTime) > 100000) {
+            uint64_t currentIncoming = metrics->transport.receive.byteCount;
+            uint64_t currentOutcoming = metrics->transport.transmit.byteCount;
+            timestamp++;
+
+            RAMCLOUD_LOG(NOTICE, "%lu: %lf, %lf", timestamp,
+                         static_cast<double > (currentIncoming -
+                                               incomingBandwidth) / 1024 / 102,
+                         static_cast<double >                        (
+                             currentOutcoming - outcomingBandwidth) / 1024 /
+                         102);
+
+            incomingBandwidth = currentIncoming;
+            outcomingBandwidth = currentOutcoming;
+            lastTime = stop;
+        }
         samples.emplace_back(start, stop, type);
 
         if (issueMigration && stop > experimentStartTime + oneSecond) {

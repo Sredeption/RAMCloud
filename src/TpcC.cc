@@ -20,36 +20,41 @@
 #include "Transaction.h"
 #include "Util.h"
 
-namespace RAMCloud { namespace TPCC {
+namespace RAMCloud {
+namespace TPCC {
 
-uint64_t tableId[100];
+uint64_t tableId;
 
-Driver::Driver(RamCloud* ramcloud, uint32_t numWarehouse, int serverSpan)
-    : ramcloud(ramcloud)
-    , context(numWarehouse, serverSpan)
+const char *tableName = "TPCC-BENCHMARK";
+
+Driver::Driver(RamCloud *ramcloud, uint32_t numWarehouse, int serverSpan)
+    : ramcloud(ramcloud), context(numWarehouse, serverSpan)
 {
-    for (uint32_t W_ID = 1; W_ID <= context.numWarehouse; ++W_ID) {
-        char tname[20];
-        snprintf(tname, 20, "Warehouse%d", W_ID);
-        tableId[W_ID] = ramcloud->createTable(tname, context.serverSpan);
-        tableId[W_ID] = ramcloud->getTableId(tname);
-    }
 }
 
-Driver::Driver(RamCloud* ramcloud, TpccContext& c)
-    : ramcloud(ramcloud)
-    , context(c)
+Driver::Driver(RamCloud *ramcloud, TpccContext &c)
+    : ramcloud(ramcloud), context(c)
 {
-    for (uint32_t W_ID = 1; W_ID <= context.numWarehouse; ++W_ID) {
-        char tname[20];
-        snprintf(tname, 20, "Warehouse%d", W_ID);
-        tableId[W_ID] = ramcloud->createTable(tname, context.serverSpan);
-        tableId[W_ID] = ramcloud->getTableId(tname);
-    }
+}
+
+
+Driver::Driver(RamCloud *ramcloud)
+    : ramcloud(ramcloud), context(5, 2)
+{
+
+}
+
+void Driver::initTables(ServerId server1, ServerId server3,
+                        uint64_t firstKey, uint64_t lastKey)
+{
+    tableId = ramcloud->createTableToServer(tableName, server1);
+    ramcloud->splitTablet(tableName, firstKey);
+    ramcloud->splitTablet(tableName, lastKey + 1);
+    ramcloud->migrateTablet(tableId, lastKey + 1, ~0lu, server3);
 }
 
 static int
-genRandomAString(char* target, int minLen, int maxLen, bool endingNull = true)
+genRandomAString(char *target, int minLen, int maxLen, bool endingNull = true)
 {
     const char alphanum[] =
         "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -63,7 +68,7 @@ genRandomAString(char* target, int minLen, int maxLen, bool endingNull = true)
 }
 
 static void
-genRandomNString(char* target, int minLen, int maxLen, bool endingNull = true)
+genRandomNString(char *target, int minLen, int maxLen, bool endingNull = true)
 {
     const char num[] = "0123456789";
     int nameLen = rand() % (maxLen - minLen + 1) + minLen;
@@ -75,7 +80,7 @@ genRandomNString(char* target, int minLen, int maxLen, bool endingNull = true)
 }
 
 static void
-genZip(char* target)
+genZip(char *target)
 {
     genRandomNString(target, 4, 4, false);
     for (int i = 0; i < 5; ++i) {
@@ -84,7 +89,7 @@ genZip(char* target)
 }
 
 void
-genLastName(char* target, int rand)
+genLastName(char *target, int rand)
 {
     char names[10][6] =
         {"BAR", "OUGHT", "ABLE", "PRI", "PRES",
@@ -135,7 +140,7 @@ Driver::addItem(uint32_t I_ID, uint32_t W_ID)
             i.data.I_DATA[startAt + j] = s[j];
         }
     }
-    write(tableId[W_ID], i);
+    write(i);
 }
 
 void
@@ -151,7 +156,7 @@ Driver::addWarehouse(uint32_t W_ID)
     w.data.W_TAX = static_cast<float>(rand() % 2001) / 10000;
     w.data.W_YTD = 300000.0;
 
-    write(tableId[W_ID], w);
+    write(w);
 }
 
 void
@@ -175,7 +180,7 @@ Driver::addStock(uint32_t I_ID, uint32_t W_ID)
         }
     }
 
-    write(tableId[W_ID], s);
+    write(s);
 }
 
 void
@@ -193,12 +198,12 @@ Driver::addDistrict(uint32_t D_ID, uint32_t W_ID)
     d.data.D_NEXT_O_ID = 3001;
     d.data.lowestToDeliverOid = 2101;
 
-    write(tableId[W_ID], d);
+    write(d);
 }
 
 void
 Driver::addCustomer(uint32_t C_ID, uint32_t D_ID, uint32_t W_ID,
-                    std::string* lastName)
+                    std::string *lastName)
 {
     Customer c(C_ID, D_ID, W_ID);
     if (C_ID <= 1000) {
@@ -229,7 +234,7 @@ Driver::addCustomer(uint32_t C_ID, uint32_t D_ID, uint32_t W_ID,
     c.data.C_DELIVERY_CNT = 0;
     genRandomAString(c.data.C_DATA, 300, 500);
 
-    write(tableId[W_ID], c);
+    write(c);
 
     lastName->append(c.data.C_LAST);
 
@@ -246,7 +251,7 @@ Driver::addHistory(uint32_t C_ID, uint32_t D_ID, uint32_t W_ID)
     h.data.H_AMOUNT = 10.00;
     genRandomAString(h.data.H_DATA, 12, 24);
 
-    write(tableId[W_ID], h);
+    write(h);
 }
 
 void
@@ -263,13 +268,13 @@ Driver::addOrder(uint32_t O_ID, uint32_t D_ID, uint32_t W_ID, uint32_t C_ID)
     o.data.O_OL_CNT = static_cast<uint8_t>(random(5, 15));
     o.data.O_ALL_LOCAL = 1;
 
-    vector<MultiWriteObject*> mulWrites;
-    mulWrites.push_back(multiWrite(tableId[W_ID], o));
+    vector<MultiWriteObject *> mulWrites;
+    mulWrites.push_back(multiWrite(tableId, o));
 
     Tub<OrderLine> ols[15];
     for (uint8_t OL_NUMBER = 0; OL_NUMBER < o.data.O_OL_CNT; ++OL_NUMBER) {
         ols[OL_NUMBER].construct(O_ID, D_ID, W_ID, OL_NUMBER);
-        OrderLine& ol = *ols[OL_NUMBER];
+        OrderLine &ol = *ols[OL_NUMBER];
 
         ol.data.OL_I_ID = random(1, 100000);
         ol.data.OL_SUPPLY_W_ID = W_ID;
@@ -286,7 +291,7 @@ Driver::addOrder(uint32_t O_ID, uint32_t D_ID, uint32_t W_ID, uint32_t C_ID)
         }
         genRandomAString(ol.data.OL_DIST_INFO, 24, 24, false);
 
-        mulWrites.push_back(multiWrite(tableId[W_ID], ol));
+        mulWrites.push_back(multiWrite(tableId, ol));
     }
     ramcloud->multiWrite(mulWrites.data(),
                          static_cast<uint32_t>(mulWrites.size()));
@@ -295,7 +300,7 @@ Driver::addOrder(uint32_t O_ID, uint32_t D_ID, uint32_t W_ID, uint32_t C_ID)
     }
 
     Customer c(C_ID, D_ID, W_ID);
-    ramcloud->write(tableId[W_ID], c.pKey(), c.lastOidKeyLength(),
+    ramcloud->write(tableId, c.pKey(), c.lastOidKeyLength(),
                     &O_ID, sizeof32(O_ID));
 }
 
@@ -303,7 +308,7 @@ void
 Driver::addNewOrder(uint32_t O_ID, uint32_t D_ID, uint32_t W_ID)
 {
     NewOrder no(O_ID, D_ID, W_ID);
-    write(tableId[W_ID], no);
+    write(no);
 }
 
 void
@@ -343,21 +348,22 @@ Driver::initBenchmark()
             //printf("WID:%d DID:%d c and h added.\n", W_ID, D_ID);
 
             for (auto it = nameToCid.begin();
-                    it != nameToCid.end(); ++it) {
+                 it != nameToCid.end(); ++it) {
                 Buffer toWrite;
                 uint32_t size = static_cast<uint32_t>(it->second.size());
                 toWrite.appendCopy(&size, sizeof(size));
                 toWrite.appendExternal(it->second.data(),
-                            static_cast<uint32_t>(it->second.size()) * 4);
+                                       static_cast<uint32_t>(it->second.size()) *
+                                       4);
                 cNameKey nameKey;
                 memcpy(nameKey.lastName, it->first.data(), it->first.size());
-                ramcloud->write(tableId[W_ID], &nameKey,
+                ramcloud->write(tableId, &nameKey,
                                 static_cast<uint16_t>(sizeof(nameKey)),
                                 toWrite.getRange(0, toWrite.size()),
                                 toWrite.size());
             }
 
-            std::random_shuffle (rand_cid.begin(), rand_cid.end());
+            std::random_shuffle(rand_cid.begin(), rand_cid.end());
             for (uint32_t O_ID = 1; O_ID <= 3000; ++O_ID) {
                 addOrder(O_ID, D_ID, W_ID, rand_cid[O_ID - 1]);
             }
@@ -371,7 +377,7 @@ Driver::initBenchmark()
     }
     uint64_t elapsed = Cycles::rdtsc() - startCycles;
     RAMCLOUD_LOG(NOTICE, "TPCC benchmark initialization completed in %lfms.",
-                 Cycles::toSeconds(elapsed) *1e03);
+                 Cycles::toSeconds(elapsed) * 1e03);
     context.initialized = true;
 }
 
@@ -379,8 +385,8 @@ void
 Driver::initBenchmark(uint32_t W_ID)
 {
     uint64_t startCycles = Cycles::rdtsc();
-    createTable(W_ID);
-    RAMCLOUD_LOG(NOTICE, "TPCC benchmark initialization: tables created.");
+    tableId = ramcloud->getTableId(tableName);
+    RAMCLOUD_LOG(NOTICE, "TPCC benchmark initialization: table %lu.", tableId);
 
 
     addWarehouse(W_ID);
@@ -410,21 +416,22 @@ Driver::initBenchmark(uint32_t W_ID)
         //printf("WID:%d DID:%d c and h added.\n", W_ID, D_ID);
 
         for (auto it = nameToCid.begin();
-                it != nameToCid.end(); ++it) {
+             it != nameToCid.end(); ++it) {
             Buffer toWrite;
             uint32_t size = static_cast<uint32_t>(it->second.size());
             toWrite.appendCopy(&size, sizeof(size));
             toWrite.appendExternal(it->second.data(),
-                        static_cast<uint32_t>(it->second.size()) * 4);
+                                   static_cast<uint32_t>(it->second.size()) *
+                                   4);
             cNameKey nameKey;
             memcpy(nameKey.lastName, it->first.data(), it->first.size());
-            ramcloud->write(tableId[W_ID], &nameKey,
+            ramcloud->write(tableId, &nameKey,
                             static_cast<uint16_t>(sizeof(nameKey)),
                             toWrite.getRange(0, toWrite.size()),
                             toWrite.size());
         }
 
-        std::random_shuffle (rand_cid.begin(), rand_cid.end());
+        std::random_shuffle(rand_cid.begin(), rand_cid.end());
         for (uint32_t O_ID = 1; O_ID <= 3000; ++O_ID) {
             addOrder(O_ID, D_ID, W_ID, rand_cid[O_ID - 1]);
         }
@@ -437,44 +444,37 @@ Driver::initBenchmark(uint32_t W_ID)
     }
     uint64_t elapsed = Cycles::rdtsc() - startCycles;
     RAMCLOUD_LOG(NOTICE, "TPCC benchmark initialization completed in %lfms.",
-                 Cycles::toSeconds(elapsed) *1e03);
+                 Cycles::toSeconds(elapsed) * 1e03);
     context.initialized = true;
 }
 
 void
 Driver::createTables()
 {
-    for (uint32_t W_ID = 1; W_ID <= context.numWarehouse; ++W_ID) {
-        char tname[20];
-        snprintf(tname, 20, "Warehouse%d", W_ID);
-        tableId[W_ID] = ramcloud->createTable(tname, context.serverSpan);
-    }
 }
 
 void
 Driver::createTable(uint32_t W_ID)
 {
-    char tname[20];
-    snprintf(tname, 20, "Warehouse%d", W_ID);
-    tableId[W_ID] = ramcloud->createTable(tname, context.serverSpan);
 }
 
 void
-Driver::write(uint64_t tid, Row& r)
+Driver::write(Row &r)
 {
-    ramcloud->write(tid, r.pKey(), r.pKeyLength(), r.value(), r.valueLength());
+    ramcloud->write(r.tid(), r.pKey(), r.pKeyLength(), r.value(),
+                    r.valueLength());
 }
 
 void
-Driver::read(Row* row)
+Driver::read(Row *row)
 {
     Buffer buf;
     ramcloud->read(row->tid(), row->pKey(), row->pKeyLength(), &buf);
     row->parseBuffer(buf);
 }
 
-MultiWriteObject*
-Driver::multiWrite(uint64_t tid, Row& r)
+MultiWriteObject *
+Driver::multiWrite(uint64_t tid, Row &r)
 {
     return new MultiWriteObject(tid, r.pKey(), r.pKeyLength(),
                                 r.value(), r.valueLength());
@@ -501,7 +501,7 @@ readRows(Transaction* t, Row** rows, int numRows)
 } */
 
 static void
-readRow(Transaction* t, Row* row)
+readRow(Transaction *t, Row *row)
 {
     Buffer buf;
     t->read(row->tid(), row->pKey(), row->pKeyLength(), &buf);
@@ -509,14 +509,14 @@ readRow(Transaction* t, Row* row)
 }
 
 static void
-readRows(Transaction* t, std::vector<Row*>& rows)
+readRows(Transaction *t, std::vector<Row *> &rows)
 {
     Buffer bufs[rows.size()];
     Tub<Transaction::ReadOp> ops[rows.size()];
     for (size_t i = 0; i < rows.size(); ++i) {
         ops[i].construct(t, rows[i]->tid(),
                          rows[i]->pKey(), rows[i]->pKeyLength(),
-                         &bufs[i], true);
+                         &bufs[i], false);
     }
     for (size_t i = 0; i < rows.size(); ++i) {
         ops[i]->wait();
@@ -580,7 +580,7 @@ readRowsSync(Transaction* t, std::vector<Row*>& rows)
 }*/
 
 static void
-writeRow(Transaction* t, Row* row)
+writeRow(Transaction *t, Row *row)
 {
     t->write(row->tid(), row->pKey(), row->pKeyLength(),
              row->value(), row->valueLength());
@@ -607,7 +607,7 @@ InputNewOrder::generate(int W_ID, int numWarehouse)
 }
 
 double
-Driver::txNewOrder(uint32_t W_ID, bool* outcome, InputNewOrder* in)
+Driver::txNewOrder(uint32_t W_ID, bool *outcome, InputNewOrder *in)
 {
     ///////////////////////////
     // Input Data Generation
@@ -621,9 +621,9 @@ Driver::txNewOrder(uint32_t W_ID, bool* outcome, InputNewOrder* in)
     uint32_t D_ID = in->D_ID;
     uint32_t C_ID = in->C_ID;
     uint8_t O_OL_CNT = in->O_OL_CNT;
-    uint32_t* I_IDs = in->I_IDs;
-    uint8_t* OL_QUANTITY = in->OL_QUANTITY;
-    uint32_t* OL_SUPPLY_W_ID = in->OL_SUPPLY_W_ID;
+    uint32_t *I_IDs = in->I_IDs;
+    uint8_t *OL_QUANTITY = in->OL_QUANTITY;
+    uint32_t *OL_SUPPLY_W_ID = in->OL_SUPPLY_W_ID;
 
     ///////////////////////////
     // Create Order header.
@@ -632,7 +632,7 @@ Driver::txNewOrder(uint32_t W_ID, bool* outcome, InputNewOrder* in)
     Transaction t(ramcloud);
 
     // Reads
-    std::vector<Row*> readList;
+    std::vector<Row *> readList;
     Warehouse w(W_ID);
     readList.push_back(&w);
 
@@ -675,10 +675,10 @@ Driver::txNewOrder(uint32_t W_ID, bool* outcome, InputNewOrder* in)
         // STOCK
         if (stocks[i]->data.S_QUANTITY >= 10) {
             stocks[i]->data.S_QUANTITY = static_cast<uint16_t>(
-                    stocks[i]->data.S_QUANTITY - OL_QUANTITY[i]);
+                stocks[i]->data.S_QUANTITY - OL_QUANTITY[i]);
         } else {
             stocks[i]->data.S_QUANTITY = static_cast<uint16_t>(
-                    stocks[i]->data.S_QUANTITY + 91 - OL_QUANTITY[i]);
+                stocks[i]->data.S_QUANTITY + 91 - OL_QUANTITY[i]);
         }
         stocks[i]->data.S_YTD += OL_QUANTITY[i];
         stocks[i]->data.S_ORDER_CNT++;
@@ -696,14 +696,14 @@ Driver::txNewOrder(uint32_t W_ID, bool* outcome, InputNewOrder* in)
         ols[i]->data.OL_QUANTITY = OL_QUANTITY[i];
         ols[i]->data.OL_AMOUNT = OL_QUANTITY[i] * items[i]->data.I_PRICE;
         sum += ols[i]->data.OL_AMOUNT;
-        memcpy(ols[i]->data.OL_DIST_INFO, stocks[i]->data.S_DIST[D_ID-1], 24);
+        memcpy(ols[i]->data.OL_DIST_INFO, stocks[i]->data.S_DIST[D_ID - 1], 24);
         writeRow(&t, ols[i].get());
     }
 
     writeRow(&t, &o);
 
-    t.write(tableId[W_ID], c.pKey(), c.lastOidKeyLength(),
-                    &O_ID, sizeof32(O_ID));
+    t.write(tableId, c.pKey(), c.lastOidKeyLength(),
+            &O_ID, sizeof32(O_ID));
 
 
     *outcome = t.commit();
@@ -729,7 +729,7 @@ Driver::txNewOrder(uint32_t W_ID, bool* outcome, InputNewOrder* in)
 
     t.sync();
 
-    return Cycles::toSeconds(elapsed) *1e06;
+    return Cycles::toSeconds(elapsed) * 1e06;
 }
 
 /**
@@ -756,11 +756,11 @@ InputPayment::generate(int W_ID, int numWarehouse)
         byLastName = false;
         C_ID = NURand(1023, 1, 3000);
     }
-    H_AMOUNT = (double)random(100, 500000) / 100.0;
+    H_AMOUNT = (double) random(100, 500000) / 100.0;
 }
 
 double
-Driver::txPayment(uint32_t W_ID, bool *outcome, InputPayment* in)
+Driver::txPayment(uint32_t W_ID, bool *outcome, InputPayment *in)
 {
     ///////////////////////////
     // Input Data Generation
@@ -791,7 +791,7 @@ Driver::txPayment(uint32_t W_ID, bool *outcome, InputPayment* in)
     uint32_t buf_idx = 0;
 
     if (byLastName) {
-        t.read(tableId[W_ID], &nameKey, static_cast<uint16_t>(sizeof(nameKey)),
+        t.read(tableId, &nameKey, static_cast<uint16_t>(sizeof(nameKey)),
                &buf_cid);
         numCustomer = *(buf_cid.getStart<uint32_t>());
         buf_idx += sizeof32(numCustomer);
@@ -800,14 +800,15 @@ Driver::txPayment(uint32_t W_ID, bool *outcome, InputPayment* in)
             return 0;
         }
 
-        uint32_t* cids;
-        cids = static_cast<uint32_t*>(buf_cid.getRange(buf_idx, numCustomer*4));
-        in->C_ID = cids[(int)((numCustomer - 1) / 2)];
+        uint32_t *cids;
+        cids = static_cast<uint32_t *>(buf_cid.getRange(buf_idx,
+                                                        numCustomer * 4));
+        in->C_ID = cids[(int) ((numCustomer - 1) / 2)];
         C_ID = in->C_ID;
     }
     assert(C_ID);
 
-    std::vector<Row*> readList;
+    std::vector<Row *> readList;
     Warehouse w(W_ID);
     readList.push_back(&w);
 
@@ -867,7 +868,7 @@ Driver::txPayment(uint32_t W_ID, bool *outcome, InputPayment* in)
     }
     t.sync();
     uint64_t elapsed = Cycles::rdtsc() - startCycles;
-    return Cycles::toSeconds(elapsed) *1e06;
+    return Cycles::toSeconds(elapsed) * 1e06;
 }
 
 void
@@ -887,7 +888,7 @@ InputOrderStatus::generate()
 }
 
 double
-Driver::txOrderStatus(uint32_t W_ID, bool *outcome, InputOrderStatus* in)
+Driver::txOrderStatus(uint32_t W_ID, bool *outcome, InputOrderStatus *in)
 {
     ///////////////////////////
     // Input Data Generation
@@ -914,7 +915,7 @@ Driver::txOrderStatus(uint32_t W_ID, bool *outcome, InputOrderStatus* in)
     int numCustomer = 0;
     uint32_t buf_idx = 0;
     if (byLastName) {
-        t.read(tableId[W_ID], &nameKey, static_cast<uint16_t>(sizeof(nameKey)),
+        t.read(tableId, &nameKey, static_cast<uint16_t>(sizeof(nameKey)),
                &buf_cid);
         numCustomer = *(buf_cid.getStart<uint32_t>());
         buf_idx += sizeof32(numCustomer);
@@ -922,20 +923,21 @@ Driver::txOrderStatus(uint32_t W_ID, bool *outcome, InputOrderStatus* in)
             return 0;
         }
 
-        uint32_t* cids;
-        cids = static_cast<uint32_t*>(buf_cid.getRange(buf_idx, numCustomer*4));
-        in->C_ID = cids[(int)((numCustomer - 1) / 2)];
+        uint32_t *cids;
+        cids = static_cast<uint32_t *>(buf_cid.getRange(buf_idx,
+                                                        numCustomer * 4));
+        in->C_ID = cids[(int) ((numCustomer - 1) / 2)];
         C_ID = in->C_ID;
     }
     assert(C_ID);
 
-    std::vector<Row*> readList;
+    std::vector<Row *> readList;
 
     Customer c(C_ID, D_ID, W_ID);
     readList.push_back(&c);
 
     Buffer buf_oid;
-    t.read(tableId[W_ID], c.pKey(), c.lastOidKeyLength(), &buf_oid);
+    t.read(tableId, c.pKey(), c.lastOidKeyLength(), &buf_oid);
     uint32_t O_ID = *(buf_oid.getStart<uint32_t>());
 
     Order o(O_ID, D_ID, W_ID);
@@ -953,11 +955,12 @@ Driver::txOrderStatus(uint32_t W_ID, bool *outcome, InputOrderStatus* in)
 
     *outcome = t.commit();
     uint64_t elapsed = Cycles::rdtsc() - startCycles;
-    return Cycles::toSeconds(elapsed) *1e06;
+    return Cycles::toSeconds(elapsed) * 1e06;
 }
 
 double
-Driver::txDelivery(uint32_t W_ID, uint32_t D_ID, bool* outcome, InputDelivery *in)
+Driver::txDelivery(uint32_t W_ID, uint32_t D_ID, bool *outcome,
+                   InputDelivery *in)
 {
     ///////////////////////////
     // Input Data Generation
@@ -982,7 +985,7 @@ Driver::txDelivery(uint32_t W_ID, uint32_t D_ID, bool* outcome, InputDelivery *i
     if (O_ID >= d.data.D_NEXT_O_ID) { //No new order.
         *outcome = true;
         uint64_t elapsed = Cycles::rdtsc() - startCycles;
-        return Cycles::toSeconds(elapsed) *1e06;
+        return Cycles::toSeconds(elapsed) * 1e06;
     }
     d.data.lowestToDeliverOid++;
     writeRow(&t, &d);
@@ -995,7 +998,7 @@ Driver::txDelivery(uint32_t W_ID, uint32_t D_ID, bool* outcome, InputDelivery *i
     o.data.O_CARRIER_ID = in->O_CARRIER_ID;
     writeRow(&t, &o);
 
-    std::vector<Row*> readList;
+    std::vector<Row *> readList;
 
     Customer c(o.data.O_C_ID, D_ID, W_ID);
     readList.push_back(&c);
@@ -1020,11 +1023,12 @@ Driver::txDelivery(uint32_t W_ID, uint32_t D_ID, bool* outcome, InputDelivery *i
 
     *outcome = t.commit();
     uint64_t elapsed = Cycles::rdtsc() - startCycles;
-    return Cycles::toSeconds(elapsed) *1e06;
+    return Cycles::toSeconds(elapsed) * 1e06;
 }
 
 double
-Driver::txStockLevel(uint32_t W_ID, uint32_t D_ID, bool* outcome, InputStockLevel* in)
+Driver::txStockLevel(uint32_t W_ID, uint32_t D_ID, bool *outcome,
+                     InputStockLevel *in)
 {
     ///////////////////////////
     // Input Data Generation
@@ -1060,8 +1064,8 @@ Driver::txStockLevel(uint32_t W_ID, uint32_t D_ID, bool* outcome, InputStockLeve
 
     vector<uint32_t> lowStock;
     for (auto it = iids.begin();
-            it != iids.end();
-            ++it) {
+         it != iids.end();
+         ++it) {
         Stock s(*it, W_ID);
         read(&s);
         if (s.data.S_QUANTITY < in->threshold) {
@@ -1070,7 +1074,14 @@ Driver::txStockLevel(uint32_t W_ID, uint32_t D_ID, bool* outcome, InputStockLeve
     }
     *outcome = true;
     uint64_t elapsed = Cycles::rdtsc() - startCycles;
-    return Cycles::toSeconds(elapsed) *1e06;
+    return Cycles::toSeconds(elapsed) * 1e06;
 }
 
-}} // namespace TPCC namespace RAMCloud
+uint64_t Driver::getTableId(uint64_t W_ID)
+{
+    return tableId;
+}
+
+
+}
+} // namespace TPCC namespace RAMCloud
