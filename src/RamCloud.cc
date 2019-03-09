@@ -2332,7 +2332,7 @@ MigrationReadRpc::wait(uint64_t *version, bool *objectExists, bool *migrating,
  *      should be aborted with an error.
  */
 ReadKeysAndValueRpc::ReadKeysAndValueRpc(RamCloud* ramcloud, uint64_t tableId,
-        const void* key, uint16_t keyLength, ObjectBuffer* value,
+        const void* key, uint16_t keyLength, Buffer* value,
         const RejectRules* rejectRules)
     : ObjectRpcWrapper(ramcloud->clientContext, tableId, key, keyLength,
             sizeof(WireFormat::ReadKeysAndValue::Response), value)
@@ -2358,7 +2358,9 @@ ReadKeysAndValueRpc::ReadKeysAndValueRpc(RamCloud* ramcloud, uint64_t tableId,
  *      indicating the existence of the object is returned here.
  */
 void
-ReadKeysAndValueRpc::wait(uint64_t* version, bool* objectExists)
+ReadKeysAndValueRpc::wait(uint64_t *version, bool *objectExists,
+                          bool *migrating, uint64_t *sourceId,
+                          uint64_t *targetId)
 {
     if (objectExists != NULL)
         *objectExists = true;
@@ -2378,6 +2380,14 @@ ReadKeysAndValueRpc::wait(uint64_t* version, bool* objectExists)
         }
     }
 
+    if (migrating != NULL) {
+        *migrating = respHdr->migrating;
+        if (respHdr->migrating) {
+            *sourceId = respHdr->sourceId;
+            *targetId = respHdr->targetId;
+        }
+    }
+
     // Truncate the response Buffer so that it consists of nothing
     // but the object data.
     response->truncateFront(sizeof(*respHdr));
@@ -2390,7 +2400,7 @@ MigrationReadKeysAndValueRpc::MigrationReadKeysAndValueRpc(
     uint64_t tableId,
     const void *key,
     uint16_t keyLength,
-    ObjectBuffer *value,
+    Buffer *value,
     const RejectRules *rejectRules)
     : ServerIdRpcWrapper(ramcloud->clientContext, serverId,
                          sizeof(WireFormat::ReadKeysAndValue::Response), value)

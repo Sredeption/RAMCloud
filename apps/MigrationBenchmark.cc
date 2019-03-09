@@ -465,7 +465,7 @@ class RocksteadyClient : public RAMCloud::WorkloadGenerator::Client {
 
 TPCC::TpccStat
 tpcc_oneClient(double runSeconds, TPCC::Driver *driver,
-               bool latencyTest = false)
+               bool latencyTest = false, bool migrating = false)
 {
     TPCC::TpccStat stat;
     uint64_t total = 0;
@@ -504,7 +504,7 @@ tpcc_oneClient(double runSeconds, TPCC::Driver *driver,
                                                &outcome);
             } else {
                 txType = 4;
-                latency = driver->txNewOrder(W_ID, &outcome);
+                latency = driver->txNewOrder(W_ID, &outcome, migrating);
             }
             if (outcome) {
                 stat.cumulativeLatency[txType] += latency;
@@ -516,7 +516,8 @@ tpcc_oneClient(double runSeconds, TPCC::Driver *driver,
             }
         } catch (std::exception e) {
             RAMCLOUD_LOG(NOTICE, "exception thrown TX job, type=%d. %s", txType,
-                e.what());
+                         e.what());
+            throw e;
         }
 
         if (latencyTest) {
@@ -728,7 +729,7 @@ class TpccClient {
             RAMCLOUD_LOG(NOTICE, "  recipient master id %u",
                          server2.indexNumber());
             while (true) {
-                tpcc_oneClient(0.1, &driver, true);
+                tpcc_oneClient(0.1, &driver, true, true);
                 bool isFinished = ramcloud->migrationQuery(migrationId);
                 if (isFinished) {
                     RAMCLOUD_LOG(NOTICE, "migration %lu finished", migrationId);
@@ -913,8 +914,8 @@ try
     serverList.applyServerList(protoServerList);
 
 //    rocksteadyBasic();
-    basic();
-//    basic_tpcc();
+//    basic();
+    basic_tpcc();
 
     return 0;
 } catch (ClientException &e) {

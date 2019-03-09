@@ -96,7 +96,8 @@ class Transaction {
             {}
 
             /// If the value is already cached this rpc is unused.
-            Tub<ReadKeysAndValueRpc> readRpc;
+            Tub<MigrationReadTask<ReadKeysAndValueRpc, MigrationReadKeysAndValueRpc>>
+                readRpc;
         };
         Tub<SingleRequest> singleRequest;   // Use Tub to prevent misuse.
 

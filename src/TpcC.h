@@ -660,7 +660,8 @@ class Driver {
     { return &context; }
 
     // returns latency.
-    double txNewOrder(uint32_t W_ID, bool *outcome, InputNewOrder *in = NULL);
+    double txNewOrder(uint32_t W_ID, bool *outcome, bool migrating = false,
+                      InputNewOrder *in = NULL);
 
     double txPayment(uint32_t W_ID, bool *outcome, InputPayment *in = NULL);
 

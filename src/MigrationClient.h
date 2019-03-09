@@ -93,7 +93,7 @@ class MigrationReadTask {
         : ramcloud(ramcloud), tableId(tableId), key(key), keyLength(keyLength),
           value(value), rejectRules(rejectRules), readRpc(), sourceReadRpc(),
           targetReadRpc(), state(INIT), sourceBuffer(), targetBuffer(),
-          version(), objectExists()
+          version(), objectExists(false)
     {
     }
 
@@ -177,10 +177,8 @@ class MigrationReadTask {
                     value->append(&targetBuffer, 0u, targetBuffer.size());
                     existsConclusion = targetObjectExists;
                 }
-                if (version)
-                    version = versionConclusion;
-                if (objectExists)
-                    objectExists = existsConclusion;
+                version = versionConclusion;
+                objectExists = existsConclusion;
                 state = DONE;
             } else {
                 ramcloud->clientContext->dispatch->poll();

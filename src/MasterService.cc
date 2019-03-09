@@ -1862,9 +1862,19 @@ MasterService::readKeysAndValue(
 
     RejectRules rejectRules = reqHdr->rejectRules;
     uint32_t initialLength = rpc->replyPayload->size();
+    TabletManager::Tablet tablet;
+    respHdr->version = 0;
     respHdr->common.status = objectManager.readObject(
-            key, rpc->replyPayload, &rejectRules, &respHdr->version);
-
+        key, rpc->replyPayload, &rejectRules, &respHdr->version,
+        false, &tablet);
+    if (tablet.state == TabletManager::MIGRATION_SOURCE ||
+        tablet.state == TabletManager::MIGRATION_TARGET) {
+        respHdr->migrating = true;
+        respHdr->sourceId = tablet.sourceId;
+        respHdr->targetId = tablet.targetId;
+    } else {
+        respHdr->migrating = false;
+    }
     if (respHdr->common.status != STATUS_OK)
         return;
 

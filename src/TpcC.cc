@@ -39,7 +39,7 @@ Driver::Driver(RamCloud *ramcloud, TpccContext &c)
 
 
 Driver::Driver(RamCloud *ramcloud)
-    : ramcloud(ramcloud), context(3, 2)
+    : ramcloud(ramcloud), context(10, 2)
 {
 
 }
@@ -507,7 +507,7 @@ readRow(Transaction *t, Row *row)
 }
 
 static void
-readRows(Transaction *t, std::vector<Row *> &rows)
+readRows(Transaction *t, std::vector<Row *> &rows, bool migrating = false)
 {
     Buffer bufs[rows.size()];
     Tub<Transaction::ReadOp> ops[rows.size()];
@@ -517,7 +517,8 @@ readRows(Transaction *t, std::vector<Row *> &rows)
                          &bufs[i], false);
     }
     for (size_t i = 0; i < rows.size(); ++i) {
-        ops[i]->wait();
+        bool exists;
+        ops[i]->wait(&exists);
         rows[i]->parseBuffer(bufs[i]);
     }
 }
@@ -605,7 +606,8 @@ InputNewOrder::generate(int W_ID, int numWarehouse)
 }
 
 double
-Driver::txNewOrder(uint32_t W_ID, bool *outcome, InputNewOrder *in)
+Driver::txNewOrder(uint32_t W_ID, bool *outcome, bool migrating,
+                   InputNewOrder *in)
 {
     ///////////////////////////
     // Input Data Generation
@@ -650,7 +652,7 @@ Driver::txNewOrder(uint32_t W_ID, bool *outcome, InputNewOrder *in)
     }
     //TODO: Try-catch not found exception.
     //readRowsMulti(&t, readList);
-    readRows(&t, readList);
+    readRows(&t, readList, migrating);
     //readRowsSync(&t, readList);
 
     // Writes
