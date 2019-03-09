@@ -23,6 +23,7 @@
 #include "Common.h"
 #include "MultiRead.h"
 #include "RamCloud.h"
+#include "MigrationClient.h"
 
 namespace RAMCloud {
 

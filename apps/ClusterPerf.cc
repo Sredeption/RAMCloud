@@ -5645,21 +5645,7 @@ tpcc()
 
         RAMCLOUD_LOG(NOTICE, "Started Clients");
 
-        for (int i = 0; i < numServers; ++i) {
-            cluster->objectServerControl(TPCC::tableId[i+1], "abc", 3,
-                    WireFormat::ControlOp::GET_PERF_STATS, NULL, 0,
-                    &statsBuffer);
-            startStats[i] = *statsBuffer.getStart<PerfStats>();
-        }
-
         Cycles::sleep(period * 1000000);
-
-        for (int i = 0; i < numServers; ++i) {
-            cluster->objectServerControl(TPCC::tableId[i + 1], "abc", 3,
-                    WireFormat::ControlOp::GET_PERF_STATS, NULL, 0,
-                    &statsBuffer);
-            finishStats[i] = *statsBuffer.getStart<PerfStats>();
-        }
 
         try {
             sendCommand("done", "done", 1, numClients-1);

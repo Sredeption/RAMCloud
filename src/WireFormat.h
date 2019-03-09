@@ -1647,6 +1647,9 @@ struct ReadKeysAndValue {
                                       // as defined in Object.h in bytes.
                                       // The actual bytes of the object follow
                                       // immediately after this header.
+        bool migrating;
+        uint64_t sourceId;
+        uint64_t targetId;
     } __attribute__((packed));
 };
 

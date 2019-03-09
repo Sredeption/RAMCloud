@@ -515,8 +515,8 @@ tpcc_oneClient(double runSeconds, TPCC::Driver *driver,
                 stat.txAbortCount[txType]++;
             }
         } catch (std::exception e) {
-            RAMCLOUD_LOG(NOTICE, "exception thrown TX job, type=%d.", txType);
-            throw e;
+            RAMCLOUD_LOG(NOTICE, "exception thrown TX job, type=%d. %s", txType,
+                e.what());
         }
 
         if (latencyTest) {
@@ -689,12 +689,10 @@ class TpccClient {
         ServerId server1 = ServerId(1u, 0u);
         ServerId server2 = ServerId(2u, 0u);
         ServerId server3 = ServerId(3u, 0u);
-        uint64_t lastKeyHash = (~0lu) / 5 * 4;
-        uint64_t firstKeyHash = lastKeyHash / 2;
         TPCC::Driver driver(client.get());
         if (clientIndex == 0) {
             driver.initTables(server1, server3,
-                              firstKeyHash, lastKeyHash);
+                              firstKey, lastKey);
             sendCommand("init", "initializing", 1, numClients - 1);
         } else {
             char command[20];
@@ -723,11 +721,19 @@ class TpccClient {
 
             uint64_t migrationId = ramcloud->backupMigrate(
                 driver.getTableId(1), firstKey, lastKey, server2, false);
+            RAMCLOUD_LOG(NOTICE, "Issuing migration request:");
+            RAMCLOUD_LOG(NOTICE, "  table (%lu)", driver.getTableId(1));
+            RAMCLOUD_LOG(NOTICE, "  first key %lu", firstKey);
+            RAMCLOUD_LOG(NOTICE, "  last key  %lx", lastKey);
+            RAMCLOUD_LOG(NOTICE, "  recipient master id %u",
+                         server2.indexNumber());
             while (true) {
                 tpcc_oneClient(0.1, &driver, true);
                 bool isFinished = ramcloud->migrationQuery(migrationId);
-                if (isFinished)
+                if (isFinished) {
+                    RAMCLOUD_LOG(NOTICE, "migration %lu finished", migrationId);
                     break;
+                }
             }
 
             for (int k = 0; k < 50; k++) {
@@ -907,8 +913,8 @@ try
     serverList.applyServerList(protoServerList);
 
 //    rocksteadyBasic();
-//    basic();
-    basic_tpcc();
+    basic();
+//    basic_tpcc();
 
     return 0;
 } catch (ClientException &e) {

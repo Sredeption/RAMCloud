@@ -1028,9 +1028,9 @@ class ReadRpc : public ObjectRpcWrapper {
     DISALLOW_COPY_AND_ASSIGN(ReadRpc);
 };
 
-class MigrationReadRpc : public ClientServerIdRpcWrapper {
+class MigrationReadRpc : public ServerIdRpcWrapper {
   public:
-    MigrationReadRpc(RamCloud *ramcloud, string locator, uint64_t tableId,
+    MigrationReadRpc(RamCloud *ramcloud, ServerId serverId, uint64_t tableId,
                      const void *key, uint16_t keyLength, Buffer *value,
                      const RejectRules *rejectRules = NULL);
     ~MigrationReadRpc() {}
@@ -1058,6 +1058,24 @@ class ReadKeysAndValueRpc : public ObjectRpcWrapper {
 
   PRIVATE:
     DISALLOW_COPY_AND_ASSIGN(ReadKeysAndValueRpc);
+};
+
+class MigrationReadKeysAndValueRpc : public ServerIdRpcWrapper {
+  public:
+    MigrationReadKeysAndValueRpc(RamCloud *ramcloud, ServerId serverId,
+                                 uint64_t tableId, const void *key,
+                                 uint16_t keyLength, ObjectBuffer *value,
+                                 const RejectRules *rejectRules = NULL);
+
+    ~MigrationReadKeysAndValueRpc()
+    {}
+
+    bool wait(uint64_t *version = NULL, bool *objectExists = NULL,
+              bool *migrating = NULL, uint64_t *sourceId = NULL,
+              uint64_t *targetId = NULL);
+
+  PRIVATE:
+    DISALLOW_COPY_AND_ASSIGN(MigrationReadKeysAndValueRpc);
 };
 
 /**

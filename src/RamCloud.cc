@@ -2240,17 +2240,17 @@ RamCloud::readMigrating(uint64_t tableId, const void *key, uint16_t keyLength,
                         uint64_t *version,
                         bool *objectExists)
 {
-    MigrationReadTask readTask(this, tableId, key, keyLength, value,
-                               rejectRules);
+    MigrationReadTask<ReadRpc, MigrationReadRpc>
+        readTask(this, tableId, key, keyLength, value, rejectRules);
     readTask.wait(version, objectExists);
 
 }
 
-MigrationReadRpc::MigrationReadRpc(RamCloud *ramcloud, string locator,
+MigrationReadRpc::MigrationReadRpc(RamCloud *ramcloud, ServerId serverId,
                                    uint64_t tableId, const void *key,
                                    uint16_t keyLength, Buffer *value,
                                    const RejectRules *rejectRules)
-    : ClientServerIdRpcWrapper(ramcloud->clientContext, locator,
+    : ServerIdRpcWrapper(ramcloud->clientContext, serverId,
                                sizeof(WireFormat::Read::Response), value)
 {
     value->reset();
@@ -2384,6 +2384,70 @@ ReadKeysAndValueRpc::wait(uint64_t* version, bool* objectExists)
     assert(respHdr->length == response->size());
 }
 
+MigrationReadKeysAndValueRpc::MigrationReadKeysAndValueRpc(
+    RamCloud *ramcloud,
+    ServerId serverId,
+    uint64_t tableId,
+    const void *key,
+    uint16_t keyLength,
+    ObjectBuffer *value,
+    const RejectRules *rejectRules)
+    : ServerIdRpcWrapper(ramcloud->clientContext, serverId,
+                         sizeof(WireFormat::ReadKeysAndValue::Response), value)
+{
+    value->reset();
+    WireFormat::ReadKeysAndValue::Request *reqHdr(allocHeader<
+        WireFormat::ReadKeysAndValue>());
+    reqHdr->tableId = tableId;
+    reqHdr->keyLength = keyLength;
+    reqHdr->rejectRules = rejectRules ? *rejectRules : defaultRejectRules;
+    request.append(key, keyLength);
+    send();
+}
+
+bool MigrationReadKeysAndValueRpc::wait(uint64_t *version, bool *objectExists,
+                                        bool *migrating, uint64_t *sourceId,
+                                        uint64_t *targetId)
+{
+    if (objectExists != NULL)
+        *objectExists = true;
+
+    waitInternal(context->dispatch);
+    const WireFormat::ReadKeysAndValue::Response *respHdr(
+        getResponseHeader<WireFormat::ReadKeysAndValue>());
+    if (version != NULL)
+        *version = respHdr->version;
+
+    if (respHdr->common.status == STATUS_UNKNOWN_TABLET) {
+        if (migrating) {
+            *migrating = false;
+        }
+        return false;
+    }
+
+    if (respHdr->common.status != STATUS_OK) {
+        if (objectExists != NULL &&
+            respHdr->common.status == STATUS_OBJECT_DOESNT_EXIST) {
+            *objectExists = false;
+        } else {
+            return false;
+        }
+    }
+
+    if (migrating != NULL) {
+        *migrating = respHdr->migrating;
+        if (respHdr->migrating) {
+            *sourceId = respHdr->sourceId;
+            *targetId = respHdr->targetId;
+        }
+    }
+
+    // Truncate the response Buffer so that it consists of nothing
+    // but the object data.
+    response->truncateFront(sizeof(*respHdr));
+    assert(respHdr->length == response->size());
+    return true;
+}
 /**
  * Delete an object from a table. If the object does not currently exist
  * then the operation succeeds without doing anything (unless rejectRules
@@ -3325,5 +3389,6 @@ WriteRpc::wait(uint64_t* version)
     if (respHdr->common.status != STATUS_OK)
         ClientException::throwException(HERE, respHdr->common.status);
 }
+
 
 }  // namespace RAMCloud

@@ -39,7 +39,7 @@ Driver::Driver(RamCloud *ramcloud, TpccContext &c)
 
 
 Driver::Driver(RamCloud *ramcloud)
-    : ramcloud(ramcloud), context(30, 2)
+    : ramcloud(ramcloud), context(3, 2)
 {
 
 }
@@ -48,9 +48,7 @@ void Driver::initTables(ServerId server1, ServerId server3,
                         uint64_t firstKey, uint64_t lastKey)
 {
     tableId = ramcloud->createTableToServer(tableName, server1);
-    ramcloud->splitTablet(tableName, firstKey);
     ramcloud->splitTablet(tableName, lastKey + 1);
-    ramcloud->migrateTablet(tableId, lastKey + 1, ~0lu, server3);
 }
 
 static int
