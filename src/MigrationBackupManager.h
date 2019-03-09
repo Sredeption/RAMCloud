@@ -117,8 +117,8 @@ class MigrationBackupManager : public Dispatch::Poller {
         uint32_t replicaNum;
         uint32_t completedReplicaNum;
 
-        static const uint32_t MAX_BATCH_SIZE = 20 * 1024;
-        static const uint32_t MAX_SCAN_SIZE = 40 * 1024;
+        static const uint32_t MAX_BATCH_SIZE = 40 * 1024;
+        static const uint32_t MAX_SCAN_SIZE = 80 * 1024;
 
         class LoadRpc : public Transport::ServerRpc {
           PRIVATE:

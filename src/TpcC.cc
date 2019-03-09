@@ -39,7 +39,7 @@ Driver::Driver(RamCloud *ramcloud, TpccContext &c)
 
 
 Driver::Driver(RamCloud *ramcloud)
-    : ramcloud(ramcloud), context(5, 2)
+    : ramcloud(ramcloud), context(30, 2)
 {
 
 }
@@ -386,7 +386,7 @@ Driver::initBenchmark(uint32_t W_ID)
 {
     uint64_t startCycles = Cycles::rdtsc();
     tableId = ramcloud->getTableId(tableName);
-    RAMCLOUD_LOG(NOTICE, "TPCC benchmark initialization: table %lu.", tableId);
+    RAMCLOUD_LOG(NOTICE, "TPCC benchmark initialization: warehouse %u.", W_ID);
 
 
     addWarehouse(W_ID);

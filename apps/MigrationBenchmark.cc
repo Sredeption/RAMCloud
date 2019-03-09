@@ -256,7 +256,7 @@ void basic()
                             keyLength, valueLength, objectCount);
 
     RAMCloud::WorkloadGenerator workloadGenerator(
-        "YCSB-B", targetOps, objectCount, objectSize, &basicClient);
+        "YCSB-A", targetOps, objectCount, objectSize, &basicClient);
 
     bool issueMigration = false;
     if (clientIndex == 0)
@@ -603,7 +603,7 @@ class TpccClient {
     }
 
     void
-    waitSlave(int slave, const char *state, double timeout = 1.0)
+    waitSlave(int slave, const char *state, double timeout = 3.0)
     {
         Buffer value;
         string key = keyVal(slave, "state");
@@ -687,7 +687,7 @@ class TpccClient {
     void run()
     {
         ServerId server1 = ServerId(1u, 0u);
-//        ServerId server2 = ServerId(2u, 0u);
+        ServerId server2 = ServerId(2u, 0u);
         ServerId server3 = ServerId(3u, 0u);
         uint64_t lastKeyHash = (~0lu) / 5 * 4;
         uint64_t firstKeyHash = lastKeyHash / 2;
@@ -721,14 +721,14 @@ class TpccClient {
                 tpcc_oneClient(0.1, &driver, true);
             }
 
-//            uint64_t migrationId = ramcloud->backupMigrate(
-//                driver.getTableId(1), firstKey, lastKey, server2, false);
-//            while (true) {
-//                tpcc_oneClient(0.1, &driver, true);
-//                bool isFinished = ramcloud->migrationQuery(migrationId);
-//                if (isFinished)
-//                    break;
-//            }
+            uint64_t migrationId = ramcloud->backupMigrate(
+                driver.getTableId(1), firstKey, lastKey, server2, false);
+            while (true) {
+                tpcc_oneClient(0.1, &driver, true);
+                bool isFinished = ramcloud->migrationQuery(migrationId);
+                if (isFinished)
+                    break;
+            }
 
             for (int k = 0; k < 50; k++) {
                 tpcc_oneClient(0.1, &driver, true);
@@ -779,9 +779,9 @@ class TpccClient {
 void basic_tpcc()
 {
     uint64_t controlTable;
-    ServerId server3 = ServerId(3u, 0u);
+    ServerId server4 = ServerId(4u, 0u);
     controlTable = client->createTableToServer(testControlHub.c_str(),
-                                               server3);
+                                               server4);
     TpccClient tpccClient(client.get(), controlTable);
     tpccClient.run();
 }
@@ -798,7 +798,7 @@ void rocksteadyBasic()
     RocksteadyClient basicClient(client.get(), clientIndex, &migration,
                                  keyLength, valueLength, objectCount, 7);
     RAMCloud::WorkloadGenerator workloadGenerator(
-        "YCSB-B", targetOps, objectCount, objectSize, &basicClient);
+        "YCSB-A", targetOps, objectCount, objectSize, &basicClient);
 
     bool issueMigration = false;
     if (clientIndex == 0)
@@ -894,7 +894,7 @@ try
         exit(1);
     }
 
-    targetOps = 100000;
+    targetOps = 200000;
     string coordinatorLocator = optionParser.options.getCoordinatorLocator();
     RAMCLOUD_LOG(NOTICE, "client: Connecting to coordinator %s",
                  coordinatorLocator.c_str());
