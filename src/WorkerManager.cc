@@ -98,6 +98,14 @@ WorkerManager::WorkerManager(Context* context, uint32_t maxCores)
     , rpcsWaiting(0)
     , testingSaveRpcs(0)
     , testRpcs()
+#ifdef RPC_BREAKDOWN
+    , lastUpdate(Cycles::rdtsc())
+    , dispatchTime(0)
+    , serviceTime(0)
+    , executionTime(0)
+    , replyTime(0)
+    , totalNumber(0)
+#endif
 {
     levels.resize(RpcLevel::maxLevel() + 1);
 
@@ -345,7 +353,49 @@ WorkerManager::poll()
                     reinterpret_cast<uint64_t>(rpc),
                     rpc->replyPayload.size());
 #endif
+#ifdef RPC_BREAKDOWN
+            uint64_t current = Cycles::rdtsc();
+#endif
             rpc->sendReply();
+
+#ifdef RPC_BREAKDOWN
+            auto header = rpc->requestPayload.getStart<WireFormat::RequestCommon>();
+
+            if (header->opcode == WireFormat::Read::opcode) {
+                dispatchTime += rpc->handleoffTimestamp - rpc->startTimestamp;
+                serviceTime += rpc->serviceTimestamp - rpc->handleoffTimestamp;
+                executionTime += rpc->finishTimestamp - rpc->serviceTimestamp;
+                replyTime += current - rpc->finishTimestamp;
+                totalNumber++;
+            }
+            if (Cycles::toMicroseconds(current - lastUpdate) > 100000) {
+                lastUpdate = current;
+                if (totalNumber == 0)
+                    totalNumber = 1;
+                double averageDispatchTime =
+                    (double) Cycles::toMicroseconds(dispatchTime) /
+                    (double) totalNumber;
+                double averageServiceTime =
+                    (double) Cycles::toMicroseconds(serviceTime) /
+                    (double) totalNumber;
+                double averageExecutionTime =
+                    (double) Cycles::toMicroseconds(executionTime) /
+                    (double) totalNumber;
+                double averageReplyTime =
+                    (double) Cycles::toMicroseconds(replyTime) /
+                    (double) totalNumber;
+                RAMCLOUD_LOG(NOTICE,
+                             "dispatch:%.2lf, service:%.2lf, execution:%.2lf,"
+                             "reply:%.2lf, throughput:%lu",
+                             averageDispatchTime, averageServiceTime,
+                             averageExecutionTime, averageReplyTime, totalNumber);
+                dispatchTime = 0;
+                serviceTime = 0;
+                executionTime = 0;
+                replyTime = 0;
+                totalNumber = 0;
+            }
+#endif
             timeTrace("sent reply for opcode %d, thread %d",
                     worker->threadId, worker->opcode);
 
@@ -454,6 +504,10 @@ WorkerManager::workerMain(Worker* worker)
             Fence::enter();
             if (worker->rpc == WORKER_EXIT)
                 break;
+
+#ifdef RPC_BREAKDOWN
+            worker->rpc->serviceTimestamp = Cycles::rdtsc();
+#endif
             timeTrace("worker thread %d received opcode %d", worker->threadId,
                     worker->opcode);
 
@@ -462,6 +516,9 @@ WorkerManager::workerMain(Worker* worker)
                     &worker->rpc->replyPayload);
             Service::handleRpc(worker->context, &rpc);
 
+#ifdef RPC_BREAKDOWN
+            worker->rpc->finishTimestamp = Cycles::rdtsc();
+#endif
             // Pass the RPC back to the dispatch thread for completion.
             Fence::leave();
             worker->state.store(Worker::POLLING);
@@ -530,6 +587,9 @@ Worker::handoff(Transport::ServerRpc* newRpc)
 {
     assert(rpc == NULL);
     rpc = newRpc;
+#ifdef RPC_BREAKDOWN
+    rpc->handleoffTimestamp = Cycles::rdtsc();
+#endif
     Fence::leave();
 #ifdef SMTT
     if (rpc != WORKER_EXIT) {

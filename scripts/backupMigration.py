@@ -61,7 +61,11 @@ def backup_migrate(num_servers,
     args['coordinator_args'] = coordinator_args
     args['share_hosts'] = True
     args['dpdk_port'] = dpdk_port
-    args['client_hosts'] = hosts[2:2 + num_clients]
+    args['client_hosts'] = []
+
+    num_hosts = len(hosts) - 2
+    for i in range(num_clients):
+        args['client_hosts'].append(hosts[2 + i % num_hosts])
 
     if backup_args:
         args['backup_args'] += backup_args

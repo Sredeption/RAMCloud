@@ -79,6 +79,13 @@ class Transport {
             , epoch(0)
             , activities(~0)
             , outstandingRpcListHook()
+#define RPC_BREAKDOWN
+#ifdef RPC_BREAKDOWN
+            , startTimestamp(~0lu)
+            , handleoffTimestamp(~0lu)
+            , serviceTimestamp(~0lu)
+            , finishTimestamp(~0lu)
+#endif
         {}
 
       public:
@@ -163,6 +170,13 @@ class Transport {
          */
         IntrusiveListHook outstandingRpcListHook;
 
+//#define RPC_BREAKDOWN
+#ifdef RPC_BREAKDOWN
+        uint64_t startTimestamp;
+        uint64_t handleoffTimestamp;
+        uint64_t serviceTimestamp;
+        uint64_t finishTimestamp;
+#endif
       PRIVATE:
         DISALLOW_COPY_AND_ASSIGN(ServerRpc);
     };

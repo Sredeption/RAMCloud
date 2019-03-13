@@ -1582,6 +1582,9 @@ InfRcTransport::Poller::poll()
             }
             Header& header(*reinterpret_cast<Header*>(bd->buffer));
             ServerRpc *r = t->serverRpcPool.construct(t, qp, header.nonce);
+#ifdef RPC_BREAKDOWN
+            r->startTimestamp = Cycles::rdtsc();
+#endif
 
             uint32_t len = request->byte_len - sizeof32(header);
             // It's very important that we don't let the receive buffer

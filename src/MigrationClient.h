@@ -107,7 +107,7 @@ class MigrationReadTask {
                     ramcloud, migratingTablet->sourceId, tableId, key,
                     keyLength, &sourceBuffer, rejectRules);
                 targetReadRpc.construct(
-                    ramcloud, migratingTablet->sourceId, tableId, key,
+                    ramcloud, migratingTablet->targetId, tableId, key,
                     keyLength, &targetBuffer, rejectRules);
                 state = MIGRATING;
             } else {

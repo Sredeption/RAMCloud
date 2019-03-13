@@ -820,29 +820,6 @@ Segment::checkMetadataIntegrity(const SegmentCertificate& certificate)
     if (certificate.checksum != currentChecksum.getResult()) {
         LOG(WARNING, "segment corrupt: bad checksum (expected 0x%08x, "
             "was 0x%08x)", certificate.checksum, currentChecksum.getResult());
-        offset = 0;
-
-        unused = NULL;
-        while (offset < certificate.segmentLength &&
-               peek(offset, &unused) > 0) {
-            EntryHeader header = getEntryHeader(offset);
-            currentChecksum.update(&header, sizeof(header));
-
-            uint32_t length = 0;
-            RAMCLOUD_LOG(NOTICE, "<%u, %u>", sizeof32(header) +header.getLengthBytes(), length);
-            copyOut(offset + sizeof32(header), &length,
-                    header.getLengthBytes());
-
-            offset += (sizeof32(header) + header.getLengthBytes() + length);
-            size_t segmentSize = segletBlocks.size() * segletSize;
-            if (offset > segmentSize) {
-                LOG(WARNING, "segment corrupt: entries run off past "
-                             "allocated segment size (segment size %lu, next entry would "
-                             "have started at %u)",
-                    segmentSize, offset);
-                break;
-            }
-        }
         return false;
     }
 

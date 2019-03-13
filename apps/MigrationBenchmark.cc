@@ -14,6 +14,7 @@
  */
 
 #include <iostream>
+#include "RawMetrics.h"
 #include "ServerList.h"
 #include "Cycles.h"
 #include "CycleCounter.h"
@@ -274,12 +275,13 @@ void basic()
                  "time: all median, 99th | read median, 99th | write median, 99th");
     for (uint64_t i = 0; i < result.size(); i++) {
         RAMCLOUD_LOG(NOTICE,
-                     "%lu:%lu, %lu, %lf | %lu, %lu, %lf | %lu, %lu, %lf", i,
-                     result[i].p50, result[i].p999,
+                     "%lu:%lu, %lu, %lu, %lf | %lu, %lu, %lu, %lf | %lu, %lu, %lu, %lf",
+                     i, result[i].p50, result[i].p999, result[i].avg,
                      static_cast<double>(result[i].bandwidth) / 100.,
-                     readResult[i].p50, readResult[i].p999,
+                     readResult[i].p50, readResult[i].p999, readResult[i].avg,
                      static_cast<double>(readResult[i].bandwidth) / 100.,
                      writeResult[i].p50, writeResult[i].p999,
+                     writeResult[i].avg,
                      static_cast<double>(writeResult[i].bandwidth) / 100.);
     }
 }
@@ -475,6 +477,10 @@ tpcc_oneClient(double runSeconds, TPCC::Driver *driver,
     uint64_t start = Cycles::rdtsc();
 
     uint32_t W_ID = clientIndex % (driver->getContext()->numWarehouse) + 1;
+
+    uint64_t prevIncoming = metrics->transport.receive.byteCount;
+    uint64_t prevOutcoming = metrics->transport.transmit.byteCount;
+
     while (true) {
         if (Cycles::rdtsc() - start > runCycles) {
             break;
@@ -525,6 +531,15 @@ tpcc_oneClient(double runSeconds, TPCC::Driver *driver,
         }
     }
 
+    uint64_t currentIncoming = metrics->transport.receive.byteCount;
+    uint64_t currentOutcoming = metrics->transport.transmit.byteCount;
+
+    RAMCLOUD_LOG(NOTICE, "%lf, %lf",
+                 static_cast<double > (currentIncoming -
+                                       prevIncoming) / 1024 / 102,
+                 static_cast<double >                        (
+                     currentOutcoming - prevOutcoming) / 1024 /
+                 102);
     double interval = Cycles::toSeconds(Cycles::rdtsc() - start);
     double tput = (double) total / interval;
     double avgLatency = totalLatency / (double) total;
@@ -914,8 +929,8 @@ try
     serverList.applyServerList(protoServerList);
 
 //    rocksteadyBasic();
-//    basic();
-    basic_tpcc();
+    basic();
+//    basic_tpcc();
 
     return 0;
 } catch (ClientException &e) {

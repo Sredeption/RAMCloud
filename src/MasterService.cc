@@ -110,6 +110,12 @@ MasterService::MasterService(Context* context, const ServerConfig* config)
     , migrationMonitor(this)
     , migrationSourceManager(this)
     , migrationTargetManager(context->migrationTargetManager)
+#ifdef MIGRATION_PROFILE
+    , lastReadUpdate()
+    , totalReadTime()
+    , totalRead()
+    , readLock("read lock")
+#endif
 {
     context->services[WireFormat::MASTER_SERVICE] = this;
 }
@@ -1788,6 +1794,9 @@ MasterService::read(const WireFormat::Read::Request* reqHdr,
         WireFormat::Read::Response* respHdr,
         Rpc* rpc)
 {
+#ifdef MIGRATION_PROFILE
+    uint64_t start = Cycles::rdtsc();
+#endif
     using RAMCloud::Perf::ReadRPC_MetricSet;
     ReadRPC_MetricSet::Interval _(&ReadRPC_MetricSet::readRpcTime);
 
@@ -1823,6 +1832,24 @@ MasterService::read(const WireFormat::Read::Request* reqHdr,
         return;
 
     respHdr->length = rpc->replyPayload->size() - initialLength;
+#ifdef MIGRATION_PROFILE
+    uint64_t current = Cycles::rdtsc();
+    uint64_t interval = Cycles::toMicroseconds(current - start);
+    {
+        SpinLock::Guard guard(readLock);
+        totalReadTime += interval;
+        totalRead += 1;
+        if (Cycles::toMicroseconds(current - lastReadUpdate) > 100000) {
+            lastReadUpdate = current;
+
+            if (totalRead == 0)totalRead = 1;
+            double readLatency = (double) totalReadTime / (double) totalRead;
+            RAMCLOUD_LOG(NOTICE, "read latency:%lf, tput:%lu", readLatency, totalRead);
+            totalReadTime = 0;
+            totalRead = 0;
+        }
+    }
+#endif
 }
 
 /**

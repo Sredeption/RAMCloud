@@ -481,6 +481,14 @@ class MasterService : public Service {
     MigrationSourceManager migrationSourceManager;
     MigrationTargetManager* migrationTargetManager;
 
+//#define MIGRATION_PROFILE
+#ifdef MIGRATION_PROFILE
+    uint64_t lastReadUpdate;
+    uint64_t totalReadTime;
+    uint64_t totalRead;
+    SpinLock readLock;
+#endif
+
 ///////////////////////////////////////////////////////////////////////////////
 /////Recovery related code. This should eventually move into its own file./////
 ///////////////////////////////////////////////////////////////////////////////

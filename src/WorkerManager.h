@@ -108,6 +108,15 @@ class WorkerManager : Dispatch::Poller {
     static void workerMain(Worker* worker);
     static Syscall *sys;
 
+#ifdef RPC_BREAKDOWN
+    uint64_t lastUpdate;
+    uint64_t dispatchTime;
+    uint64_t serviceTime;
+    uint64_t executionTime;
+    uint64_t replyTime;
+    uint64_t totalNumber;
+#endif
+
     friend class Worker;
     DISALLOW_COPY_AND_ASSIGN(WorkerManager);
 };

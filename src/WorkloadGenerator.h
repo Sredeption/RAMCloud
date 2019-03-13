@@ -27,7 +27,8 @@ class WorkloadGenerator {
         virtual void read(const char *key, uint64_t keyLen) = 0;
 
         virtual void
-        write(const char *key, uint64_t keyLen, char *value, uint32_t valueLen) = 0;
+        write(const char *key, uint64_t keyLen, char *value,
+              uint32_t valueLen) = 0;
 
         virtual void startMigration() = 0;
 
@@ -36,6 +37,7 @@ class WorkloadGenerator {
 
     struct TimeDist {
         uint64_t min;
+        uint64_t avg;
         uint64_t p50;
         uint64_t p90;
         uint64_t p99;
@@ -117,12 +119,21 @@ class WorkloadGenerator {
     {
         int count = static_cast<int>(times.size());
         std::sort(times.begin(), times.end());
+        dist->avg = 0;
         dist->min = 0;
         uint64_t last = 0;
-        if (count > 0){
-            dist->min = Cycles::toMicroseconds(times[0]);
-            last= times.back();
+        uint64_t sum = 0;
+
+        for (uint64_t time: times) {
+            sum += Cycles::toMicroseconds(time);
         }
+
+        if (count > 0) {
+            dist->avg = sum / count;
+            dist->min = Cycles::toMicroseconds(times[0]);
+            last = times.back();
+        }
+
 
         dist->bandwidth = times.size();
         int index = count / 2;
