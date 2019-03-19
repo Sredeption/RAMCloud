@@ -16,7 +16,7 @@ WorkloadGenerator::WorkloadGenerator(
     if (workloadName == "YCSB-A") {
         readPercent = 50;
     } else if (workloadName == "YCSB-B") {
-        readPercent = 95;
+        readPercent = 90;
     } else if (workloadName == "YCSB-C") {
         readPercent = 100;
     } else if (workloadName == "WRITE-ONLY") {
