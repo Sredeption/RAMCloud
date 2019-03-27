@@ -1148,9 +1148,9 @@ try
     ServerList serverList(&context);
     serverList.applyServerList(protoServerList);
 
-//    rocksteadyBasic();
-    ramcloudBasic();
 //    basic();
+    rocksteadyBasic();
+//    ramcloudBasic();
 //    basic_tpcc();
 
     return 0;

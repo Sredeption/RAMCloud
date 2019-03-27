@@ -518,6 +518,12 @@ class RocksteadyMigration {
 
     uint64_t sideLogCommitEndTS;
 
+#ifdef RPC_BREAKDOWN
+    uint64_t lastUpdate;
+    uint64_t totalNumber;
+    uint64_t priorityPullTime;
+#endif
+
     friend class RocksteadyMigrationManager;
     DISALLOW_COPY_AND_ASSIGN(RocksteadyMigration);
 };

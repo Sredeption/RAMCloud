@@ -140,7 +140,7 @@ void MigrationBackupManager::Replica::filter_scan()
 
 void MigrationBackupManager::Replica::filter_finish()
 {
-    RAMCLOUD_LOG(NOTICE,
+    RAMCLOUD_LOG(DEBUG,
                  "<%s,%lu> migration  segments took %lu us to construct.",
                  migration->sourceServerId.toString().c_str(),
                  metadata->segmentId,

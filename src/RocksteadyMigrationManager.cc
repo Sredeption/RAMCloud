@@ -223,6 +223,11 @@ RocksteadyMigration::RocksteadyMigration(Context* context,
     , migratedMegaBytes()
     , sideLogCommitStartTS()
     , sideLogCommitEndTS()
+ #ifdef RPC_BREAKDOWN
+    , lastUpdate()
+    , totalNumber(0)
+    , priorityPullTime(0)
+#endif
 {
     // Get a pointer to this master's tablet and object manager.
     tabletManager = &((context->getMasterService())->tabletManager);
@@ -508,12 +513,29 @@ RocksteadyMigration::pullAndReplay_priorityHashes()
     SpinLock::Guard lock(priorityLock);
 
     int workDone = 0;
+#ifdef RPC_BREAKDOWN
+    uint64_t current = Cycles::rdtsc();
+    if (Cycles::toMicroseconds(current - lastUpdate) > 100000) {
+        lastUpdate=current;
+        double averagePullTime =
+                    (double) Cycles::toMicroseconds(priorityPullTime) /
+                    (double) totalNumber;
+        RAMCLOUD_LOG(NOTICE, "pull:%.2lf", averagePullTime);
+        totalNumber = 0;
+        priorityPullTime=0;
+    }
+#endif
 
     // If a priority request is in progress, check if it has completed.
     if (priorityPullRpc) {
         if (priorityPullRpc->isReady()) {
             SegmentCertificate certificate;
             uint32_t numReturnedHashes = priorityPullRpc->wait(&certificate);
+
+#ifdef RPC_BREAKDOWN
+            priorityPullTime += priorityPullRpc->duration;
+            totalNumber++;
+#endif
 
             priorityHashesResponseBuffer->truncateFront(sizeof32(
                     WireFormat::RocksteadyMigrationPriorityHashes::Response));

@@ -932,6 +932,9 @@ RocksteadyMigrationPriorityHashesRpc::RocksteadyMigrationPriorityHashesRpc(
     : ServerIdRpcWrapper(context, sourceServerId,
             sizeof(WireFormat::RocksteadyMigrationPriorityHashes::Response),
             response)
+#ifdef RPC_BREAKDOWN
+            , startTime(), duration()
+#endif
 {
     WireFormat::RocksteadyMigrationPriorityHashes::Request* reqHdr(
             allocHeader<WireFormat::RocksteadyMigrationPriorityHashes>(
@@ -942,6 +945,9 @@ RocksteadyMigrationPriorityHashesRpc::RocksteadyMigrationPriorityHashesRpc(
     reqHdr->tombstoneSafeVersion = tombstoneSafeVersion;
     reqHdr->numRequestedHashes = numRequestedHashes;
     request.append(requestedPriorityHashes, 0, requestedPriorityHashes->size());
+#ifdef RPC_BREAKDOWN
+    startTime = Cycles::rdtsc();
+#endif
     send();
 }
 
@@ -954,6 +960,9 @@ RocksteadyMigrationPriorityHashesRpc::wait(SegmentCertificate* certificate)
     if (certificate != NULL) {
         *certificate = respHdr->certificate;
     }
+#ifdef RPC_BREAKDOWN
+    duration = Cycles::rdtsc() - startTime;
+#endif
     return respHdr->numReturnedLogEntries;
 }
 

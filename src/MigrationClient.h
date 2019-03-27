@@ -78,6 +78,7 @@ class MigrationReadTask {
 
     State state;
     Buffer sourceBuffer, targetBuffer;
+    uint64_t finishTime;
 
     uint64_t version;
     bool objectExists;
@@ -93,7 +94,7 @@ class MigrationReadTask {
         : ramcloud(ramcloud), tableId(tableId), key(key), keyLength(keyLength),
           value(value), rejectRules(rejectRules), readRpc(), sourceReadRpc(),
           targetReadRpc(), state(INIT), sourceBuffer(), targetBuffer(),
-          version(), objectExists(false)
+          finishTime(), version(), objectExists(false)
     {
     }
 
@@ -179,10 +180,16 @@ class MigrationReadTask {
                 }
                 version = versionConclusion;
                 objectExists = existsConclusion;
-                state = DONE;
+                state = MIGRATING_WAIT;
+                finishTime = Cycles::rdtsc();
             } else {
                 ramcloud->clientContext->dispatch->poll();
             }
+        }
+
+        if (state == MIGRATING_WAIT &&
+            Cycles::toMicroseconds(Cycles::rdtsc() - finishTime) > 5) {
+            state = DONE;
         }
 
     }

@@ -375,7 +375,7 @@ int MigrationTargetManager::Migration::pullAndReplay_reapReplayRpcs()
                     numCompletedReplicas % 10 == 0) {
                     double time = Cycles::toSeconds(
                         Cycles::rdtsc() - migrationStartTS);
-                    RAMCLOUD_LOG(NOTICE, "replay progress: %u/%u, time: %.3lf",
+                    RAMCLOUD_LOG(DEBUG, "replay progress: %u/%u, time: %.3lf",
                                  numCompletedReplicas, numReplicas, time);
                 }
             } else {

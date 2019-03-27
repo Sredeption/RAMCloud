@@ -361,7 +361,8 @@ WorkerManager::poll()
 #ifdef RPC_BREAKDOWN
             auto header = rpc->requestPayload.getStart<WireFormat::RequestCommon>();
 
-            if (header->opcode == WireFormat::Read::opcode) {
+            if (header->opcode == WireFormat::Read::opcode ||
+                header->opcode == WireFormat::Write::opcode) {
                 dispatchTime += rpc->handleoffTimestamp - rpc->startTimestamp;
                 serviceTime += rpc->serviceTimestamp - rpc->handleoffTimestamp;
                 executionTime += rpc->finishTimestamp - rpc->serviceTimestamp;
