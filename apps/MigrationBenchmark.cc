@@ -1083,8 +1083,6 @@ int
 main(int argc, char *argv[])
 try
 {
-    Context context(true);
-
 
     OptionsDescription migrateOptions("Migrate");
     migrateOptions.add_options()
@@ -1114,11 +1112,11 @@ try
          "ServerId of the master to migrate to")
         ("objectCount",
          ProgramOptions::value<uint32_t>(&objectCount)->
-             default_value(3000000),
+             default_value(30000000),
          "Number of objects to pre-populate in the table to be migrated")
         ("objectSize",
          ProgramOptions::value<uint32_t>(&objectSize)->
-             default_value(1000),
+             default_value(100),
          "Size of objects to pre-populate in tables")
         ("otherObjectCount",
          ProgramOptions::value<uint32_t>(&otherObjectCount)->
@@ -1140,12 +1138,13 @@ try
     string coordinatorLocator = optionParser.options.getCoordinatorLocator();
     RAMCLOUD_LOG(NOTICE, "client: Connecting to coordinator %s",
                  coordinatorLocator.c_str());
-    client.construct(&context, coordinatorLocator.c_str());
+    client.construct(&optionParser.options);
 
+    Context *context = client->clientContext;
     ProtoBuf::ServerList protoServerList;
-    CoordinatorClient::getServerList(&context, &protoServerList);
+    CoordinatorClient::getServerList(context, &protoServerList);
 
-    ServerList serverList(&context);
+    ServerList serverList(context);
     serverList.applyServerList(protoServerList);
 
 //    basic();

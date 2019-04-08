@@ -78,9 +78,10 @@ coord_locator_templates = {
     # or dpdk.
     'basic+infud': 'basic+udp:host=%(host)s,port=%(port)d',
     'homa+infud': 'homa+udp:host=%(host)s,port=%(port)d',
-    'basic+dpdk': 'basic+udp:host=%(host)s,port=%(port)d',
-    'homa+dpdk': 'homa+udp:host=%(host)s,port=%(port)d',
+    'basic+dpdk': 'basic+udp:host=%(host1g)s,port=%(port)d',
+    'homa+dpdk': 'homa+udp:host=%(host1g)s,port=%(port)d',
 }
+
 
 def server_locator(transport, host, port=server_port):
     """Generate a service locator for a master/backup process.
@@ -105,6 +106,7 @@ def server_locator(transport, host, port=server_port):
                 'id': host[2]})
     return locator
 
+
 def coord_locator(transport, host):
     """Generate a service locator for a coordinator process.
 
@@ -123,6 +125,7 @@ def coord_locator(transport, host):
                 'port': coordinator_port,
                 'id': host[2]})
     return locator
+
 
 class Cluster(object):
     """Helper context manager for scripting and coordinating RAMCloud on a
@@ -195,16 +198,16 @@ class Cluster(object):
         self.disk = default_disks
         self.disjunct = False
 
-        if cluster_name_exists: # do nothing if it exists
+        if cluster_name_exists:  # do nothing if it exists
             self.cluster_name = None
             if self.verbose:
-                print ('Cluster name exists')
+                print('Cluster name exists')
         else:
-            self.cluster_name = 'cluster_' +  ''.join([chr(random.choice(
-                                 range(ord('a'), ord('z'))))
-                                    for c in range(20)])
+            self.cluster_name = 'cluster_' + ''.join([chr(random.choice(
+                range(ord('a'), ord('z'))))
+                for c in range(20)])
         if self.verbose:
-            print ('Cluster name is %s' % (self.cluster_name))
+            print('Cluster name is %s' % (self.cluster_name))
 
         self.coordinator = None
         self.next_server_id = 1
@@ -212,7 +215,7 @@ class Cluster(object):
         self.masters_started = 0
         self.backups_started = 0
 
-        self.coordinator_host= getHosts()[0]
+        self.coordinator_host = getHosts()[0]
         self.coordinator_locator = coord_locator(self.transport,
                                                  self.coordinator_host)
         self.log_subdir = log.createDir(log_dir, log_exists)
@@ -261,45 +264,48 @@ class Cluster(object):
                                                  self.coordinator_host)
         if not self.enable_logcabin:
             command = (
-                '%s %s -C %s -l %s --logFile %s/coordinator.%s.log %s' %
-                (prefix_command,
-                 coordinator_binary, self.coordinator_locator,
-                 self.log_level, self.log_subdir,
-                 self.coordinator_host[0], args))
+                    '%s %s -C %s -l %s --logFile %s/coordinator.%s.log %s' %
+                    (prefix_command,
+                     coordinator_binary, self.coordinator_locator,
+                     self.log_level, self.log_subdir,
+                     self.coordinator_host[0], args))
 
             self.coordinator = self.sandbox.rsh(self.coordinator_host[0],
-                        command, bg=True, stderr=subprocess.STDOUT)
+                                                command, bg=True,
+                                                stderr=subprocess.STDOUT)
         else:
             # currently hardcoding logcabin server because ankita's logcabin
             # scripts are not on git.
             command = (
-                '%s %s -C %s -z logcabin21:61023 -l %s '
-                '--logFile %s/coordinator.%s.log %s' %
-                (prefix_command,
-                 coordinator_binary, self.coordinator_locator,
-                 self.log_level, self.log_subdir,
-                 self.coordinator_host[0], args))
+                    '%s %s -C %s -z logcabin21:61023 -l %s '
+                    '--logFile %s/coordinator.%s.log %s' %
+                    (prefix_command,
+                     coordinator_binary, self.coordinator_locator,
+                     self.log_level, self.log_subdir,
+                     self.coordinator_host[0], args))
 
             self.coordinator = self.sandbox.rsh(self.coordinator_host[0],
-                        command, bg=True, stderr=subprocess.STDOUT)
+                                                command, bg=True,
+                                                stderr=subprocess.STDOUT)
 
             # just wait for coordinator to start
             time.sleep(1)
             # invoke the script that restarts the coordinator if it dies
             restart_command = ('%s/restart_coordinator %s/coordinator.%s.log'
                                ' %s %s logcabin21:61023' %
-                                (local_scripts_path, self.log_subdir,
-                                 self.coordinator_host[0],
-                                 obj_path, self.coordinator_locator))
+                               (local_scripts_path, self.log_subdir,
+                                self.coordinator_host[0],
+                                obj_path, self.coordinator_locator))
 
             restarted_coord = self.sandbox.rsh(self.coordinator_host[0],
-                        restart_command, kill_on_exit=True, bg=True,
-                        stderr=subprocess.STDOUT)
+                                               restart_command,
+                                               kill_on_exit=True, bg=True,
+                                               stderr=subprocess.STDOUT)
 
         self.ensure_servers(0, 0)
         if self.verbose:
             print('Coordinator started on %s at %s' %
-                   (self.coordinator_host[0], self.coordinator_locator))
+                  (self.coordinator_host[0], self.coordinator_locator))
             print('Coordinator command line arguments %s' % command)
         return self.coordinator
 
@@ -332,19 +338,20 @@ class Cluster(object):
                      (default: True)
         @return: Sandbox.Process representing the server process.
         """
-        log_prefix = '%s/server%d.%s' % (
-                      self.log_subdir, self.next_server_id, host[0])
+        log_prefix = '%s/server%d.%s:%d' % (
+            self.log_subdir, self.next_server_id, host[0], host[3])
 
-        command = ('%s %s -C %s -L %s -r %d -l %s --clusterName __unnamed__ '
-                   '--logFile %s.log --preferredIndex %d %s' %
-                   (prefix_command,
-                    server_binary, self.coordinator_locator,
-                    server_locator(self.transport, host, port),
-                    self.replicas,
-                    self.log_level,
-                    log_prefix,
-                    self.next_server_id,
-                    args))
+        command = (
+                    'taskset -c %s %s %s -C %s -L %s -r %d -l %s --clusterName __unnamed__ '
+                    '--logFile %s.log --preferredIndex %d %s' %
+                    (host[4], prefix_command,
+                     server_binary, self.coordinator_locator,
+                     server_locator(self.transport, host, port),
+                     self.replicas,
+                     self.log_level,
+                     log_prefix,
+                     self.next_server_id,
+                     args))
 
         self.next_server_id += 1
         if master and backup:
@@ -369,10 +376,13 @@ class Cluster(object):
         # Adding redirection for stdout and stderr.
         stdout = open(log_prefix + '.out', 'w')
         stderr = open(log_prefix + '.err', 'w')
+        print(command)
         server = self.sandbox.rsh(host[0], command, is_server=True,
-                locator=server_locator(self.transport, host, port),
-                kill_on_exit=kill_on_exit, bg=True, stdout=stdout,
-                stderr=stderr)
+                                  locator=server_locator(self.transport, host,
+                                                         port),
+                                  kill_on_exit=kill_on_exit, bg=True,
+                                  stdout=stdout,
+                                  stderr=stderr)
 
         if self.verbose:
             print('Server started on %s at %s: %s' %
@@ -388,10 +398,10 @@ class Cluster(object):
 
         path = '%s/logs/shm' % os.getcwd()
         files = sorted([f for f in os.listdir(path)
-           if os.path.isfile( os.path.join(path, f) )])
+                        if os.path.isfile(os.path.join(path, f))])
 
         for file in files:
-            f = open('%s/logs/shm/%s' % (os.getcwd(), file),'r')
+            f = open('%s/logs/shm/%s' % (os.getcwd(), file), 'r')
             service_locator = f.read()
 
             if (locator in service_locator):
@@ -407,7 +417,6 @@ class Cluster(object):
                     pass
             else:
                 f.close()
-
 
     def ensure_servers(self, numMasters=None, numBackups=None, timeout=30):
         """Poll the coordinator and block until the specified number of
@@ -434,8 +443,8 @@ class Cluster(object):
             ensureCommand = ('%s %s -C %s -m %d -b %d -l 1 --wait %d '
                              '--logFile %s/ensureServers.log' %
                              (prefix_command, ensure_servers_bin,
-                             self.coordinator_locator, numMasters, numBackups,
-                             timeout, self.log_subdir))
+                              self.coordinator_locator, numMasters, numBackups,
+                              timeout, self.log_subdir))
             if self.verbose:
                 print("ensureServers command: %s" % ensureCommand)
             self.sandbox.rsh(self.coordinator_host[0], ensureCommand)
@@ -467,10 +476,11 @@ class Cluster(object):
                         i, self.log_subdir, self.next_client_id,
                         client_host[0], client_args))
             self.next_client_id += 1
+            print(command);
             clients.append(self.sandbox.rsh(client_host[0], command, bg=True))
             if self.verbose:
                 print('Client %d started on %s: %s' % (i, client_host[0],
-                        command))
+                                                       command))
         return clients
 
     def wait(self, processes, timeout=30):
@@ -498,15 +508,15 @@ class Cluster(object):
         """
         root = self.log_subdir
         for item in os.listdir(root):
-           path = os.path.join(root, item)
-           if os.path.isfile(path):
-             if os.path.getsize(path) == 0:
-                os.remove(path)
-           elif os.path.isdir(path):
-             try:
-                os.rmdir(path)
-             except:
-                None
+            path = os.path.join(root, item)
+            if os.path.isfile(path):
+                if os.path.getsize(path) == 0:
+                    os.remove(path)
+            elif os.path.isdir(path):
+                try:
+                    os.rmdir(path)
+                except:
+                    None
 
     def shutdown():
         """Kill all remaining processes started as part of this cluster and
@@ -523,76 +533,77 @@ class Cluster(object):
         config.hooks.cluster_exit()
         self.sandbox.__exit__(exc_type, exc_value, exc_tb)
         self.remove_empty_files()
-        return False # rethrow exception, if any
+        return False  # rethrow exception, if any
+
 
 def run(
-        num_servers=4,             # Number of hosts on which to start
-                                   # servers (not including coordinator).
-        replicas=3,                # Replication factor to use for each
-                                   # log segment.
-        disk=default_disks,        # Server arguments specifying the
-                                   # backing devices as a comma-separated list
-                                   # prefixed by `-f`.
-        timeout=20,                # How many seconds to wait for the
-                                   # clients to complete.
-        coordinator_args='',       # Additional arguments for the
-                                   # coordinator.
-        master_args='',            # Additional arguments for each server
-                                   # that runs a master
-        backup_args='',            # Additional arguments for each server
-                                   # that runs a backup.
-        log_level='NOTICE',        # Log level to use for all servers.
-        log_dir='logs',            # Top-level directory in which to write
-                                   # log files.  A separate subdirectory
-                                   # will be created in this directory
-                                   # for the log files from this run.
-        config_dir='config',       # Directory containing RAMCloud
-                                   # configuration files.
-        client=None,               # Command-line to invoke for each client
-                                   # additional arguments will be prepended
-                                   # with configuration information such as
-                                   # -C.
-        num_clients=0,             # Number of client processes to run.
-                                   # They will all run on separate
-                                   # machines, if possible, but if there
-                                   # aren't enough available machines then
-                                   # multiple clients will run on some
-                                   # machines.
-        client_hosts=None,         # An explicit list of hosts (in
-                                   # host, ip, id triples) on which clients
-                                   # should be run. If this is set and
-                                   # share_hosts is set then share_hosts is
-                                   # ignored.
-        share_hosts=False,         # True means clients can be run on
-                                   # machines running servers, if needed.
-        transport='basic+infud',   # Name of transport to use for servers.
-        verbose=False,             # Print information about progress in
-                                   # starting clients and servers
-        debug=False,               # If True, pause after starting all
-                                   # to allow for debugging setup such as
-                                   # attaching gdb.
-        old_master_host=None,      # Pass a (hostname, ip, id) tuple to
-                                   # construct a large master on that host
-                                   # before the others are started.  Useful
-                                   # for creating the old master for
-                                   # recoveries.
-        old_master_args='',        # Additional arguments to run on the
-                                   # old master (e.g. total RAM).
-        enable_logcabin=False,     # Do not enable logcabin.
-        dpdk_port=None,            # Do not enable DpdkDriver.
-        superuser=False,           # Do not start cluster as superuser by default.
-        valgrind=False,            # Do not run under valgrind
-        valgrind_args='',          # Additional arguments for valgrind
-        disjunct=False,            # Disjunct entities on a server
+        num_servers=4,  # Number of hosts on which to start
+        # servers (not including coordinator).
+        replicas=3,  # Replication factor to use for each
+        # log segment.
+        disk=default_disks,  # Server arguments specifying the
+        # backing devices as a comma-separated list
+        # prefixed by `-f`.
+        timeout=20,  # How many seconds to wait for the
+        # clients to complete.
+        coordinator_args='',  # Additional arguments for the
+        # coordinator.
+        master_args='',  # Additional arguments for each server
+        # that runs a master
+        backup_args='',  # Additional arguments for each server
+        # that runs a backup.
+        log_level='NOTICE',  # Log level to use for all servers.
+        log_dir='logs',  # Top-level directory in which to write
+        # log files.  A separate subdirectory
+        # will be created in this directory
+        # for the log files from this run.
+        config_dir='config',  # Directory containing RAMCloud
+        # configuration files.
+        client=None,  # Command-line to invoke for each client
+        # additional arguments will be prepended
+        # with configuration information such as
+        # -C.
+        num_clients=0,  # Number of client processes to run.
+        # They will all run on separate
+        # machines, if possible, but if there
+        # aren't enough available machines then
+        # multiple clients will run on some
+        # machines.
+        client_hosts=None,  # An explicit list of hosts (in
+        # host, ip, id triples) on which clients
+        # should be run. If this is set and
+        # share_hosts is set then share_hosts is
+        # ignored.
+        share_hosts=False,  # True means clients can be run on
+        # machines running servers, if needed.
+        transport='basic+infud',  # Name of transport to use for servers.
+        verbose=False,  # Print information about progress in
+        # starting clients and servers
+        debug=False,  # If True, pause after starting all
+        # to allow for debugging setup such as
+        # attaching gdb.
+        old_master_host=None,  # Pass a (hostname, ip, id) tuple to
+        # construct a large master on that host
+        # before the others are started.  Useful
+        # for creating the old master for
+        # recoveries.
+        old_master_args='',  # Additional arguments to run on the
+        # old master (e.g. total RAM).
+        enable_logcabin=False,  # Do not enable logcabin.
+        dpdk_port=None,  # Do not enable DpdkDriver.
+        superuser=False,  # Do not start cluster as superuser by default.
+        valgrind=False,  # Do not run under valgrind
+        valgrind_args='',  # Additional arguments for valgrind
+        disjunct=False,  # Disjunct entities on a server
         coordinator_host=None
-        ):
+):
     """
     Start a coordinator and servers, as indicated by the arguments.  If a
     client is specified, then start one or more client processes and wait for
     them to complete. Otherwise leave the cluster running.
     @return: string indicating the path to the log files for this run.
     """
-#    client_hosts = [('rc52', '192.168.1.152', 52)]
+    #    client_hosts = [('rc52', '192.168.1.152', 52)]
 
     if client:
         if num_clients == 0:
@@ -601,13 +612,14 @@ def run(
     if verbose:
         print('num_servers=(%d), available hosts=(%d) defined in config.py'
               % (num_servers, len(getHosts())))
-        print ('disjunct=', disjunct)
+        print('disjunct=', disjunct)
 
-# When disjunct=True, disjuncts Coordinator and Clients on Server nodes.
+    # When disjunct=True, disjuncts Coordinator and Clients on Server nodes.
     if disjunct:
         if num_servers + num_clients + 1 > len(getHosts()):
-            raise Exception('num_servers (%d)+num_clients (%d)+1(coord) exceeds the available hosts (%d)'
-                            % (num_servers, num_clients, len(getHosts())))
+            raise Exception(
+                'num_servers (%d)+num_clients (%d)+1(coord) exceeds the available hosts (%d)'
+                % (num_servers, num_clients, len(getHosts())))
     else:
         if num_servers > len(getHosts()):
             raise Exception('num_servers (%d) exceeds the available hosts (%d)'
@@ -615,9 +627,10 @@ def run(
 
     if not share_hosts and not client_hosts:
         if (len(getHosts()) - num_servers) < 1:
-            raise Exception('Asked for %d servers without sharing hosts with %d '
-                            'clients, but only %d hosts were available'
-                            % (num_servers, num_clients, len(getHosts())))
+            raise Exception(
+                'Asked for %d servers without sharing hosts with %d '
+                'clients, but only %d hosts were available'
+                % (num_servers, num_clients, len(getHosts())))
 
     masters_started = 0
     backups_started = 0
@@ -670,7 +683,8 @@ def run(
                 args += ' %s' % backup_args
                 backups_started += 1
                 disk_args = disk
-            cluster.start_server(host, args, backup=backup, disk=disk_args)
+            cluster.start_server(host, args, backup=backup, disk=disk_args,
+                                 port=host[3])
             masters_started += 1
 
         if disjunct:
@@ -701,87 +715,88 @@ def run(
 
                 client_hosts = [host_list[i % len(host_list)]
                                 for i in range(num_clients)]
-            assert(len(client_hosts) == num_clients)
+            assert (len(client_hosts) == num_clients)
 
             clients = cluster.start_clients(client_hosts, client)
             cluster.wait(clients, timeout)
 
         return cluster.log_subdir
 
+
 if __name__ == '__main__':
     parser = OptionParser(description=
-            'Start RAMCloud servers and run a client application.',
-            conflict_handler='resolve')
+                          'Start RAMCloud servers and run a client application.',
+                          conflict_handler='resolve')
     parser.add_option('--backupArgs', metavar='ARGS', default='',
-            dest='backup_args',
-            help='Additional command-line arguments to pass to '
-                 'each backup')
+                      dest='backup_args',
+                      help='Additional command-line arguments to pass to '
+                           'each backup')
     parser.add_option('--client', metavar='ARGS',
-            help='Command line to invoke the client application '
-                 '(additional arguments will be inserted at the beginning '
-                 'of the argument list)')
+                      help='Command line to invoke the client application '
+                           '(additional arguments will be inserted at the beginning '
+                           'of the argument list)')
     parser.add_option('-n', '--clients', type=int, default=1,
-            metavar='N', dest='num_clients',
-            help='Number of instances of the client application '
-                 'to run')
+                      metavar='N', dest='num_clients',
+                      help='Number of instances of the client application '
+                           'to run')
     parser.add_option('--coordinatorArgs', metavar='ARGS', default='',
-            dest='coordinator_args',
-            help='Additional command-line arguments to pass to the '
-                 'cluster coordinator')
+                      dest='coordinator_args',
+                      help='Additional command-line arguments to pass to the '
+                           'cluster coordinator')
     parser.add_option('--debug', action='store_true', default=False,
-            help='Pause after starting servers but before running '
-                 'clients to enable debugging setup')
+                      help='Pause after starting servers but before running '
+                           'clients to enable debugging setup')
     parser.add_option('--disks', default=default_disks, dest="disk",
-            help='Server arguments to specify disks used for backup; '
-                  'format is -f followed by a comma separated list.')
+                      help='Server arguments to specify disks used for backup; '
+                           'format is -f followed by a comma separated list.')
     parser.add_option('-l', '--logLevel', default='NOTICE',
-            choices=['DEBUG', 'NOTICE', 'WARNING', 'ERROR', 'SILENT'],
-            metavar='L', dest='log_level',
-            help='Controls degree of logging in servers')
+                      choices=['DEBUG', 'NOTICE', 'WARNING', 'ERROR', 'SILENT'],
+                      metavar='L', dest='log_level',
+                      help='Controls degree of logging in servers')
     parser.add_option('-d', '--logDir', default='logs',
-            metavar='DIR',
-            dest='log_dir',
-            help='Top level directory for log files; the files for '
-                 'each invocation will go in a subdirectory.')
+                      metavar='DIR',
+                      dest='log_dir',
+                      help='Top level directory for log files; the files for '
+                           'each invocation will go in a subdirectory.')
     parser.add_option('--configDir', default='config',
-            metavar='DIR',
-            dest='config_dir',
-            help='Directory containing RAMCloud configuration files.')
+                      metavar='DIR',
+                      dest='config_dir',
+                      help='Directory containing RAMCloud configuration files.')
     parser.add_option('--masterArgs', metavar='ARGS', default='',
-            dest='master_args',
-            help='Additional command-line arguments to pass to '
-                 'each master')
+                      dest='master_args',
+                      help='Additional command-line arguments to pass to '
+                           'each master')
     parser.add_option('-r', '--replicas', type=int, default=3,
-            metavar='N',
-            help='Number of disk backup copies for each segment')
+                      metavar='N',
+                      help='Number of disk backup copies for each segment')
     parser.add_option('-s', '--servers', type=int, default=4,
-            metavar='N', dest='num_servers',
-            help='Number of hosts on which to run servers')
+                      metavar='N', dest='num_servers',
+                      help='Number of hosts on which to run servers')
     parser.add_option('--shareHosts', action='store_true', default=False,
-            dest='share_hosts',
-            help='Allow clients to run on machines running servers '
-                 '(by default clients run on different machines than '
-                 'the servers, though multiple clients may run on a '
-                 'single machine)')
+                      dest='share_hosts',
+                      help='Allow clients to run on machines running servers '
+                           '(by default clients run on different machines than '
+                           'the servers, though multiple clients may run on a '
+                           'single machine)')
     parser.add_option('-t', '--timeout', type=int, default=20,
-            metavar='SECS',
-            help="Abort if the client application doesn't finish within "
-            'SECS seconds')
+                      metavar='SECS',
+                      help="Abort if the client application doesn't finish within "
+                           'SECS seconds')
     parser.add_option('--dpdkPort', type=int, dest='dpdk_port',
-            help='Ethernet port that the DPDK driver should use')
+                      help='Ethernet port that the DPDK driver should use')
     parser.add_option('-T', '--transport', default='basic+infud',
-            help='Transport to use for communication with servers')
+                      help='Transport to use for communication with servers')
     parser.add_option('-v', '--verbose', action='store_true', default=False,
-            help='Print progress messages')
+                      help='Print progress messages')
     parser.add_option('--valgrind', action='store_true', default=False,
-            help='Run all the processes under valgrind')
+                      help='Run all the processes under valgrind')
     parser.add_option('--valgrindArgs', metavar='ARGS', default='',
-            dest='valgrind_args',
-            help='Arguments to pass to valgrind')
+                      dest='valgrind_args',
+                      help='Arguments to pass to valgrind')
     parser.add_option('--disjunct', action='store_true', default=False,
-            help='Disjunct entities (disable collocation) on each server')
+                      help='Disjunct entities (disable collocation) on each server')
     parser.add_option('--superuser', action='store_true', default=False,
-            help='Start the cluster and clients as superuser')
+                      help='Start the cluster and clients as superuser')
 
     (options, args) = parser.parse_args()
 

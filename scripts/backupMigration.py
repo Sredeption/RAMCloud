@@ -33,7 +33,7 @@ def backup_migrate(num_servers,
                    coordinator_args='',
                    master_args='',
                    backup_args='',
-                   dpdk_port=None,
+                   dpdk_port=-1,
                    master_ram=None,
                    old_master_ram=None,
                    num_removals=0,
@@ -42,7 +42,8 @@ def backup_migrate(num_servers,
                    log_dir='logs',
                    transport='basic+infud',
                    verbose=False,
-                   debug=False):
+                   debug=False,
+                   superuser=False):
     server_binary = '%s/server' % obj_path
     client_binary = '%s/apps/migrationBenchmark' % obj_path
     ensure_servers_bin = '%s/ensureServers' % obj_path
@@ -62,10 +63,13 @@ def backup_migrate(num_servers,
     args['share_hosts'] = True
     args['dpdk_port'] = dpdk_port
     args['client_hosts'] = []
+    args['superuser'] = superuser
 
     num_hosts = len(hosts) - 2
+
+
     for i in range(num_clients):
-        args['client_hosts'].append(hosts[2 + i % num_hosts])
+        args['client_hosts'].append(hosts[-1 - (i % num_hosts)])
 
     if backup_args:
         args['backup_args'] += backup_args
@@ -77,7 +81,7 @@ def backup_migrate(num_servers,
     # partition per master, which is about 500 MB).
     args['master_args'] = '-t 18000 --segmentFrames 8192'
     if master_args:
-        args['master_args'] += ' ' + master_args;
+        args['master_args'] += ' ' + master_args
     args['client'] = ('%s -l %s' %
                       (client_binary, log_level))
 
@@ -167,8 +171,11 @@ if __name__ == '__main__':
     parser.add_option('--trend',
                       dest='trends', action='append',
                       help='Add to dumpstr trend line (may be repeated)')
-    parser.add_option('--dpdkPort', type=int, dest='dpdk_port',
+    parser.add_option('--dpdkPort', type=int, dest='dpdk_port', default=0,
                       help='Ethernet port that the DPDK driver should use')
+    parser.add_option('--superuser', action='store_true', default=False,
+                      help='Start the cluster and clients as superuser')
+
     (options, args) = parser.parse_args()
     args = {}
     args['num_servers'] = options.num_servers
@@ -194,10 +201,10 @@ if __name__ == '__main__':
     args['master_args'] = options.master_args
     args['backup_args'] = options.backup_args
     args['dpdk_port'] = options.dpdk_port
+    args['superuser'] = options.superuser
 
     try:
         backup_migrate(**args)
-
 
     finally:
         log_info = log.scan("%s/latest" % (options.log_dir),

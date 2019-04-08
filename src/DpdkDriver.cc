@@ -177,8 +177,8 @@ DpdkDriver::DpdkDriver(Context* context, int port)
     }
 
     // ensure that DPDK was able to detect a compatible and available NIC
-    numPorts = rte_eth_dev_count_avail();
-//    numPorts = rte_eth_dev_count();
+//    numPorts = rte_eth_dev_count_avail();
+    numPorts = rte_eth_dev_count();
 
     if (numPorts <= portId) {
         throw DriverException(HERE, format(

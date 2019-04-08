@@ -26,7 +26,7 @@ import re
 import subprocess
 
 __all__ = ['coordinator_port', 'default_disks', 'git_branch',
-           'git_ref', 'git_diff', 'hosts','obj_dir', 'obj_path',
+           'git_ref', 'git_diff', 'hosts', 'obj_dir', 'obj_path',
            'local_scripts_path', 'second_backup_port', 'server_port',
            'top_path']
 
@@ -83,7 +83,7 @@ os.environ['LD_LIBRARY_PATH'] = ':'.join(ld_library_path)
 
 # Host on which old master is run for running recoveries.
 # Need not be a member of hosts
-#old_master_host = ('rcmaster', '192.168.1.1', 81)
+# old_master_host = ('rcmaster', '192.168.1.1', 81)
 old_master_host = None
 
 # Full path to the directory containing RAMCloud executables.
@@ -97,19 +97,36 @@ second_backup_port = 12248
 # Command-line argument specifying where the server should store the segment
 # replicas by default.
 # default_disks = '-f /dev/sda2,/dev/sdb2'
-default_disks = '-f /tmp/rc-backup'
+default_disks = '-f /tmp/rc-backup-user'
 
 # List of machines available to use as servers or clients; see
 # common.getHosts() for more information on how to set this variable.
 hosts = []
 # ids = [1, 2, 3, 4, 12, 14, 15, 16, 18, 19, 20, 21]
-ids = [2, 3, 12, 14, 15, 18, 19, 20, 21]
+# ids = [(4, server_port), (5, server_port), (6, server_port),
+cpu_range = '0-23'
+cpu_range_serve = '0-11'
+cpu_range_migrate = '12-23'
+
+# ids = [(4, server_port, cpu_range), (5, server_port, cpu_range),
+#        (14, server_port, cpu_range),
+#        (15, server_port, cpu_range), (18, server_port, cpu_range),
+#        (19, server_port, cpu_range),
+#        (20, server_port, cpu_range), (21, server_port, cpu_range)]
+
+ids = [(4, server_port, cpu_range), (5, server_port, cpu_range),
+       (6, server_port, cpu_range), (7, server_port, cpu_range),
+       (14, server_port, cpu_range), (15, server_port, cpu_range)]
+
 for i in ids:
     hosts.append((
-        '10.22.1.%d' % i,
-        '10.22.1.%d' % i,
-        i
+        '202.45.128.%d' % (159 + i[0]),
+        '10.22.1.%d' % i[0],
+        i[0],
+        i[1],
+        i[2]
     ))
+
 
 class NoOpClusterHooks:
     def __init__(self):
@@ -130,6 +147,7 @@ class NoOpClusterHooks:
     def get_remote_obj_path(self):
         return os.path.join(self.get_remote_wd(), obj_dir)
 
+
 hooks = NoOpClusterHooks()
 
 # Try to include local overrides.
@@ -140,4 +158,5 @@ except ImportError:
 
 if __name__ == '__main__':
     import common
+
     print('\n'.join([s[0] for s in common.getHosts()]))
