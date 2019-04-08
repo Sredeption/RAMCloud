@@ -69,7 +69,7 @@ def backup_migrate(num_servers,
 
 
     for i in range(num_clients):
-        args['client_hosts'].append(hosts[-1 - (i % num_hosts)])
+        args['client_hosts'].append(hosts[-2 - (i % num_hosts)])
 
     if backup_args:
         args['backup_args'] += backup_args

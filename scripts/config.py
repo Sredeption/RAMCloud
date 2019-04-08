@@ -116,7 +116,7 @@ cpu_range_migrate = '12-23'
 
 ids = [(4, server_port, cpu_range), (5, server_port, cpu_range),
        (6, server_port, cpu_range), (7, server_port, cpu_range),
-       (14, server_port, cpu_range), (15, server_port, cpu_range)]
+       (19, server_port, cpu_range), (14, server_port, cpu_range)]
 
 for i in ids:
     hosts.append((

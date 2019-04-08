@@ -177,7 +177,6 @@ DpdkDriver::DpdkDriver(Context* context, int port)
     }
 
     // ensure that DPDK was able to detect a compatible and available NIC
-//    numPorts = rte_eth_dev_count_avail();
     numPorts = rte_eth_dev_count();
 
     if (numPorts <= portId) {
@@ -185,7 +184,21 @@ DpdkDriver::DpdkDriver(Context* context, int port)
                 "Ethernet port %u doesn't exist (%u ports available)",
                 portId, numPorts));
     }
-
+    {
+        struct rte_eth_link link;
+        memset(&link, 0, sizeof(link));
+        rte_eth_link_get(portId, &link);
+        if (link.link_status == ETH_LINK_DOWN) {
+            for (int i = 0; i < 3; i++) {
+                memset(&link, 0, sizeof(link));
+                portId = static_cast<uint8_t>(i);
+                rte_eth_link_get(portId, &link);
+                if (link.link_status)
+                    break;
+            }
+        }
+        RAMCLOUD_LOG(NOTICE, "use dpdk port:%d", portId);
+    }
     // Read the MAC address from the NIC via DPDK.
     rte_eth_macaddr_get(portId, &mac);
     localMac.construct(mac.addr_bytes);

@@ -476,7 +476,6 @@ class Cluster(object):
                         i, self.log_subdir, self.next_client_id,
                         client_host[0], client_args))
             self.next_client_id += 1
-            print(command);
             clients.append(self.sandbox.rsh(client_host[0], command, bg=True))
             if self.verbose:
                 print('Client %d started on %s: %s' % (i, client_host[0],
