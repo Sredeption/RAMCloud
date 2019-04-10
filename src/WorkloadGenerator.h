@@ -9,6 +9,7 @@
 #include <algorithm>
 
 #include "Cycles.h"
+#include "RamCloud.h"
 
 namespace RAMCloud {
 
@@ -33,6 +34,10 @@ class WorkloadGenerator {
         virtual void startMigration() = 0;
 
         virtual bool isFinished() = 0;
+
+        virtual RamCloud *getRamCloud() = 0;
+
+        virtual uint64_t getTableId() = 0;
     };
 
     struct TimeDist {
@@ -183,6 +188,8 @@ class WorkloadGenerator {
     std::string debugString() const;
 
     void run(bool issueMigration);
+
+    void asyncRun(bool issueMigration);
 
     void statistics(std::vector<TimeDist> &result, SampleType type);
 

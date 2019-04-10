@@ -226,6 +226,16 @@ class BasicClient : public RAMCloud::WorkloadGenerator::Client {
         return migrationFinishTime - migrationStartTime;
     }
 
+    RamCloud *getRamCloud()
+    {
+        return ramcloud;
+    }
+
+    uint64_t getTableId()
+    {
+        return pressTableId;
+    }
+
   PRIVATE:
     RamCloud *ramcloud;
     int clientIndex;
@@ -443,6 +453,16 @@ class RocksteadyClient : public RAMCloud::WorkloadGenerator::Client {
     uint64_t migrationDuration()
     {
         return migrationFinishTime - migrationStartTime;
+    }
+
+    RamCloud *getRamCloud()
+    {
+        return ramcloud;
+    }
+
+    uint64_t getTableId()
+    {
+        return pressTableId;
     }
 
   PRIVATE:
@@ -953,6 +973,16 @@ class RamcloudClient : public RAMCloud::WorkloadGenerator::Client {
         return migrationFinishTime - migrationStartTime;
     }
 
+    RamCloud *getRamCloud()
+    {
+        return ramcloud;
+    }
+
+    uint64_t getTableId()
+    {
+        return pressTableId;
+    }
+
   PRIVATE:
     RamCloud *ramcloud;
     int clientIndex;
@@ -1000,7 +1030,8 @@ void rocksteadyBasic()
     bool issueMigration = false;
     if (clientIndex == 0)
         issueMigration = true;
-    workloadGenerator.run(issueMigration);
+    workloadGenerator.asyncRun(issueMigration);
+    RAMCLOUD_LOG(WARNING, "...");
 
     std::vector<RAMCloud::WorkloadGenerator::TimeDist> result;
     std::vector<RAMCloud::WorkloadGenerator::TimeDist> readResult;
