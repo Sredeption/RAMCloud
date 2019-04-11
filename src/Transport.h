@@ -170,7 +170,6 @@ class Transport {
          */
         IntrusiveListHook outstandingRpcListHook;
 
-//#define RPC_BREAKDOWN
 #ifdef RPC_BREAKDOWN
         uint64_t startTimestamp;
         uint64_t handleoffTimestamp;

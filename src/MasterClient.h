@@ -409,7 +409,8 @@ class RocksteadyMigrationPriorityHashesRpc : public ServerIdRpcWrapper {
     ~RocksteadyMigrationPriorityHashesRpc() {}
     uint32_t wait(SegmentCertificate* certificate = NULL);
 
-#ifdef RPC_BREAKDOWN
+//#define PRIORITY_PULL_BREAKDOWN
+#ifdef PRIORITY_PULL_BREAKDOWN
     uint64_t startTime;
     uint64_t duration;
 #endif

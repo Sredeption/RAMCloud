@@ -932,7 +932,7 @@ RocksteadyMigrationPriorityHashesRpc::RocksteadyMigrationPriorityHashesRpc(
     : ServerIdRpcWrapper(context, sourceServerId,
             sizeof(WireFormat::RocksteadyMigrationPriorityHashes::Response),
             response)
-#ifdef RPC_BREAKDOWN
+#ifdef PRIORITY_PULL_BREAKDOWN
             , startTime(), duration()
 #endif
 {
@@ -945,7 +945,7 @@ RocksteadyMigrationPriorityHashesRpc::RocksteadyMigrationPriorityHashesRpc(
     reqHdr->tombstoneSafeVersion = tombstoneSafeVersion;
     reqHdr->numRequestedHashes = numRequestedHashes;
     request.append(requestedPriorityHashes, 0, requestedPriorityHashes->size());
-#ifdef RPC_BREAKDOWN
+#ifdef PRIORITY_PULL_BREAKDOWN
     startTime = Cycles::rdtsc();
 #endif
     send();
@@ -960,7 +960,7 @@ RocksteadyMigrationPriorityHashesRpc::wait(SegmentCertificate* certificate)
     if (certificate != NULL) {
         *certificate = respHdr->certificate;
     }
-#ifdef RPC_BREAKDOWN
+#ifdef PRIORITY_PULL_BREAKDOWN
     duration = Cycles::rdtsc() - startTime;
 #endif
     return respHdr->numReturnedLogEntries;

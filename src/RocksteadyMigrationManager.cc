@@ -223,7 +223,7 @@ RocksteadyMigration::RocksteadyMigration(Context* context,
     , migratedMegaBytes()
     , sideLogCommitStartTS()
     , sideLogCommitEndTS()
- #ifdef RPC_BREAKDOWN
+ #ifdef PRIORITY_PULL_BREAKDOWN
     , lastUpdate()
     , totalNumber(0)
     , priorityPullTime(0)
@@ -513,7 +513,7 @@ RocksteadyMigration::pullAndReplay_priorityHashes()
     SpinLock::Guard lock(priorityLock);
 
     int workDone = 0;
-#ifdef RPC_BREAKDOWN
+#ifdef PRIORITY_PULL_BREAKDOWN
     uint64_t current = Cycles::rdtsc();
     if (Cycles::toMicroseconds(current - lastUpdate) > 100000) {
         lastUpdate=current;
@@ -532,7 +532,7 @@ RocksteadyMigration::pullAndReplay_priorityHashes()
             SegmentCertificate certificate;
             uint32_t numReturnedHashes = priorityPullRpc->wait(&certificate);
 
-#ifdef RPC_BREAKDOWN
+#ifdef PRIORITY_PULL_BREAKDOWN
             priorityPullTime += priorityPullRpc->duration;
             totalNumber++;
 #endif
