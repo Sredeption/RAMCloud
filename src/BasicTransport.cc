@@ -18,6 +18,7 @@
 #include "Service.h"
 #include "TimeTrace.h"
 #include "WorkerManager.h"
+#include "CycleCounter.h"
 
 namespace RAMCloud {
 
@@ -1753,7 +1754,23 @@ BasicTransport::Poller::poll()
     // best value).
 #define MAX_PACKETS 8
     uint32_t numPackets;
+
+//    uint64_t current = Cycles::rdtsc();
+//    if (Cycles::toMicroseconds(current - lastUpdate) > 100000) {
+//        lastUpdate = current;
+//        RAMCLOUD_LOG(NOTICE, "receive:%lu us handle:%lu us transmit:%lu us",
+//                     Cycles::toMicroseconds(receiveCycles),
+//                     Cycles::toMicroseconds(handleCycles),
+//                     Cycles::toMicroseconds(transmitCycles));
+//        receiveCycles = 0;
+//        handleCycles = 0;
+//        transmitCycles = 0;
+//    }
+
+    CycleCounter<> receiveCounter(&receiveCycles);
     t->driver->receivePackets(MAX_PACKETS, &t->receivedPackets);
+    receiveCounter.stop();
+
     numPackets = downCast<uint>(t->receivedPackets.size());
 #if TIME_TRACE
     // Log the beginning of poll() here so that timetrace entries do not
@@ -1766,10 +1783,12 @@ BasicTransport::Poller::poll()
     }
     lastPollTime = Cycles::rdtsc();
 #endif
+    CycleCounter<> handleCounter(&handleCycles);
     for (uint i = 0; i < numPackets; i++) {
         t->handlePacket(&t->receivedPackets[i]);
     }
     t->receivedPackets.clear();
+    handleCounter.stop();
     result = numPackets > 0 ? 1 : result;
 
     // See if we should send out new GRANT packets. Grants are sent here as
@@ -1821,9 +1840,11 @@ BasicTransport::Poller::poll()
         }
     }
 
+    CycleCounter<> transmitCounter(&transmitCycles);
     // Transmit data packets if possible.
     uint32_t totalBytesSent = t->tryToTransmitData();
     result = totalBytesSent > 0 ? 1 : result;
+    transmitCounter.stop();
 
 
     // Provide a hint to the driver on how many packet buffers to release.

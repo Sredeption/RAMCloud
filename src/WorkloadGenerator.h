@@ -38,6 +38,9 @@ class WorkloadGenerator {
         virtual RamCloud *getRamCloud() = 0;
 
         virtual uint64_t getTableId() = 0;
+
+        virtual uint64_t splitHash()
+        { return 0; }
     };
 
     struct TimeDist {
@@ -100,11 +103,22 @@ class WorkloadGenerator {
         uint64_t startTicks;
         uint64_t endTicks;
         SampleType type;
+        uint64_t hash;
 
         Sample(uint64_t startTicks,
                uint64_t endTicks,
                SampleType type)
-            : startTicks{startTicks}, endTicks{endTicks}, type{type}
+            : Sample(startTicks, endTicks, type, 0)
+        {
+
+        }
+
+        Sample(uint64_t startTicks,
+               uint64_t endTicks,
+               SampleType type,
+               uint64_t hash)
+            : startTicks(startTicks), endTicks(endTicks), type(type),
+              hash(hash)
         {}
 
     };
@@ -191,7 +205,8 @@ class WorkloadGenerator {
 
     void asyncRun(bool issueMigration);
 
-    void statistics(std::vector<TimeDist> &result, SampleType type);
+    void
+    statistics(std::vector<TimeDist> &result, SampleType type, int tablet = 0);
 
     WorkloadGenerator(const WorkloadGenerator &) = delete;
 

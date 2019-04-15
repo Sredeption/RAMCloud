@@ -328,6 +328,11 @@ class RocksteadyClient : public RAMCloud::WorkloadGenerator::Client {
     {
     }
 
+    uint64_t splitHash()
+    {
+        return lastKey;
+    }
+
     ~RocksteadyClient()
     {
 
@@ -1031,18 +1036,17 @@ void rocksteadyBasic()
     if (clientIndex == 0)
         issueMigration = true;
     workloadGenerator.asyncRun(issueMigration);
-    RAMCLOUD_LOG(WARNING, "...");
 
     std::vector<RAMCloud::WorkloadGenerator::TimeDist> result;
     std::vector<RAMCloud::WorkloadGenerator::TimeDist> readResult;
     std::vector<RAMCloud::WorkloadGenerator::TimeDist> writeResult;
     workloadGenerator.statistics(result, RAMCloud::WorkloadGenerator::ALL);
     workloadGenerator.statistics(readResult,
-                                 RAMCloud::WorkloadGenerator::READ);
+                                 RAMCloud::WorkloadGenerator::ALL, 1);
     workloadGenerator.statistics(writeResult,
-                                 RAMCloud::WorkloadGenerator::WRITE);
+                                 RAMCloud::WorkloadGenerator::ALL, 2);
     RAMCLOUD_LOG(WARNING,
-                 "time: all median, 99th | read median, 99th | write median, 99th");
+                 "    overall   |    target    |    source    ");
     for (uint64_t i = 0; i < result.size(); i++) {
         RAMCLOUD_LOG(NOTICE,
                      "%lu:%lu, %lu, %lu, %lf | %lu, %lu, %lu, %lf | %lu, %lu, %lu, %lf",

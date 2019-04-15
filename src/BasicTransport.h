@@ -618,9 +618,20 @@ class BasicTransport : public Transport {
         explicit Poller(Context* context, BasicTransport* t)
             : Dispatch::Poller(context->dispatch, "BasicTransport(" +
                     t->driver->getServiceLocator() + ")::Poller")
+                    ,receiveCycles(0)
+                    , handleCycles(0)
+                    , transmitCycles(0)
+                    , lastUpdate(0)
             , t(t)
             , lastPollTime(0) { }
         virtual int poll();
+
+        uint64_t receiveCycles;
+        uint64_t handleCycles;
+        uint64_t transmitCycles;
+
+        uint64_t lastUpdate;
+
       private:
         /// Transport on whose behalf this poller operates.
         BasicTransport* t;

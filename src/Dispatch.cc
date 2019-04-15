@@ -31,7 +31,7 @@
 // Uncomment to print out a human readable name for any poller that takes longer
 // than slowPollerCycles to complete. Useful for determining which poller is
 // responsible for "Long gap" messages.
-// #define DEBUG_SLOW_POLLERS 1
+//#define DEBUG_SLOW_POLLERS 1
 
 namespace RAMCloud {
 
@@ -84,6 +84,7 @@ Dispatch::Dispatch(bool hasDedicatedThread)
     , totalElements(0)
     , pollingTimes(NULL)
     , nextInd(0)
+    , lastUpdate(0)
 {
     exitPipeFds[0] = exitPipeFds[1] = -1;
 }
@@ -160,6 +161,16 @@ Dispatch::poll()
         LOG(WARNING, "Long gap in dispatcher: %.2f ms",
                 Cycles::toSeconds(currentTime - previous)*1e03);
     }
+
+#if DEBUG_SLOW_POLLERS
+    bool update= false;
+
+    if (Cycles::toMicroseconds(currentTime - lastUpdate) > 10000) {
+        lastUpdate = currentTime;
+        update = true;
+    }
+#endif
+
     if (lockNeeded.load() != 0) {
         // Someone wants us locked. Indicate that we are locked,
         // then wait for the lock to be released.
@@ -185,6 +196,16 @@ Dispatch::poll()
         result += pollers[i]->poll();
 #if DEBUG_SLOW_POLLERS
         counter.stop();
+        if (update && pollers[i]->totalTimes != 0) {
+            RAMCLOUD_LOG(NOTICE, "Poller %s consume %lu us, times: %lu",
+                         pollers[i]->pollerName.c_str(),
+                         Cycles::toMicroseconds(pollers[i]->totalCycles),
+                         pollers[i]->totalTimes);
+            pollers[i]->totalCycles = 0;
+            pollers[i]->totalTimes = 0;
+        }
+        pollers[i]->totalCycles += ticks;
+        pollers[i]->totalTimes += 1;
         if (ticks > slowPollerCycles) {
             double ms = Cycles::toSeconds(ticks) * 1000;
             LOG(NOTICE, "Poller %s (%u) took awhile: %.2f ms",
@@ -410,7 +431,7 @@ Dispatch::cleanProfiler() {
  */
 Dispatch::Poller::Poller(Dispatch* dispatch, const string& pollerName)
     : owner(dispatch)
-    , pollerName(pollerName)
+    , pollerName(pollerName), totalCycles(0), totalTimes(0)
     , slot(downCast<int>(owner->pollers.size()))
 {
     CHECK_LOCK;

@@ -115,6 +115,9 @@ class Dispatch {
         /// in the subclass name probably makes sense.
         string pollerName;
 
+        uint64_t totalCycles;
+        uint64_t totalTimes;
+
       PRIVATE:
         /// Index of this Poller in Dispatch::pollers.  Allows deletion
         /// without having to scan all the entries in pollers. -1 means
@@ -361,6 +364,7 @@ class Dispatch {
     // last valid data point that's been taken.
     uint64_t nextInd;
 
+    uint64_t lastUpdate;
     static Syscall *sys;
 
     friend class Poller;

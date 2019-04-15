@@ -43,7 +43,7 @@ class ObjectRpcWrapper : public RpcWrapper {
      */
     virtual ~ObjectRpcWrapper() {}
 
-  PROTECTED:
+//  PROTECTED:
     virtual bool checkStatus();
     virtual bool handleTransportError();
     virtual void send();

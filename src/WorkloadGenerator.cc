@@ -191,7 +191,8 @@ void WorkloadGenerator::asyncRun(bool issueMigration)
                 op->first->wait(NULL, &exists);
 
                 stop = Cycles::rdtsc();
-                samples.emplace_back(op->second.first, stop, READ);
+                samples.emplace_back(op->second.first, stop, READ,
+                                     op->first->keyHash);
                 freeBuffers.push_back(op->second.second);
                 operationInFlight--;
                 delete op->first;
@@ -205,7 +206,8 @@ void WorkloadGenerator::asyncRun(bool issueMigration)
             if (op->first->isReady()) {
                 op->first->wait();
                 stop = Cycles::rdtsc();
-                samples.emplace_back(op->second, stop, WRITE);
+                samples.emplace_back(op->second, stop, WRITE,
+                                     op->first->keyHash);
                 operationInFlight--;
                 delete op->first;
                 op = writeQueue.erase(op);
@@ -230,7 +232,7 @@ void WorkloadGenerator::asyncRun(bool issueMigration)
 }
 
 void WorkloadGenerator::statistics(
-    vector<WorkloadGenerator::TimeDist> &result, SampleType type)
+    vector<WorkloadGenerator::TimeDist> &result, SampleType type, int tablet)
 {
     std::map<uint64_t, vector<uint64_t> *> latency;
     for (Sample &sample: samples) {
@@ -240,6 +242,13 @@ void WorkloadGenerator::statistics(
             for (uint64_t i = latency.size(); i <= timestamp; i++)
                 latency[i] = new vector<uint64_t>();
         }
+
+        if (tablet == 1 && sample.hash > client->splitHash())
+            continue;
+
+        if (tablet == 2 && sample.hash <= client->splitHash())
+            continue;
+
         if (sample.type == type || type == ALL)
             latency[timestamp]->push_back(
                 sample.endTicks - sample.startTicks);
