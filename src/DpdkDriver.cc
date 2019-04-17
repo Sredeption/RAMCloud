@@ -151,9 +151,12 @@ DpdkDriver::DpdkDriver(Context* context, int port)
         throw DriverException(HERE, format("gethostname failed: %s",
                 strerror(errno)));
     }
+    size_t l = strlen(nameBuffer);
+    nameBuffer[l] = static_cast<char>(portId);
+
     nameBuffer[sizeof(nameBuffer)-1] = 0;   // Needed if name was too long.
     const char *argv[] = {"rc", "--file-prefix", nameBuffer, "-c", "1",
-            "-n", "1", NULL};
+            "-n", "1","-m", "512", NULL};
     int argc = static_cast<int>(sizeof(argv) / sizeof(argv[0])) - 1;
 
     rte_openlog_stream(fileLogger.getFile());

@@ -79,7 +79,7 @@ class Transport {
             , epoch(0)
             , activities(~0)
             , outstandingRpcListHook()
-//#define RPC_BREAKDOWN
+#define RPC_BREAKDOWN
 #ifdef RPC_BREAKDOWN
             , startTimestamp(~0lu)
             , handleoffTimestamp(~0lu)

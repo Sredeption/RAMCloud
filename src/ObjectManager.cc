@@ -386,7 +386,6 @@ ObjectManager::readObject(Key& key, Buffer* outBuffer,
             // Check the current state of the tablet the key belongs to.
             if (tabletExists && t.state ==
                                 TabletManager::ROCKSTEADY_MIGRATING) {
-                return STATUS_OBJECT_DOESNT_EXIST;
                 {
                     // The tablet is still under migration. Request for a priority
                     // migration and ask the client to retry after some time.

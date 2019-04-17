@@ -343,12 +343,21 @@ class RocksteadyClient : public RAMCloud::WorkloadGenerator::Client {
         if (clientIndex == 0) {
             ServerId server1 = ServerId(1u, 0u);
             ServerId server3 = ServerId(3u, 0u);
-            pressTableId = client->createTableToServer(tableName.c_str(),
-                                                       server1);
-            migration->tableId = pressTableId;
+            ServerId server5 = ServerId(5u, 0u);
+
+
+            uint64_t migrationTableId =
+                client->createTableToServer(tableName.c_str(), server1);
+
+            pressTableId = client->createTableToServer("press table",
+                                                       server5);
+//            pressTableId = migrationTableId;
+
+            migration->tableId = migrationTableId;
             controlHubId = client->createTableToServer(testControlHub.c_str(),
                                                        server3);
-            client->testingFill(pressTableId, "", 0, objectCount, objectSize);
+            client->testingFill(migrationTableId, "", 0, objectCount,
+                                objectSize);
 
             client->splitTablet(tableName.c_str(), lastKey + 1);
 
@@ -363,7 +372,7 @@ class RocksteadyClient : public RAMCloud::WorkloadGenerator::Client {
             while (true) {
                 try {
                     controlHubId = client->getTableId(testControlHub.c_str());
-                    pressTableId = client->getTableId(tableName.c_str());
+                    pressTableId = client->getTableId("press table");
                     break;
                 } catch (TableDoesntExistException &e) {
                 }

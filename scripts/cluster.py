@@ -264,7 +264,7 @@ class Cluster(object):
                                                  self.coordinator_host)
         if not self.enable_logcabin:
             command = (
-                    '%s %s -C %s -l %s --logFile %s/coordinator.%s.log %s' %
+                    '%s %s -C %s -l %s --logFile %s/coordinator.%s.log --dpdkPort 0 %s' %
                     (prefix_command,
                      coordinator_binary, self.coordinator_locator,
                      self.log_level, self.log_subdir,
@@ -339,11 +339,11 @@ class Cluster(object):
         @return: Sandbox.Process representing the server process.
         """
         log_prefix = '%s/server%d.%s:%d' % (
-            self.log_subdir, self.next_server_id, host[0], host[3])
+            self.log_subdir, self.next_server_id, host[0], host[5])
 
         command = (
                     'taskset -c %s %s %s -C %s -L %s -r %d -l %s --clusterName __unnamed__ '
-                    '--logFile %s.log --preferredIndex %d %s' %
+                    '--logFile %s.log --preferredIndex %d --dpdkPort %d %s' %
                     (host[4], prefix_command,
                      server_binary, self.coordinator_locator,
                      server_locator(self.transport, host, port),
@@ -351,6 +351,7 @@ class Cluster(object):
                      self.log_level,
                      log_prefix,
                      self.next_server_id,
+                     host[5],
                      args))
 
         self.next_server_id += 1
@@ -470,7 +471,7 @@ class Cluster(object):
         clients = []
         for i, client_host in enumerate(hosts):
             command = ('%s %s -C %s --numClients %d --clientIndex %d '
-                       '--logFile %s/client%d.%s.log %s' %
+                       '--logFile %s/client%d.%s.log --dpdkPort 0 %s' %
                        (prefix_command,
                         client_bin, self.coordinator_locator, num_clients,
                         i, self.log_subdir, self.next_client_id,

@@ -105,8 +105,8 @@ hosts = []
 # ids = [1, 2, 3, 4, 12, 14, 15, 16, 18, 19, 20, 21]
 # ids = [(4, server_port), (5, server_port), (6, server_port),
 cpu_range = '0-23'
-cpu_range_serve = '0-11'
-cpu_range_migrate = '12-23'
+cpu_range_serve = '0-23'
+cpu_range_migrate = '24-47'
 
 # ids = [(4, server_port, cpu_range), (5, server_port, cpu_range),
 #        (14, server_port, cpu_range),
@@ -114,14 +114,15 @@ cpu_range_migrate = '12-23'
 #        (19, server_port, cpu_range),
 #        (20, server_port, cpu_range), (21, server_port, cpu_range)]
 
-ids = [(4, server_port, cpu_range), (5, server_port, cpu_range),
-       (8, server_port, cpu_range), (9, server_port, cpu_range),
-       (6, server_port, cpu_range),
-       (10, server_port, cpu_range), (11, server_port, cpu_range),
-       (12, server_port, cpu_range), (14, server_port, cpu_range),
-       (15, server_port, cpu_range), (16, server_port, cpu_range),
-       (7, server_port, cpu_range),
-       (21, server_port, cpu_range)]
+ids = [
+    (7, server_port, cpu_range_migrate, 0), (9, server_port, cpu_range, 0),
+    (5, server_port, cpu_range, 0), (6, server_port, cpu_range, 0),
+    (7, server_port, cpu_range_serve, 1),
+    (4, server_port, cpu_range, 0),
+    (10, server_port, cpu_range, 0), (11, server_port, cpu_range, 0),
+    (12, server_port, cpu_range, 0), (14, server_port, cpu_range, 0),
+    (15, server_port, cpu_range, 0), (16, server_port, cpu_range, 0),
+    (21, server_port, cpu_range, 0)]
 
 for i in ids:
     hosts.append((
@@ -129,7 +130,8 @@ for i in ids:
         '10.22.1.%d' % i[0],
         i[0],
         i[1],
-        i[2]
+        i[2],
+        i[3]
     ))
 
 

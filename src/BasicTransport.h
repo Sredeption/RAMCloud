@@ -620,7 +620,9 @@ class BasicTransport : public Transport {
                     t->driver->getServiceLocator() + ")::Poller")
                     ,receiveCycles(0)
                     , handleCycles(0)
+                    , numHandle(0)
                     , transmitCycles(0)
+                    , bytesSent(0)
                     , lastUpdate(0)
             , t(t)
             , lastPollTime(0) { }
@@ -628,7 +630,9 @@ class BasicTransport : public Transport {
 
         uint64_t receiveCycles;
         uint64_t handleCycles;
+        uint64_t numHandle;
         uint64_t transmitCycles;
+        uint64_t bytesSent;
 
         uint64_t lastUpdate;
 

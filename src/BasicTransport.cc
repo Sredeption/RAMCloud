@@ -1755,18 +1755,6 @@ BasicTransport::Poller::poll()
 #define MAX_PACKETS 8
     uint32_t numPackets;
 
-//    uint64_t current = Cycles::rdtsc();
-//    if (Cycles::toMicroseconds(current - lastUpdate) > 100000) {
-//        lastUpdate = current;
-//        RAMCLOUD_LOG(NOTICE, "receive:%lu us handle:%lu us transmit:%lu us",
-//                     Cycles::toMicroseconds(receiveCycles),
-//                     Cycles::toMicroseconds(handleCycles),
-//                     Cycles::toMicroseconds(transmitCycles));
-//        receiveCycles = 0;
-//        handleCycles = 0;
-//        transmitCycles = 0;
-//    }
-
     CycleCounter<> receiveCounter(&receiveCycles);
     t->driver->receivePackets(MAX_PACKETS, &t->receivedPackets);
     receiveCounter.stop();
@@ -1787,6 +1775,7 @@ BasicTransport::Poller::poll()
     for (uint i = 0; i < numPackets; i++) {
         t->handlePacket(&t->receivedPackets[i]);
     }
+    numHandle += numPackets;
     t->receivedPackets.clear();
     handleCounter.stop();
     result = numPackets > 0 ? 1 : result;
@@ -1844,6 +1833,7 @@ BasicTransport::Poller::poll()
     // Transmit data packets if possible.
     uint32_t totalBytesSent = t->tryToTransmitData();
     result = totalBytesSent > 0 ? 1 : result;
+    bytesSent += totalBytesSent;
     transmitCounter.stop();
 
 

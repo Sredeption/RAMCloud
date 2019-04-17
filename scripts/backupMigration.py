@@ -61,7 +61,7 @@ def backup_migrate(num_servers,
     # args['coordinator_host'] = getOldMasterHost()
     args['coordinator_args'] = coordinator_args
     args['share_hosts'] = True
-    args['dpdk_port'] = dpdk_port
+    # args['dpdk_port'] = dpdk_port
     args['client_hosts'] = []
     args['superuser'] = superuser
 
