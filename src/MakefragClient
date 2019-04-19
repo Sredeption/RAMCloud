@@ -28,6 +28,8 @@ CLIENT_SRCFILES := \
 		   src/AbstractServerList.cc \
 		   src/AdminClient.cc \
 		   src/ArpCache.cc \
+		   src/AuxiliaryManager.cc \
+		   src/AuxiliaryTransport.cc \
 		   src/BasicTransport.cc \
 		   src/Buffer.cc \
 		   src/CRamCloud.cc \

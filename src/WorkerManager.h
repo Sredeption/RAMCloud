@@ -17,6 +17,7 @@
 #define RAMCLOUD_WORKERMANAGER_H
 
 #include <queue>
+#include <boost/lockfree/spsc_queue.hpp>
 
 #include "Dispatch.h"
 #include "Service.h"
@@ -41,6 +42,7 @@ class WorkerManager : Dispatch::Poller {
 
     void exitWorker();
     void handleRpc(Transport::ServerRpc* rpc);
+    void handoffRpc(Transport::ServerRpc* rpc);
     bool idle();
     static void init();
     int poll();
@@ -96,6 +98,8 @@ class WorkerManager : Dispatch::Poller {
 
     // Total number of RPCs (across all Levels) in waitingRpcs queues.
     int rpcsWaiting;
+
+    boost::lockfree::spsc_queue<Transport::ServerRpc*> auxRpcs;
 
     // Nonzero means save incoming RPCs rather than executing them.
     // Intended for use in unit tests only.

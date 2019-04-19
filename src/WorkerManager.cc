@@ -14,6 +14,7 @@
  */
 
 #include <new>
+#include "AuxiliaryManager.h"
 #include "BitOps.h"
 #include "Cycles.h"
 #include "CycleCounter.h"
@@ -96,6 +97,7 @@ WorkerManager::WorkerManager(Context* context, uint32_t maxCores)
     , idleThreads()
     , maxCores(maxCores)
     , rpcsWaiting(0)
+    , auxRpcs(100)
     , testingSaveRpcs(0)
     , testRpcs()
 #ifdef RPC_BREAKDOWN
@@ -262,6 +264,11 @@ WorkerManager::handleRpc(Transport::ServerRpc* rpc)
     busyThreads.push_back(worker);
 }
 
+void WorkerManager::handoffRpc(Transport::ServerRpc *rpc)
+{
+    auxRpcs.push(rpc);
+}
+
 /**
  * Returns true if there are currently no RPCs being serviced, false
  * if at least one RPC is currently being executed by a worker.  If true
@@ -282,6 +289,10 @@ int
 WorkerManager::poll()
 {
     int foundWork = 0;
+    while (!auxRpcs.empty()) {
+        handleRpc(auxRpcs.front());
+        auxRpcs.pop();
+    }
 
     // Each iteration of the following loop checks the status of one active
     // worker. The order of iteration is crucial, since it allows us to
@@ -356,7 +367,11 @@ WorkerManager::poll()
 #ifdef RPC_BREAKDOWN
             uint64_t current = Cycles::rdtsc();
 #endif
-            rpc->sendReply();
+            if (rpc->isAuxiliary()) {
+                context->auxManager->sendReply(rpc);
+            } else {
+                rpc->sendReply();
+            }
 
 #ifdef RPC_BREAKDOWN
             auto header = rpc->requestPayload.getStart<WireFormat::RequestCommon>();

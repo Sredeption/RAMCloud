@@ -45,6 +45,8 @@ SHARED_SRCFILES := \
 		   src/AdminClient.cc \
 		   src/AdminService.cc \
 		   src/ArpCache.cc \
+		   src/AuxiliaryManager.cc \
+		   src/AuxiliaryTransport.cc \
 		   src/BasicTransport.cc \
 		   src/CacheTrace.cc \
 		   src/ClientException.cc \

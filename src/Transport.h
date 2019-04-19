@@ -126,6 +126,11 @@ class Transport {
             return epoch != 0;
         }
 
+        virtual bool isAuxiliary()
+        {
+            return false;
+        }
+
         /**
          * The incoming RPC payload, which contains a request.
          */

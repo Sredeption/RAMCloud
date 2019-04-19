@@ -131,6 +131,10 @@ class Server {
     };
     Tub<EnlistTimer> enlistTimer;
 
+    Tub<std::thread> auxDispatchThread;
+
+    static void auxDispatchMain(Dispatch *dispatch);
+
     DISALLOW_COPY_AND_ASSIGN(Server);
 };
 

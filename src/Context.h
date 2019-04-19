@@ -24,6 +24,7 @@ namespace RAMCloud {
 
 // forward declarations
 class AbstractServerList;
+class AuxiliaryManager;
 class BackupService;
 class CacheTrace;
 class CommandLineOptions;
@@ -89,6 +90,7 @@ class Context {
     MockContextMember* mockContextMember1; ///< for testing purposes
     Dispatch* dispatch;
     MockContextMember* mockContextMember2; ///< for testing purposes
+    Dispatch* auxDispatch;
     TransportManager* transportManager;
     DispatchExec* dispatchExec;
     SessionAlarmTimer* sessionAlarmTimer;
@@ -109,6 +111,8 @@ class Context {
     // If this variable is non-NULL, it belongs to the Context and will
     // be freed when the Context is destroyed.
     WorkerManager* workerManager;
+
+    AuxiliaryManager* auxManager;
 
     // The following array is indexed by WireFormat::ServiceType, and
     // holds pointers to all of the services currently known in this
