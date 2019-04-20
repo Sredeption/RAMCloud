@@ -80,6 +80,7 @@ SHARED_SRCFILES := \
 		   src/FailureDetector.cc \
 		   src/FailSession.cc \
 		   src/FileLogger.cc \
+		   src/GeminiMigrationManager.cc \
 		   src/HashTable.cc \
 		   src/HomaTransport.cc \
 		   src/IndexKey.cc \

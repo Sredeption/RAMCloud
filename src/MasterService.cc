@@ -22,6 +22,7 @@
 #include "Dispatch.h"
 #include "Enumeration.h"
 #include "EnumerationIterator.h"
+#include "GeminiMigrationManager.h"
 #include "IndexKey.h"
 #include "LogIterator.h"
 #include "LogProtector.h"
@@ -41,6 +42,7 @@
 #include "Tub.h"
 #include "WallTime.h"
 #include "WorkerManager.h"
+#include "AuxiliaryManager.h"
 
 namespace RAMCloud {
 
@@ -172,6 +174,14 @@ MasterService::dispatch(WireFormat::Opcode opcode, Rpc* rpc)
         case WireFormat::GetServerStatistics::opcode:
             callHandler<WireFormat::GetServerStatistics, MasterService,
                         &MasterService::getServerStatistics>(rpc);
+            break;
+        case WireFormat::GeminiMigrateTablet::opcode:
+            callHandler<WireFormat::GeminiMigrateTablet, MasterService,
+                        &MasterService::geminiMigrateTablet>(rpc);
+            break;
+        case WireFormat::GeminiPrepForMigration::opcode:
+            callHandler<WireFormat::GeminiPrepForMigration, MasterService,
+                        &MasterService::geminiPrepForMigration>(rpc);
             break;
         case WireFormat::FillWithTestData::opcode:
             callHandler<WireFormat::FillWithTestData, MasterService,
@@ -572,6 +582,129 @@ MasterService::getServerStatistics(
             rpc->replyPayload, &serverStats);
 }
 
+void
+MasterService::geminiMigrateTablet(
+        const WireFormat::GeminiMigrateTablet::Request* reqHdr,
+        WireFormat::GeminiMigrateTablet::Response* respHdr,
+        Rpc* rpc)
+{
+    const uint64_t tableId = reqHdr->tableId;
+    const uint64_t startKeyHash = reqHdr->startKeyHash;
+    const uint64_t endKeyHash = reqHdr->endKeyHash;
+    const ServerId sourceServerId(reqHdr->sourceServerId);
+
+    // Ignore requests to migrate data to self.
+    if (serverId == sourceServerId) {
+        LOG(WARNING, "Ignoring request to migrate tablet[0x%lx, 0x%lx] in"
+                " table %lu to self.", startKeyHash, endKeyHash, tableId);
+
+        respHdr->migrationStarted = false;
+        respHdr->common.status = STATUS_REQUEST_FORMAT_ERROR;
+        return;
+    }
+
+    bool tabletExists = tabletManager.getTablet(tableId, startKeyHash,
+                            endKeyHash);
+
+    // Ignore requests on tablets that this master already owns.
+    if (tabletExists) {
+        LOG(WARNING, "Ignoring request to migrate tablet[0x%lx, 0x%lx] in table"
+                " %lu from master %lu already owned by this master,",
+                startKeyHash, endKeyHash, tableId, sourceServerId.getId());
+
+        respHdr->migrationStarted = false;
+        respHdr->common.status = STATUS_INTERNAL_ERROR;
+        return;
+    }
+
+    bool migrationStarted;
+    {
+        Dispatch::Lock(context->auxDispatch);
+        migrationStarted = context->geminiMigrationManager->startMigration(
+                sourceServerId, tableId, startKeyHash, endKeyHash);
+    }
+
+    if (migrationStarted) {
+        LOG(NOTICE, "Started migration of tablet[0x%lx, 0x%lx] in table %lu"
+                " from master %lu.", startKeyHash, endKeyHash, tableId,
+                sourceServerId.getId());
+
+        respHdr->migrationStarted = migrationStarted;
+        respHdr->common.status = STATUS_OK;
+    } else {
+        LOG(NOTICE, "Failed to start migration of tablet[0x%lx, 0x%lx] in"
+                " table %lu from master %lu.", startKeyHash, endKeyHash,
+                tableId, sourceServerId.getId());
+
+        respHdr->migrationStarted = migrationStarted;
+        respHdr->common.status = STATUS_INTERNAL_ERROR;
+    }
+
+    return;
+}
+
+void
+MasterService::geminiPrepForMigration(
+        const WireFormat::GeminiPrepForMigration::Request* reqHdr,
+        WireFormat::GeminiPrepForMigration::Response* respHdr,
+        Rpc* rpc)
+{
+    const uint64_t tableId = reqHdr->tableId;
+    const uint64_t startKeyHash = reqHdr->startKeyHash;
+    const uint64_t endKeyHash = reqHdr->endKeyHash;
+
+    LOG(NOTICE, "Received a prepare-for-migration request on"
+            " tablet[0x%lx, 0x%lx] in tablet %lu.", startKeyHash, endKeyHash,
+            tableId);
+
+    // Mark this rpc as read-only to avoid deadlock while waiting for appends
+    // to complete below.
+    rpc->worker->rpc->activities = Transport::ServerRpc::READ_ACTIVITY;
+
+    // First check if this server owns the tablet being requested for.
+    bool found = tabletManager.getTablet(tableId, startKeyHash,
+                         endKeyHash, NULL);
+    if (!found) {
+        LOG(WARNING, "Migration request for a tablet this master does not own:"
+                " tablet [0x%lx, 0x%lx] in table %lu", startKeyHash,
+                endKeyHash, tableId);
+        respHdr->common.status = STATUS_UNKNOWN_TABLET;
+        return;
+    }
+
+    bool changedState = tabletManager.changeState(tableId, startKeyHash,
+                                endKeyHash, TabletManager::NORMAL,
+                                TabletManager::LOCKED_FOR_MIGRATION);
+    if (!changedState) {
+        LOG(WARNING, "Failed to lock tablet for migration: "
+                "tablet [0x%lx, 0x%lx] in table %lu", startKeyHash,
+                endKeyHash, tableId);
+        respHdr->common.status = STATUS_INTERNAL_ERROR;
+        return;
+    }
+
+    LogProtector::wait(context, Transport::ServerRpc::APPEND_ACTIVITY);
+
+    // Return the safe version number so that the destination may serve
+    // writes on objects that have not been migrated yet.
+    respHdr->safeVersion = objectManager.getSafeVersion();
+
+    // Return the number of hash table buckets so that the destination can
+    // pull tablet entries in parallel.
+    respHdr->numHTBuckets = objectManager.getNumHashTableBuckets();
+
+    string locator = context->auxManager->getAuxiliaryLocator();
+    uint32_t locatorLength = static_cast<uint32_t >(locator.length());
+    respHdr->locatorLength = locatorLength;
+    rpc->replyPayload->append(locator.c_str(), locatorLength);
+
+    LOG(NOTICE, "Successfully serviced a prepare-for-migration request on"
+            " tablet[0x%lx, 0x%lx] in tablet %lu.", startKeyHash, endKeyHash,
+            tableId);
+
+    respHdr->common.status = STATUS_OK;
+    return;
+}
 /**
  * Fill a master server with the given number of objects, each of the
  * same given size. Objects are added to all tables in the master in

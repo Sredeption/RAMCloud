@@ -175,6 +175,14 @@ class MasterService : public Service {
                 const WireFormat::GetServerStatistics::Request* reqHdr,
                 WireFormat::GetServerStatistics::Response* respHdr,
                 Rpc* rpc);
+    void geminiMigrateTablet(
+        const WireFormat::GeminiMigrateTablet::Request* reqHdr,
+        WireFormat::GeminiMigrateTablet::Response* respHdr,
+        Rpc* rpc);
+    void geminiPrepForMigration(
+        const WireFormat::GeminiPrepForMigration::Request* reqHdr,
+        WireFormat::GeminiPrepForMigration::Response* respHdr,
+        Rpc* rpc);
     void fillWithTestData(const WireFormat::FillWithTestData::Request* reqHdr,
                 WireFormat::FillWithTestData::Response* respHdr,
                 Rpc* rpc);

@@ -155,7 +155,9 @@ enum Opcode {
     ROCKSTEADY_MIGRATION_PRIORITY_HASHES = 103,
     ROCKSTEADY_DROP_SOURCE_TABLET = 104,
     ROCKSTEADY_MIGRATION_PRIORITY_REPLAY = 105,
-    ILLEGAL_RPC_TYPE            = 106, // 1 + the highest legitimate Opcode
+    GEMINI_PREP_FOR_MIGRATION = 106,
+    GEMINI_MIGRATE_TABLET = 107,
+    ILLEGAL_RPC_TYPE            = 108, // 1 + the highest legitimate Opcode
 };
 
 /**
@@ -696,6 +698,40 @@ struct FillWithTestData {
     } __attribute__((packed));
     struct Response {
         ResponseCommon common;
+    } __attribute__((packed));
+};
+
+struct GeminiPrepForMigration {
+    static const Opcode opcode = GEMINI_PREP_FOR_MIGRATION ;
+    static const ServiceType service = MASTER_SERVICE;
+    struct Request {
+        RequestCommonWithId common;
+        uint64_t tableId;      // Table that the tablet belongs to.
+        uint64_t startKeyHash; // Lower bound on the tablet's hash space.
+        uint64_t endKeyHash;   // Upper bound on the tablet's hash space.
+    } __attribute__((packed));
+    struct Response {
+        ResponseCommon common;
+        uint64_t safeVersion;  // Safe version on the recipient after the tablet
+                               // was locked for migration.
+        uint64_t numHTBuckets; // Number of hash table buckets on the recipient.
+        uint64_t locatorLength;
+    } __attribute__((packed));
+};
+
+struct GeminiMigrateTablet {
+    static const Opcode opcode = GEMINI_MIGRATE_TABLET;
+    static const ServiceType service = MASTER_SERVICE;
+    struct Request {
+        RequestCommonWithId common;
+        uint64_t tableId;
+        uint64_t startKeyHash;
+        uint64_t endKeyHash;
+        uint64_t sourceServerId;
+    } __attribute__((packed));
+    struct Response {
+        ResponseCommon common;
+        bool migrationStarted;
     } __attribute__((packed));
 };
 

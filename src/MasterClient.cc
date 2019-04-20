@@ -226,6 +226,36 @@ GetHeadOfLogRpc::wait()
     return { respHdr->headSegmentId, respHdr->headSegmentOffset };
 }
 
+GeminiPrepForMigrationRpc::GeminiPrepForMigrationRpc(
+        Context* context, ServerId sourceServerId, uint64_t tableId,
+        uint64_t startKeyHash, uint64_t endKeyHash)
+    : ServerIdRpcWrapper(context, sourceServerId,
+            sizeof(WireFormat::GeminiPrepForMigration::Response))
+{
+    WireFormat::GeminiPrepForMigration::Request* reqHdr(
+            allocHeader<WireFormat::GeminiPrepForMigration>(
+                    sourceServerId));
+    reqHdr->tableId = tableId;
+    reqHdr->startKeyHash = startKeyHash;
+    reqHdr->endKeyHash = endKeyHash;
+    send();
+}
+
+uint64_t
+GeminiPrepForMigrationRpc::wait(uint64_t* numHTBuckets, string *auxLocator)
+{
+    waitAndCheckErrors();
+    const WireFormat::GeminiPrepForMigration::Response* respHdr(
+            getResponseHeader<WireFormat::GeminiPrepForMigration>());
+    *numHTBuckets = respHdr->numHTBuckets;
+
+    *auxLocator = string(static_cast<char *>(
+                             response->getRange(sizeof32(*respHdr),
+                                                respHdr->locatorLength)),
+                         respHdr->locatorLength);
+    return respHdr->safeVersion;
+}
+
 /**
  * This RPC is sent to an index server to request that it insert an index
  * entry in an indexlet it holds.

@@ -44,6 +44,7 @@ class MockContextMember;
 class ObjectFinder;
 class PortAlarmTimer;
 class RocksteadyMigrationManager;
+class GeminiMigrationManager;
 class Service;
 class WorkerManager;
 class SessionAlarmTimer;
@@ -152,6 +153,7 @@ class Context {
     MigrationTargetManager *migrationTargetManager;
 
     RocksteadyMigrationManager* rocksteadyMigrationManager;
+    GeminiMigrationManager* geminiMigrationManager;
 
     // On masters, it points to a permanently mapped region of read-only
     // memory that can be used as zero-copy source buffer for transmission;

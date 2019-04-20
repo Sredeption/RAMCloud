@@ -4,9 +4,11 @@ namespace RAMCloud {
 
 AuxiliaryManager::AuxiliaryManager(Context *context)
     : Dispatch::Poller(context->auxDispatch, "AuxiliaryManager"),
-      replyQueue(100)
+      replyQueue(100), driver(NULL), transport(NULL)
 {
-
+    driver = new DpdkDriver(context, 1);
+    transport = new AuxiliaryTransport(context, NULL, driver, false,
+                                       generateRandom());
 }
 
 AuxiliaryManager::~AuxiliaryManager()
@@ -28,6 +30,11 @@ int AuxiliaryManager::poll()
 void AuxiliaryManager::sendReply(Transport::ServerRpc *rpc)
 {
     replyQueue.push(rpc);
+}
+
+string AuxiliaryManager::getAuxiliaryLocator()
+{
+    return transport->getServiceLocator();
 }
 
 }

@@ -20,6 +20,7 @@
 #include "MigrationTargetManager.h"
 #include "MigrationBackupManager.h"
 #include "RocksteadyMigrationManager.h"
+#include "GeminiMigrationManager.h"
 #include "AuxiliaryManager.h"
 
 namespace RAMCloud {
@@ -52,13 +53,15 @@ Server::Server(Context* context, const ServerConfig* config)
     context->coordinatorSession->setLocation(
             config->coordinatorLocator.c_str(), config->clusterName.c_str());
     context->workerManager = new WorkerManager(context, config->maxCores-1);
-    context->migrationTargetManager = new MigrationTargetManager(context);
-    context->migrationBackupManager = new MigrationBackupManager(
-        context, config->localLocator, config->segmentSize);
+//    context->migrationTargetManager = new MigrationTargetManager(context);
+//    context->migrationBackupManager = new MigrationBackupManager(
+//        context, config->localLocator, config->segmentSize);
     context->rocksteadyMigrationManager =
         new RocksteadyMigrationManager(context, config->localLocator);
     auxDispatchThread.construct(auxDispatchMain, context->auxDispatch);
     context->auxManager= new AuxiliaryManager(context);
+    context->geminiMigrationManager =
+        new GeminiMigrationManager(context, config->localLocator);
 }
 
 /**

@@ -183,6 +183,21 @@ class GetHeadOfLogRpc : public ServerIdRpcWrapper {
     DISALLOW_COPY_AND_ASSIGN(GetHeadOfLogRpc);
 };
 
+class GeminiPrepForMigrationRpc : public ServerIdRpcWrapper {
+  public:
+    GeminiPrepForMigrationRpc(Context *context,
+                              ServerId sourceServerId, uint64_t tableId,
+                              uint64_t startKeyHash, uint64_t endKeyHash);
+
+    ~GeminiPrepForMigrationRpc()
+    {}
+
+    uint64_t wait(uint64_t *numHTBuckets, string *auxLocator);
+
+  PRIVATE:
+    DISALLOW_COPY_AND_ASSIGN(GeminiPrepForMigrationRpc);
+};
+
 /**
  * Encapsulates the state of a MasterClient::insertIndexEntry
  * request, allowing it to execute asynchronously.
