@@ -1123,6 +1123,242 @@ BenchmarkInfo tests[] = {
     {"basic", basic}
 };
 
+
+class GeminiClient : public RAMCloud::WorkloadGenerator::Client {
+  PUBLIC:
+
+    struct Migration {
+        uint64_t tableId;
+        uint64_t firstKey;
+        uint64_t lastKey;
+        ServerId sourceServerId;
+        ServerId targetServerId;
+        bool skipMaster;
+
+        Migration(uint64_t tableId, uint64_t firstKey, uint64_t lastKey,
+                  ServerId sourceServerId, ServerId targetServerId,
+                  bool skipMaster)
+            : tableId(tableId), firstKey(firstKey), lastKey(lastKey),
+              sourceServerId(sourceServerId), targetServerId(targetServerId),
+              skipMaster(skipMaster)
+        {
+        }
+    };
+
+    GeminiClient (RamCloud *ramcloud, int clientIndex, Migration *migration,
+                     uint16_t keyLength, uint32_t valueLength,
+                     uint32_t numObjects, uint64_t time)
+        : ramcloud(ramcloud), clientIndex(clientIndex), migration(migration),
+          controlHubId(), keyLength(keyLength), valueLength(valueLength),
+          numObjects(numObjects), experimentStartTime(0), migrationId(),
+          migrationStartTime(0), migrationFinishTime(0), pressTableId(),
+          generateWorkload(true), time(time), geminiMigration()
+    {
+    }
+
+    uint64_t splitHash()
+    {
+        return lastKey;
+    }
+
+    ~GeminiClient()
+    {
+
+    }
+
+    void setup(uint32_t objectCount, uint32_t objectSize)
+    {
+        if (clientIndex == 0) {
+            ServerId server1 = ServerId(1u, 0u);
+            ServerId server3 = ServerId(3u, 0u);
+
+            uint64_t migrationTableId =
+                client->createTableToServer(tableName.c_str(), server1);
+
+            pressTableId = migrationTableId;
+
+            migration->tableId = migrationTableId;
+            controlHubId = client->createTableToServer(testControlHub.c_str(),
+                                                       server3);
+            client->testingFill(migrationTableId, "", 0, objectCount,
+                                objectSize);
+
+            client->splitTablet(tableName.c_str(), lastKey + 1);
+
+            client->write(controlHubId, status.c_str(),
+                          static_cast<uint16_t>(status.length()),
+                          filling.c_str(),
+                          static_cast<uint32_t>(filling.length()));
+            RAMCLOUD_LOG(WARNING, "write status to %lu", controlHubId);
+
+        } else {
+
+            while (true) {
+                try {
+                    controlHubId = client->getTableId(testControlHub.c_str());
+                    pressTableId = client->getTableId("press table");
+                    break;
+                } catch (TableDoesntExistException &e) {
+                }
+            }
+
+            Buffer statusValue;
+            bool exists = false;
+            while (true) {
+                client->read(controlHubId, status.c_str(),
+                             static_cast<uint16_t>(status.length()),
+                             &statusValue, NULL, NULL, &exists);
+
+                if (exists) {
+                    statusValue.size();
+                    string currentStatus = string(
+                        reinterpret_cast<const char *>(
+                            statusValue.getRange(0, statusValue.size())),
+                        statusValue.size());
+
+                    RAMCLOUD_CLOG(WARNING, "status:%s", currentStatus.c_str());
+                    if (currentStatus == filling)
+                        break;
+                }
+
+                RAMCLOUD_CLOG(WARNING, "wait for filling");
+            }
+
+        }
+    }
+
+    void read(const char *key, uint64_t keyLen)
+    {
+    }
+
+    void write(const char *key, uint64_t keyLen, char *value, uint32_t valueLen)
+    {
+    }
+
+    void startMigration()
+    {
+        RAMCLOUD_LOG(WARNING, "Issuing migration request:");
+        RAMCLOUD_LOG(NOTICE, "  table (%lu)", migration->tableId);
+        RAMCLOUD_LOG(NOTICE, "  first key %lu", migration->firstKey);
+        RAMCLOUD_LOG(NOTICE, "  last key  %lx", migration->lastKey);
+        RAMCLOUD_LOG(NOTICE, "  recipient master id %u",
+                     migration->targetServerId.indexNumber());
+
+        geminiMigration.construct(ramcloud, migration->tableId,
+                                      migration->firstKey, migration->lastKey,
+                                      migration->sourceServerId,
+                                      migration->targetServerId);
+        geminiMigration->wait();
+        geminiMigration.destroy();
+        migrationStartTime = Cycles::rdtsc();
+    }
+
+    bool isFinished()
+    {
+        if (clientIndex == 0) {
+            if (migrationStartTime == 0 || Cycles::toSeconds(
+                Cycles::rdtsc() - migrationStartTime) < time)
+                return false;
+            else {
+                RAMCLOUD_LOG(WARNING, "finish");
+                ramcloud->write(controlHubId, status.c_str(),
+                                static_cast<uint16_t>(status.length()),
+                                ending.c_str(),
+                                static_cast<uint32_t>(ending.length()));
+                return true;
+            }
+        } else {
+            Buffer statusValue;
+            ramcloud->read(controlHubId, status.c_str(),
+                           static_cast<uint16_t>(status.length()),
+                           &statusValue);
+            string currentStatus = string(
+                reinterpret_cast<const char *>(
+                    statusValue.getRange(0, statusValue.size())),
+                statusValue.size());
+            RAMCLOUD_CLOG(WARNING, "finish status:%s", currentStatus.c_str());
+            return currentStatus == ending;
+        }
+    }
+
+    uint64_t migrationDuration()
+    {
+        return migrationFinishTime - migrationStartTime;
+    }
+
+    RamCloud *getRamCloud()
+    {
+        return ramcloud;
+    }
+
+    uint64_t getTableId()
+    {
+        return pressTableId;
+    }
+
+  PRIVATE:
+    RamCloud *ramcloud;
+    int clientIndex;
+    Migration *migration;
+    uint64_t controlHubId;
+    uint16_t keyLength;
+    uint32_t valueLength;
+    uint32_t numObjects;
+    uint64_t experimentStartTime;
+    uint64_t migrationId;
+    uint64_t migrationStartTime;
+    uint64_t migrationFinishTime;
+    uint64_t pressTableId;
+    bool generateWorkload;
+    uint64_t time;
+    Tub<GeminiMigrateTabletRpc> geminiMigration;
+
+    DISALLOW_COPY_AND_ASSIGN(GeminiClient )
+};
+
+void geminiBasic()
+{
+    uint64_t tableId = 0;
+
+    const uint16_t keyLength = 30;
+    const uint32_t valueLength = 100;
+    GeminiClient ::Migration
+        migration(tableId, firstKey, lastKey, ServerId(1, 0),
+                  ServerId(newOwnerMasterId, 0), false);
+    GeminiClient basicClient(client.get(), clientIndex, &migration,
+                                 keyLength, valueLength, objectCount, 7);
+    RAMCloud::WorkloadGenerator workloadGenerator(
+        "YCSB-B", targetOps, objectCount, objectSize, &basicClient);
+
+    bool issueMigration = false;
+    if (clientIndex == 0)
+        issueMigration = true;
+    workloadGenerator.run(issueMigration);
+
+    std::vector<RAMCloud::WorkloadGenerator::TimeDist> result;
+    std::vector<RAMCloud::WorkloadGenerator::TimeDist> readResult;
+    std::vector<RAMCloud::WorkloadGenerator::TimeDist> writeResult;
+    workloadGenerator.statistics(result, RAMCloud::WorkloadGenerator::ALL);
+    workloadGenerator.statistics(readResult,
+                                 RAMCloud::WorkloadGenerator::ALL, 1);
+    workloadGenerator.statistics(writeResult,
+                                 RAMCloud::WorkloadGenerator::ALL, 2);
+    RAMCLOUD_LOG(WARNING,
+                 "    overall   |    target    |    source    ");
+    for (uint64_t i = 0; i < result.size(); i++) {
+        RAMCLOUD_LOG(NOTICE,
+                     "%lu:%lu, %lu, %lu, %lf | %lu, %lu, %lu, %lf | %lu, %lu, %lu, %lf",
+                     i, result[i].p50, result[i].p999, result[i].avg,
+                     static_cast<double>(result[i].bandwidth) / 100.,
+                     readResult[i].p50, readResult[i].p999,
+                     readResult[i].avg,
+                     static_cast<double>(readResult[i].bandwidth) / 100.,
+                     writeResult[i].p50, writeResult[i].p999,
+                     writeResult[i].avg,
+                     static_cast<double>(writeResult[i].bandwidth) / 100.);
+    }
+}
+
 int
 main(int argc, char *argv[])
 try
@@ -1192,9 +1428,10 @@ try
     serverList.applyServerList(protoServerList);
 
 //    basic();
-    rocksteadyBasic();
+//    rocksteadyBasic();
 //    ramcloudBasic();
 //    basic_tpcc();
+    geminiBasic();
 
     return 0;
 } catch (ClientException &e) {

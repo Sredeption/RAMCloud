@@ -73,13 +73,14 @@ class Transport {
         /**
          * Constructor for ServerRpc.
          */
-        ServerRpc()
+        ServerRpc(bool auxiliary = false)
             : requestPayload()
             , replyPayload()
             , epoch(0)
             , activities(~0)
             , outstandingRpcListHook()
-#define RPC_BREAKDOWN
+            , auxiliary(auxiliary)
+//#define RPC_BREAKDOWN
 #ifdef RPC_BREAKDOWN
             , startTimestamp(~0lu)
             , handleoffTimestamp(~0lu)
@@ -126,9 +127,9 @@ class Transport {
             return epoch != 0;
         }
 
-        virtual bool isAuxiliary()
+        bool isAuxiliary()
         {
-            return false;
+            return auxiliary;
         }
 
         /**
@@ -174,6 +175,8 @@ class Transport {
          * constructed by ServerRpcPool and removed when they're destroyed.
          */
         IntrusiveListHook outstandingRpcListHook;
+
+        std::atomic_bool auxiliary;
 
 #ifdef RPC_BREAKDOWN
         uint64_t startTimestamp;

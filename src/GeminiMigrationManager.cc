@@ -62,7 +62,7 @@ int GeminiMigrationManager::poll()
         // Delete any completed migrations.
         if (currentMigration->phase == GeminiMigration::COMPLETED) {
             migration = migrationsInProgress.erase(migration);
-            delete currentMigration;
+//            delete currentMigration;
         } else {
             migration++;
         }
@@ -344,9 +344,13 @@ GeminiMigration::prepare()
 
             // Obtain the head of this master's log in order to initiate
             // ownership transfer.
-            getHeadOfLogRpc.construct((context->getMasterService())->serverId,
-                                      localLocator);
-            context->workerManager->handoffRpc(getHeadOfLogRpc.get());
+            getHeadOfLogRpc.construct(
+                (context->getMasterService())->serverId, localLocator);
+
+            context->workerManager->handoffRpc(
+                getHeadOfLogRpc.get());
+
+            phase = COMPLETED;
 
             return 1;
         } else {
@@ -356,8 +360,8 @@ GeminiMigration::prepare()
         }
     } else {
         // Send out the prepare rpc if it hasn't been sent out yet.
-        prepareSourceRpc.construct(context, sourceServerId, tableId,
-                                   startKeyHash, endKeyHash);
+        prepareSourceRpc.construct(
+            context, sourceServerId, tableId, startKeyHash, endKeyHash);
 
         RAMCLOUD_LOG(ll, "Sent out a prepare-for-migration request to"
                          " master %lu for tablet[0x%lx, 0x%lx] in table %lu.",
@@ -547,7 +551,7 @@ GeminiMigration::pullAndReplay_reapPullRpcs()
 
     size_t numBusyPullRpcs = busyPullRpcs.size();
     for (size_t i = 0; i < numBusyPullRpcs; i++) {
-        Tub<RocksteadyPullRpc> *pullRpc = busyPullRpcs.front();
+        Tub<GeminiPullRpc> *pullRpc = busyPullRpcs.front();
 
         if ((*pullRpc)->rpc->isReady()) {
             // If this pull rpc completed, first obtain the return values.
@@ -610,7 +614,7 @@ GeminiMigration::pullAndReplay_reapReplayRpcs()
 
     size_t numBusyReplayRpcs = busyReplayRpcs.size();
     for (size_t i = 0; i < numBusyReplayRpcs; i++) {
-        Tub<RocksteadyReplayRpc> *replayRpc = busyReplayRpcs.front();
+        Tub<GeminiReplayRpc> *replayRpc = busyReplayRpcs.front();
 
         if ((*replayRpc)->isReady()) {
             // If the replay has completed, update the corresponding
@@ -710,7 +714,7 @@ GeminiMigration::pullAndReplay_sendPullRpcs()
         while ((freePullRpcs.size() != 0) &&
                (candidatePartitions.size() != 0)) {
             // Get a pull rpc and partition to issue it on.
-            Tub<RocksteadyPullRpc> *pullRpc = freePullRpcs.front();
+            Tub<GeminiPullRpc> *pullRpc = freePullRpcs.front();
             Tub<RocksteadyHashPartition> *partition =
                 candidatePartitions.front();
 
@@ -787,7 +791,7 @@ GeminiMigration::pullAndReplay_sendReplayRpcs()
         while ((freeReplayRpcs.size() != 0) &&
                (candidatePartitions.size() != 0)) {
             // Get a replay rpc and a partition to issue it on.
-            Tub<RocksteadyReplayRpc> *replayRpc = freeReplayRpcs.front();
+            Tub<GeminiReplayRpc> *replayRpc = freeReplayRpcs.front();
             Tub<SideLog> *sideLog = freeSideLogs.front();
             Tub<RocksteadyHashPartition> *partition =
                 candidatePartitions.front();

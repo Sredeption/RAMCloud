@@ -140,33 +140,40 @@ DpdkDriver::DpdkDriver(Context* context, int port)
 
     portId = downCast<uint8_t>(port);
 
-    // Initialize the DPDK environment with some default parameters.
-    // --file-prefix is needed to avoid false lock conflicts if servers
-    // run on different nodes, but with a shared NFS home directory.
-    // This is a bug in DPDK as of 9/2016; if the bug gets fixed, then
-    // the --file-prefix argument can be removed.
-    LOG(NOTICE, "Using DPDK version %s", rte_version());
-    char nameBuffer[1000];
-    if (gethostname(nameBuffer, sizeof(nameBuffer)) != 0) {
-        throw DriverException(HERE, format("gethostname failed: %s",
-                strerror(errno)));
+    static bool initialize = true;
+
+    if (initialize) {
+        initialize = false;
+        // Initialize the DPDK environment with some default parameters.
+        // --file-prefix is needed to avoid false lock conflicts if servers
+        // run on different nodes, but with a shared NFS home directory.
+        // This is a bug in DPDK as of 9/2016; if the bug gets fixed, then
+        // the --file-prefix argument can be removed.
+            LOG(NOTICE, "Using DPDK version %s", rte_version());
+        char nameBuffer[1000];
+        if (gethostname(nameBuffer, sizeof(nameBuffer)) != 0) {
+            throw DriverException(HERE, format("gethostname failed: %s",
+                                               strerror(errno)));
+        }
+        size_t l = strlen(nameBuffer);
+        nameBuffer[l] = static_cast<char>(portId);
+
+        nameBuffer[sizeof(nameBuffer) - 1] = 0; // Needed if name was too long.
+        const char *argv[] = {"rc", "--file-prefix", nameBuffer, "-c", "1",
+                              "-n", "1", "-m", "512", NULL};
+        int argc = static_cast<int>(sizeof(argv) / sizeof(argv[0])) - 1;
+
+        rte_openlog_stream(fileLogger.getFile());
+        ret = rte_eal_init(argc, const_cast<char **>(argv));
+        if (ret < 0) {
+            throw DriverException(HERE, "rte_eal_init failed");
+        }
+
     }
-    size_t l = strlen(nameBuffer);
-    nameBuffer[l] = static_cast<char>(portId);
 
-    nameBuffer[sizeof(nameBuffer)-1] = 0;   // Needed if name was too long.
-    const char *argv[] = {"rc", "--file-prefix", nameBuffer, "-c", "1",
-            "-n", "1","-m", "512", NULL};
-    int argc = static_cast<int>(sizeof(argv) / sizeof(argv[0])) - 1;
-
-    rte_openlog_stream(fileLogger.getFile());
-    ret = rte_eal_init(argc, const_cast<char**>(argv));
-    if (ret < 0) {
-        throw DriverException(HERE, "rte_eal_init failed");
-    }
-
+    string mempool_name = format("mbuf_pool:%d", portId);
     // create an memory pool for accommodating packet buffers
-    mbufPool = rte_mempool_create("mbuf_pool", NB_MBUF,
+    mbufPool = rte_mempool_create(mempool_name.c_str(), NB_MBUF,
             MBUF_SIZE, 32,
             sizeof32(struct rte_pktmbuf_pool_private),
             rte_pktmbuf_pool_init, NULL,
@@ -279,7 +286,9 @@ DpdkDriver::DpdkDriver(Context* context, int port)
 
     // create an in-memory ring, used as a software loopback in order to handle
     // packets that are addressed to the localhost.
-    loopbackRing = rte_ring_create("dpdk_loopback_ring", 4096,
+
+    string ring_name = format("dpdk_loopback_ring%d", portId);
+    loopbackRing = rte_ring_create(ring_name.c_str(), 4096,
             SOCKET_ID_ANY, 0);
     if (NULL == loopbackRing) {
         throw DriverException(HERE, format(

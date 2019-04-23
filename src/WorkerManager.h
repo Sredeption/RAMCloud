@@ -26,6 +26,7 @@
 #include "ThreadId.h"
 #include "TimeTrace.h"
 #include "PerfStats.h"
+#include "CommQueue.h"
 
 namespace RAMCloud {
 
@@ -99,7 +100,7 @@ class WorkerManager : Dispatch::Poller {
     // Total number of RPCs (across all Levels) in waitingRpcs queues.
     int rpcsWaiting;
 
-    boost::lockfree::spsc_queue<Transport::ServerRpc*> auxRpcs;
+    CommQueue<Transport::ServerRpc*> auxRpcs;
 
     // Nonzero means save incoming RPCs rather than executing them.
     // Intended for use in unit tests only.

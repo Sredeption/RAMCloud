@@ -110,7 +110,6 @@ Context::Context(bool hasDedicatedDispatchThread,
         cacheTrace = new CacheTrace();
         objectFinder = new ObjectFinder(this);
         dispatch = new Dispatch(hasDedicatedDispatchThread);
-        auxDispatch = new Dispatch(true);
 #if TESTING
         mockContextMember2 = new MockContextMember(2);
 #endif

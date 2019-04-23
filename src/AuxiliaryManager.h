@@ -7,6 +7,7 @@
 #include "Transport.h"
 #include "DpdkDriver.h"
 #include "AuxiliaryTransport.h"
+#include "CommQueue.h"
 
 namespace RAMCloud {
 
@@ -24,7 +25,7 @@ class AuxiliaryManager : Dispatch::Poller {
     string getAuxiliaryLocator();
 
   private:
-    boost::lockfree::spsc_queue<Transport::ServerRpc *> replyQueue;
+    CommQueue<Transport::ServerRpc *> replyQueue;
     DpdkDriver *driver;
     AuxiliaryTransport *transport;
 

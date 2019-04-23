@@ -76,7 +76,7 @@ class GeminiMigration {
     int tearDown();
 
     // Change as necessary.
-    LogLevel ll = DEBUG;
+    LogLevel ll = NOTICE;
 
     Context *context;
 
@@ -116,10 +116,11 @@ class GeminiMigration {
 
     Tub<GeminiPrepForMigrationRpc> prepareSourceRpc;
 
-    class RocksteadyGetHeadOfLog : public Transport::ServerRpc {
+    class GeminiGetHeadOfLog : public Transport::ServerRpc {
       public:
-        explicit RocksteadyGetHeadOfLog(ServerId serverId, string localLocator)
-            : localLocator(localLocator), completed(false)
+        explicit GeminiGetHeadOfLog(ServerId serverId, string localLocator)
+            : Transport::ServerRpc(true), localLocator(localLocator),
+              completed(false)
         {
             WireFormat::GetHeadOfLog::Request *reqHdr =
                 requestPayload.emplaceAppend<
@@ -132,15 +133,15 @@ class GeminiMigration {
             reqHdr->common.targetId = serverId.getId();
         }
 
-        ~RocksteadyGetHeadOfLog()
+        ~GeminiGetHeadOfLog()
         {}
 
-        string getClientServiceLocator()
+        string getClientServiceLocator() override
         {
             return localLocator;
         }
 
-        void sendReply()
+        void sendReply() override
         {
             completed = true;
         }
@@ -168,7 +169,7 @@ class GeminiMigration {
         bool completed;
     };
 
-    Tub<RocksteadyGetHeadOfLog> getHeadOfLogRpc;
+    Tub<GeminiGetHeadOfLog> getHeadOfLogRpc;
 
     Tub<RocksteadyTakeTabletOwnershipRpc> takeOwnershipRpc;
 
@@ -249,16 +250,16 @@ class GeminiMigration {
 
     uint32_t numCompletedPartitions;
 
-    class RocksteadyPullRpc {
+    class GeminiPullRpc {
       public:
-        RocksteadyPullRpc(Context *context, ServerId sourceServerId,
-                          uint64_t tableId, uint64_t startKeyHash,
-                          uint64_t endKeyHash,
-                          uint64_t currentHTBucket,
-                          uint64_t currentHTBucketEntry,
-                          uint64_t endHTBucket, uint32_t numRequestedBytes,
-                          Tub<Buffer> *response,
-                          Tub<RocksteadyHashPartition> *partition)
+        GeminiPullRpc(Context *context, ServerId sourceServerId,
+                      uint64_t tableId, uint64_t startKeyHash,
+                      uint64_t endKeyHash,
+                      uint64_t currentHTBucket,
+                      uint64_t currentHTBucketEntry,
+                      uint64_t endHTBucket, uint32_t numRequestedBytes,
+                      Tub<Buffer> *response,
+                      Tub<RocksteadyHashPartition> *partition)
             : partition(partition), responseBuffer(response), rpc()
         {
             rpc.construct(context, sourceServerId, tableId, startKeyHash,
@@ -266,7 +267,7 @@ class GeminiMigration {
                           endHTBucket, numRequestedBytes, response->get());
         }
 
-        ~RocksteadyPullRpc()
+        ~GeminiPullRpc()
         {
             rpc.destroy();
         }
@@ -279,29 +280,30 @@ class GeminiMigration {
         Tub<RocksteadyMigrationPullHashesRpc> rpc;
 
         friend class GeminiMigration;
-        DISALLOW_COPY_AND_ASSIGN(RocksteadyPullRpc);
+        DISALLOW_COPY_AND_ASSIGN(GeminiPullRpc);
     };
 
     static const uint32_t MAX_PARALLEL_PULL_RPCS = 8;
 
-    Tub<RocksteadyPullRpc> pullRpcs[MAX_PARALLEL_PULL_RPCS];
+    Tub<GeminiPullRpc> pullRpcs[MAX_PARALLEL_PULL_RPCS];
 
-    std::deque<Tub<RocksteadyPullRpc> *>
+    std::deque<Tub<GeminiPullRpc> *>
         freePullRpcs;
 
-    std::deque<Tub<RocksteadyPullRpc> *>
+    std::deque<Tub<GeminiPullRpc> *>
         busyPullRpcs;
 
     static const uint32_t MAX_PARALLEL_REPLAY_RPCS = 6;
 
-    class RocksteadyReplayRpc : public Transport::ServerRpc {
+    class GeminiReplayRpc : public Transport::ServerRpc {
       public:
-        explicit RocksteadyReplayRpc(Tub<RocksteadyHashPartition> *partition,
-                                     Tub<Buffer> *response,
-                                     Tub<SideLog> *sideLog,
-                                     string localLocator,
-                                     SegmentCertificate certificate)
-            : partition(partition), responseBuffer(response), sideLog(sideLog),
+        explicit GeminiReplayRpc(Tub<RocksteadyHashPartition> *partition,
+                                 Tub<Buffer> *response,
+                                 Tub<SideLog> *sideLog,
+                                 string localLocator,
+                                 SegmentCertificate certificate)
+            : Transport::ServerRpc(true), partition(partition),
+              responseBuffer(response), sideLog(sideLog),
               completed(false), localLocator(localLocator)
         {
             WireFormat::RocksteadyMigrationReplay::Request *reqHdr =
@@ -318,7 +320,7 @@ class GeminiMigration {
             reqHdr->certificate = certificate;
         }
 
-        ~RocksteadyReplayRpc()
+        ~GeminiReplayRpc()
         {}
 
         void
@@ -351,16 +353,17 @@ class GeminiMigration {
         const string localLocator;
 
         friend class GeminiMigration;
-        DISALLOW_COPY_AND_ASSIGN(RocksteadyReplayRpc);
+        DISALLOW_COPY_AND_ASSIGN(GeminiReplayRpc);
     };
 
-    class RocksteadyPriorityReplayRpc : public Transport::ServerRpc {
+    class GeminiPriorityReplayRpc : public Transport::ServerRpc {
       public:
-        explicit RocksteadyPriorityReplayRpc(Tub<RocksteadyHashPartition> *
+        explicit GeminiPriorityReplayRpc(Tub<RocksteadyHashPartition> *
         partition, Tub<Buffer> *response, Tub<SideLog> *sideLog,
-                                             string localLocator,
-                                             SegmentCertificate certificate)
-            : partition(partition), responseBuffer(response), sideLog(sideLog),
+                                         string localLocator,
+                                         SegmentCertificate certificate)
+            : Transport::ServerRpc(true), partition(partition),
+              responseBuffer(response), sideLog(sideLog),
               completed(false), localLocator(localLocator)
         {
             WireFormat::RocksteadyMigrationPriorityReplay::Request *reqHdr =
@@ -377,7 +380,7 @@ class GeminiMigration {
             reqHdr->certificate = certificate;
         }
 
-        ~RocksteadyPriorityReplayRpc()
+        ~GeminiPriorityReplayRpc()
         {}
 
         void
@@ -410,17 +413,17 @@ class GeminiMigration {
         const string localLocator;
 
         friend class RocksteadyMigration;
-        DISALLOW_COPY_AND_ASSIGN(RocksteadyPriorityReplayRpc);
+        DISALLOW_COPY_AND_ASSIGN(GeminiPriorityReplayRpc);
     };
 
-    Tub<RocksteadyPriorityReplayRpc> priorityReplayRpc;
+    Tub<GeminiPriorityReplayRpc> priorityReplayRpc;
 
-    Tub<RocksteadyReplayRpc> replayRpcs[MAX_PARALLEL_REPLAY_RPCS];
+    Tub<GeminiReplayRpc> replayRpcs[MAX_PARALLEL_REPLAY_RPCS];
 
-    std::deque<Tub<RocksteadyReplayRpc> *>
+    std::deque<Tub<GeminiReplayRpc> *>
         freeReplayRpcs;
 
-    std::deque<Tub<RocksteadyReplayRpc> *>
+    std::deque<Tub<GeminiReplayRpc> *>
         busyReplayRpcs;
 
     Tub<SideLog> sideLogs[MAX_PARALLEL_REPLAY_RPCS];
@@ -428,10 +431,10 @@ class GeminiMigration {
     std::deque<Tub<SideLog> *>
         freeSideLogs;
 
-    class RocksteadySideLogCommitRpc : public Transport::ServerRpc {
+    class GeminiSideLogCommitRpc : public Transport::ServerRpc {
       public:
-        explicit RocksteadySideLogCommitRpc(Tub<SideLog> *sideLog,
-                                            string localLocator)
+        explicit GeminiSideLogCommitRpc(Tub<SideLog> *sideLog,
+                                        string localLocator)
             : sideLog(sideLog), completed(false), localLocator(localLocator)
         {
             WireFormat::RocksteadySideLogCommit::Request *reqHdr =
@@ -446,7 +449,7 @@ class GeminiMigration {
             reqHdr->sideLogPtr = reinterpret_cast<uintptr_t>(sideLog);
         }
 
-        ~RocksteadySideLogCommitRpc()
+        ~GeminiSideLogCommitRpc()
         {}
 
         void
@@ -475,7 +478,7 @@ class GeminiMigration {
         const string localLocator;
 
         friend class RocksteadyMigration;
-        DISALLOW_COPY_AND_ASSIGN(RocksteadySideLogCommitRpc);
+        DISALLOW_COPY_AND_ASSIGN(GeminiSideLogCommitRpc);
     };
 
     bool tookOwnership;
@@ -486,7 +489,7 @@ class GeminiMigration {
 
     uint32_t nextSideLogCommit;
 
-    Tub<RocksteadySideLogCommitRpc> sideLogCommitRpc;
+    Tub<GeminiSideLogCommitRpc> sideLogCommitRpc;
 
     uint64_t migrationStartTS;
 

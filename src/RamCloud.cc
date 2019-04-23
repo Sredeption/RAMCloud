@@ -884,6 +884,32 @@ GetLogMetricsRpc::wait(ProtoBuf::LogMetrics& logMetrics)
         respHdr->logMetricsLength, &logMetrics);
 }
 
+GeminiMigrateTabletRpc::GeminiMigrateTabletRpc(RamCloud* ramcloud,
+        uint64_t tableId, uint64_t startKeyHash, uint64_t endKeyHash,
+        ServerId sourceServerId, ServerId destinationServerId)
+    : ServerIdRpcWrapper(ramcloud->clientContext, destinationServerId,
+            sizeof(WireFormat::GeminiMigrateTablet::Response))
+{
+    WireFormat::GeminiMigrateTablet::Request* reqHdr(
+            allocHeader<WireFormat::GeminiMigrateTablet>(
+            destinationServerId));
+    reqHdr->tableId = tableId;
+    reqHdr->startKeyHash = startKeyHash;
+    reqHdr->endKeyHash = endKeyHash;
+    reqHdr->sourceServerId = sourceServerId.getId();
+    send();
+}
+
+bool
+GeminiMigrateTabletRpc::wait()
+{
+    waitAndCheckErrors();
+    const WireFormat::GeminiMigrateTablet::Response* respHdr(
+            getResponseHeader<WireFormat::GeminiMigrateTablet>());
+
+    return respHdr->migrationStarted;
+}
+
 /**
  * Retrieve performance counters from the server that stores a particular
  * object.

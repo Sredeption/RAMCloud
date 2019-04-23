@@ -1,4 +1,5 @@
 #include "AuxiliaryManager.h"
+#include "Fence.h"
 
 namespace RAMCloud {
 

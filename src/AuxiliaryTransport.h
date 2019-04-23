@@ -406,7 +406,8 @@ class AuxiliaryTransport : public Transport{
 
         ServerRpc(AuxiliaryTransport* transport, uint64_t sequence,
                 const Driver::Address* clientAddress, RpcId rpcId)
-            : t(transport)
+            : Transport::ServerRpc(true)
+            , t(transport)
             , sequence(sequence)
             , cancelled(false)
             , rpcId(rpcId)
@@ -419,11 +420,6 @@ class AuxiliaryTransport : public Transport{
             , timerLinks()
             , outgoingResponseLinks()
         {}
-
-        bool isAuxiliary() override
-        {
-            return true;
-        }
 
         DISALLOW_COPY_AND_ASSIGN(ServerRpc);
     };

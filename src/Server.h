@@ -133,7 +133,7 @@ class Server {
 
     Tub<std::thread> auxDispatchThread;
 
-    static void auxDispatchMain(Dispatch *dispatch);
+    static void auxDispatchMain(Context *context, const ServerConfig* config);
 
     DISALLOW_COPY_AND_ASSIGN(Server);
 };

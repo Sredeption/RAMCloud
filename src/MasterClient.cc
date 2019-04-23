@@ -251,7 +251,7 @@ GeminiPrepForMigrationRpc::wait(uint64_t* numHTBuckets, string *auxLocator)
 
     *auxLocator = string(static_cast<char *>(
                              response->getRange(sizeof32(*respHdr),
-                                                respHdr->locatorLength)),
+                                                static_cast<uint32_t>(respHdr->locatorLength))),
                          respHdr->locatorLength);
     return respHdr->safeVersion;
 }

@@ -58,10 +58,7 @@ Server::Server(Context* context, const ServerConfig* config)
 //        context, config->localLocator, config->segmentSize);
     context->rocksteadyMigrationManager =
         new RocksteadyMigrationManager(context, config->localLocator);
-    auxDispatchThread.construct(auxDispatchMain, context->auxDispatch);
-    context->auxManager= new AuxiliaryManager(context);
-    context->geminiMigrationManager =
-        new GeminiMigrationManager(context, config->localLocator);
+    auxDispatchThread.construct(auxDispatchMain, context, config);
 }
 
 /**
@@ -228,9 +225,13 @@ Server::enlist(ServerId replacingId)
     }
 }
 
-void Server::auxDispatchMain(Dispatch *dispatch)
+void Server::auxDispatchMain(Context *context, const ServerConfig* config)
 {
-    dispatch->run();
+    context->auxDispatch = new Dispatch(true);
+    context->auxManager = new AuxiliaryManager(context);
+    context->geminiMigrationManager =
+        new GeminiMigrationManager(context, config->localLocator);
+    context->auxDispatch->run();
 }
 
 } // namespace RAMCloud

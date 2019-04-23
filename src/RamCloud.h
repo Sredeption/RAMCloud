@@ -400,6 +400,22 @@ class GetLogMetricsRpc: public RpcWrapper {
     DISALLOW_COPY_AND_ASSIGN(GetLogMetricsRpc);
 };
 
+class GeminiMigrateTabletRpc : public ServerIdRpcWrapper {
+  public:
+    GeminiMigrateTabletRpc(RamCloud *ramcloud, uint64_t tableId,
+                           uint64_t startKeyHash, uint64_t endKeyHash,
+                           ServerId sourceServerId,
+                           ServerId destinationServerId);
+
+    ~GeminiMigrateTabletRpc()
+    {}
+
+    bool wait();
+
+  PRIVATE:
+    DISALLOW_COPY_AND_ASSIGN(GeminiMigrateTabletRpc);
+};
+
 /**
  * Encapsulates the state of a RamCloud::getMetrics operation,
  * allowing it to execute asynchronously.
