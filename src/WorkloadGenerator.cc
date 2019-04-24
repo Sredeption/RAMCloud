@@ -80,6 +80,7 @@ void WorkloadGenerator::run(bool issueMigration)
         string keyStr = std::to_string(generator->nextNumber());
         SampleType type;
         uint64_t start = Cycles::rdtsc();
+
         if (rand() <= readThreshold) {
             client->read(keyStr.c_str(), keyStr.length());
             readCount++;
@@ -107,7 +108,9 @@ void WorkloadGenerator::run(bool issueMigration)
             outcomingBandwidth = currentOutcoming;
             lastTime = stop;
         }
-        samples.emplace_back(start, stop, type);
+        samples.emplace_back(start, stop, type,
+                             Key::getHash(client->getTableId(), keyStr.c_str(),
+                                          (uint16_t)keyStr.length()));
 
         if (issueMigration && stop > experimentStartTime + oneSecond) {
             issueMigration = false;

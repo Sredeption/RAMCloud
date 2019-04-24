@@ -76,7 +76,7 @@ class GeminiMigration {
     int tearDown();
 
     // Change as necessary.
-    LogLevel ll = NOTICE;
+    LogLevel ll = DEBUG;
 
     Context *context;
 
@@ -113,6 +113,8 @@ class GeminiMigration {
     Tub<uint64_t> sourceSafeVersion;
 
     string sourceAuxLocator;
+
+    Transport::SessionRef sourceSession;
 
     Tub<GeminiPrepForMigrationRpc> prepareSourceRpc;
 
@@ -185,7 +187,7 @@ class GeminiMigration {
 
     Tub<Buffer> priorityHashesResponseBuffer;
 
-    Tub<RocksteadyMigrationPriorityHashesRpc> priorityPullRpc;
+    Tub<GeminiMigrationPriorityHashesRpc> priorityPullRpc;
 
     bool priorityHashesSideLogCommitted;
 
@@ -193,9 +195,9 @@ class GeminiMigration {
 
     static const uint32_t PARTITION_PIPELINE_DEPTH = 8;
 
-    class RocksteadyHashPartition {
+    class GeminiHashPartition {
       public:
-        explicit RocksteadyHashPartition(uint64_t startHTBucket,
+        explicit GeminiHashPartition(uint64_t startHTBucket,
                                          uint64_t endHTBucket)
             : startHTBucket(startHTBucket), endHTBucket(endHTBucket),
               currentHTBucket(startHTBucket), currentHTBucketEntry(0),
@@ -210,7 +212,7 @@ class GeminiMigration {
             }
         }
 
-        ~RocksteadyHashPartition()
+        ~GeminiHashPartition()
         {}
 
       PRIVATE:
@@ -241,28 +243,28 @@ class GeminiMigration {
             freeReplayBuffers;
 
         friend class GeminiMigration;
-        DISALLOW_COPY_AND_ASSIGN(RocksteadyHashPartition);
+        DISALLOW_COPY_AND_ASSIGN(GeminiHashPartition);
     };
 
     static const uint32_t MAX_NUM_PARTITIONS = 8;
 
-    Tub<RocksteadyHashPartition> partitions[MAX_NUM_PARTITIONS];
+    Tub<GeminiHashPartition> partitions[MAX_NUM_PARTITIONS];
 
     uint32_t numCompletedPartitions;
 
     class GeminiPullRpc {
       public:
-        GeminiPullRpc(Context *context, ServerId sourceServerId,
+        GeminiPullRpc(Context *context, Transport::SessionRef session,
                       uint64_t tableId, uint64_t startKeyHash,
                       uint64_t endKeyHash,
                       uint64_t currentHTBucket,
                       uint64_t currentHTBucketEntry,
                       uint64_t endHTBucket, uint32_t numRequestedBytes,
                       Tub<Buffer> *response,
-                      Tub<RocksteadyHashPartition> *partition)
+                      Tub<GeminiHashPartition> *partition)
             : partition(partition), responseBuffer(response), rpc()
         {
-            rpc.construct(context, sourceServerId, tableId, startKeyHash,
+            rpc.construct(context, session, tableId, startKeyHash,
                           endKeyHash, currentHTBucket, currentHTBucketEntry,
                           endHTBucket, numRequestedBytes, response->get());
         }
@@ -273,11 +275,11 @@ class GeminiMigration {
         }
 
       PRIVATE:
-        Tub<RocksteadyHashPartition> *partition;
+        Tub<GeminiHashPartition> *partition;
 
         Tub<Buffer> *responseBuffer;
 
-        Tub<RocksteadyMigrationPullHashesRpc> rpc;
+        Tub<GeminiMigrationPullHashesRpc> rpc;
 
         friend class GeminiMigration;
         DISALLOW_COPY_AND_ASSIGN(GeminiPullRpc);
@@ -297,7 +299,7 @@ class GeminiMigration {
 
     class GeminiReplayRpc : public Transport::ServerRpc {
       public:
-        explicit GeminiReplayRpc(Tub<RocksteadyHashPartition> *partition,
+        explicit GeminiReplayRpc(Tub<GeminiHashPartition> *partition,
                                  Tub<Buffer> *response,
                                  Tub<SideLog> *sideLog,
                                  string localLocator,
@@ -342,7 +344,7 @@ class GeminiMigration {
         }
 
       PRIVATE:
-        Tub<RocksteadyHashPartition> *partition;
+        Tub<GeminiHashPartition> *partition;
 
         Tub<Buffer> *responseBuffer;
 
@@ -358,7 +360,7 @@ class GeminiMigration {
 
     class GeminiPriorityReplayRpc : public Transport::ServerRpc {
       public:
-        explicit GeminiPriorityReplayRpc(Tub<RocksteadyHashPartition> *
+        explicit GeminiPriorityReplayRpc(Tub<GeminiHashPartition> *
         partition, Tub<Buffer> *response, Tub<SideLog> *sideLog,
                                          string localLocator,
                                          SegmentCertificate certificate)
@@ -402,7 +404,7 @@ class GeminiMigration {
         }
 
       PRIVATE:
-        Tub<RocksteadyHashPartition> *partition;
+        Tub<GeminiHashPartition> *partition;
 
         Tub<Buffer> *responseBuffer;
 

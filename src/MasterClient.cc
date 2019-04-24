@@ -256,6 +256,76 @@ GeminiPrepForMigrationRpc::wait(uint64_t* numHTBuckets, string *auxLocator)
     return respHdr->safeVersion;
 }
 
+GeminiMigrationPriorityHashesRpc ::GeminiMigrationPriorityHashesRpc (
+        Context* context, Transport::SessionRef session, uint64_t tableId,
+        uint64_t startKeyHash, uint64_t endKeyHash,
+        uint64_t tombstoneSafeVersion, uint64_t numRequestedHashes,
+        Buffer* requestedPriorityHashes, Buffer* response)
+    : AuxiliaryRpcWrapper(context, session,
+            sizeof(WireFormat::RocksteadyMigrationPriorityHashes::Response),
+            response)
+{
+    WireFormat::RocksteadyMigrationPriorityHashes::Request *reqHdr(
+        allocHeader<WireFormat::RocksteadyMigrationPriorityHashes>(ServerId()));
+    reqHdr->tableId = tableId;
+    reqHdr->startKeyHash = startKeyHash;
+    reqHdr->endKeyHash = endKeyHash;
+    reqHdr->tombstoneSafeVersion = tombstoneSafeVersion;
+    reqHdr->numRequestedHashes = numRequestedHashes;
+    request.append(requestedPriorityHashes, 0, requestedPriorityHashes->size());
+    send();
+}
+
+uint32_t
+GeminiMigrationPriorityHashesRpc ::wait(SegmentCertificate* certificate)
+{
+    waitAndCheckErrors();
+    const WireFormat::RocksteadyMigrationPriorityHashes::Response* respHdr(
+            getResponseHeader<WireFormat::RocksteadyMigrationPriorityHashes>());
+    if (certificate != NULL) {
+        *certificate = respHdr->certificate;
+    }
+    return respHdr->numReturnedLogEntries;
+}
+
+GeminiMigrationPullHashesRpc::GeminiMigrationPullHashesRpc (
+        Context* context, Transport::SessionRef session, uint64_t tableId,
+        uint64_t startKeyHash, uint64_t endKeyHash, uint64_t currentHTBucket,
+        uint64_t currentHTBucketEntry, uint64_t endHTBucket,
+        uint32_t numRequestedBytes, Buffer* response)
+    : AuxiliaryRpcWrapper(context, session,
+            sizeof(WireFormat::RocksteadyMigrationPullHashes::Response),
+            response)
+{
+    WireFormat::RocksteadyMigrationPullHashes::Request *reqHdr(
+        allocHeader<WireFormat::RocksteadyMigrationPullHashes>(ServerId()));
+    reqHdr->tableId = tableId;
+    reqHdr->startKeyHash = startKeyHash;
+    reqHdr->endKeyHash = endKeyHash;
+    reqHdr->currentHTBucket = currentHTBucket;
+    reqHdr->currentHTBucketEntry = currentHTBucketEntry;
+    reqHdr->endHTBucket = endHTBucket;
+    reqHdr->numRequestedBytes = numRequestedBytes;
+    send();
+}
+
+uint32_t
+GeminiMigrationPullHashesRpc::wait(uint64_t* nextHTBucket,
+        uint64_t* nextHTBucketEntry, SegmentCertificate* certificate)
+{
+    waitAndCheckErrors();
+    const WireFormat::RocksteadyMigrationPullHashes::Response* respHdr(
+            getResponseHeader<WireFormat::RocksteadyMigrationPullHashes>());
+    *nextHTBucket = respHdr->nextHTBucket;
+    *nextHTBucketEntry = respHdr->nextHTBucketEntry;
+
+    if(certificate != NULL) {
+        *certificate = respHdr->certificate;
+    }
+
+    return respHdr->numReturnedBytes;
+}
+
 /**
  * This RPC is sent to an index server to request that it insert an index
  * entry in an indexlet it holds.

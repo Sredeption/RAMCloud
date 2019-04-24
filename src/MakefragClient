@@ -30,6 +30,7 @@ CLIENT_SRCFILES := \
 		   src/ArpCache.cc \
 		   src/AuxiliaryManager.cc \
 		   src/AuxiliaryTransport.cc \
+		   src/AuxiliaryRpcWrapper.cc \
 		   src/BasicTransport.cc \
 		   src/Buffer.cc \
 		   src/CRamCloud.cc \

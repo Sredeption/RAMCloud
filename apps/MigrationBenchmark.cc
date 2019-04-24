@@ -1229,10 +1229,16 @@ class GeminiClient : public RAMCloud::WorkloadGenerator::Client {
 
     void read(const char *key, uint64_t keyLen)
     {
+        Buffer value;
+        bool exists;
+        ramcloud->read(pressTableId, key, static_cast<uint16_t>(keyLen), &value,
+                       NULL, NULL, &exists);
     }
 
     void write(const char *key, uint64_t keyLen, char *value, uint32_t valueLen)
     {
+        ramcloud->write(pressTableId, key, static_cast<uint16_t>(keyLen), value,
+                        valueLen, NULL, NULL, true);
     }
 
     void startMigration()

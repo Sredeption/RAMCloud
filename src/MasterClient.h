@@ -17,6 +17,7 @@
 #define RAMCLOUD_MASTERCLIENT_H
 
 #include <MigrationPartition.pb.h>
+#include "AuxiliaryRpcWrapper.h"
 #include "Buffer.h"
 #include "Context.h"
 #include "CoordinatorClient.h"
@@ -196,6 +197,46 @@ class GeminiPrepForMigrationRpc : public ServerIdRpcWrapper {
 
   PRIVATE:
     DISALLOW_COPY_AND_ASSIGN(GeminiPrepForMigrationRpc);
+};
+
+class GeminiMigrationPriorityHashesRpc : public AuxiliaryRpcWrapper {
+  public:
+    GeminiMigrationPriorityHashesRpc(
+        Context *context, Transport::SessionRef session, uint64_t tableId,
+        uint64_t startKeyHash, uint64_t endKeyHash,
+        uint64_t tombstoneSafeVersion, uint64_t numRequestedHashes,
+        Buffer *requestedPriorityHashes, Buffer *response);
+
+    ~GeminiMigrationPriorityHashesRpc()
+    {}
+
+    uint32_t wait(SegmentCertificate *certificate = NULL);
+
+
+  PRIVATE:
+    DISALLOW_COPY_AND_ASSIGN(GeminiMigrationPriorityHashesRpc);
+};
+
+/**
+ * Encapsulates the state of a MasterClient::rocksteadyMigrationPullHashes
+ * request, allowing it to execute asynchronously.
+ */
+class GeminiMigrationPullHashesRpc : public AuxiliaryRpcWrapper {
+  public:
+    GeminiMigrationPullHashesRpc(
+        Context *context, Transport::SessionRef session, uint64_t tableId,
+        uint64_t startKeyHash, uint64_t endKeyHash, uint64_t currentHTBucket,
+        uint64_t currentHTBucketEntry, uint64_t endHTBucket,
+        uint32_t numRequestedBytes, Buffer *response);
+
+    ~GeminiMigrationPullHashesRpc()
+    {}
+
+    uint32_t wait(uint64_t *nextHTBucket, uint64_t *nextHTBucketEntry,
+                  SegmentCertificate *certificate = NULL);
+
+  PRIVATE:
+    DISALLOW_COPY_AND_ASSIGN(GeminiMigrationPullHashesRpc);
 };
 
 /**

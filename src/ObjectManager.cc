@@ -24,6 +24,7 @@
 #include "Object.h"
 #include "PerfStats.h"
 #include "RocksteadyMigrationManager.h"
+#include "GeminiMigrationManager.h"
 #include "ShortMacros.h"
 #include "RawMetrics.h"
 #include "Tub.h"
@@ -389,7 +390,7 @@ ObjectManager::readObject(Key& key, Buffer* outBuffer,
                 {
                     // The tablet is still under migration. Request for a priority
                     // migration and ask the client to retry after some time.
-                    context->rocksteadyMigrationManager->requestPriorityHash(
+                    context->geminiMigrationManager->requestPriorityHash(
                         t.tableId, t.startKeyHash, t.endKeyHash,
                         key.getHash());
                 }

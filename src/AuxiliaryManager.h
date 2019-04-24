@@ -24,6 +24,8 @@ class AuxiliaryManager : Dispatch::Poller {
 
     string getAuxiliaryLocator();
 
+    Transport::SessionRef openSession(string locator);
+
   private:
     CommQueue<Transport::ServerRpc *> replyQueue;
     DpdkDriver *driver;

@@ -38,4 +38,11 @@ string AuxiliaryManager::getAuxiliaryLocator()
     return transport->getServiceLocator();
 }
 
+Transport::SessionRef AuxiliaryManager::openSession(string locator)
+{
+    vector<ServiceLocator> locators = ServiceLocator::parseServiceLocators(
+        locator);
+    return transport->getSession(&locators[0]);
+}
+
 }

@@ -1,6 +1,7 @@
 #include "GeminiMigrationManager.h"
 #include "MasterService.h"
 #include "WorkerManager.h"
+#include "AuxiliaryManager.h"
 
 namespace RAMCloud {
 
@@ -144,8 +145,8 @@ GeminiMigration::GeminiMigration(Context *context,
       localLocator(localLocator), sourceServerId(sourceServerId),
       tableId(tableId), startKeyHash(startKeyHash), endKeyHash(endKeyHash),
       phase(GeminiMigration::SETUP), sourceNumHTBuckets(), sourceSafeVersion(),
-      sourceAuxLocator(), prepareSourceRpc(), getHeadOfLogRpc(),
-      takeOwnershipRpc(),
+      sourceAuxLocator(), sourceSession(), prepareSourceRpc(),
+      getHeadOfLogRpc(), takeOwnershipRpc(),
       priorityLock("priorityLock"), waitingPriorityHashes(),
       inProgressPriorityHashes(), priorityHashesRequestBuffer(),
       priorityHashesResponseBuffer(), priorityPullRpc(),
@@ -336,6 +337,8 @@ GeminiMigration::prepare()
                 prepareSourceRpc->wait(&sourceNumHTBuckets, &sourceAuxLocator));
             objectManager->raiseSafeVersion(*sourceSafeVersion);
 
+            sourceSession = context->auxManager->openSession(sourceAuxLocator);
+
             RAMCLOUD_LOG(ll, "Successfully raised safeVersion above %lu"
                              " in preparation for migrating tablet[0x%lx, 0x%lx] in"
                              " table %lu from master %lu.", *sourceSafeVersion,
@@ -349,8 +352,6 @@ GeminiMigration::prepare()
 
             context->workerManager->handoffRpc(
                 getHeadOfLogRpc.get());
-
-            phase = COMPLETED;
 
             return 1;
         } else {
@@ -529,7 +530,7 @@ GeminiMigration::pullAndReplay_priorityHashes()
         }
 
         // Issue the priority rpc.
-        priorityPullRpc.construct(context, sourceServerId, tableId,
+        priorityPullRpc.construct(context, sourceSession, tableId,
                                   startKeyHash, endKeyHash, *sourceSafeVersion,
                                   numRequestedHashes,
                                   priorityHashesRequestBuffer.get(),
@@ -563,7 +564,7 @@ GeminiMigration::pullAndReplay_reapPullRpcs()
                                                      &nextHTBucketEntry);
 
             // Update the partition state on which this pull rpc was issued.
-            Tub<RocksteadyHashPartition> *partition = (*pullRpc)->partition;
+            Tub<GeminiHashPartition> *partition = (*pullRpc)->partition;
             (*partition)->currentHTBucket = nextHTBucket;
             (*partition)->currentHTBucketEntry = nextHTBucketEntry;
             (*partition)->totalPulledBytes += numReturnedBytes;
@@ -619,7 +620,7 @@ GeminiMigration::pullAndReplay_reapReplayRpcs()
         if ((*replayRpc)->isReady()) {
             // If the replay has completed, update the corresponding
             // partition's state.
-            Tub<RocksteadyHashPartition> *partition = (*replayRpc)->partition;
+            Tub<GeminiHashPartition> *partition = (*replayRpc)->partition;
             Tub<Buffer> *responseBuffer = (*replayRpc)->responseBuffer;
             Tub<SideLog> *sideLog = (*replayRpc)->sideLog;
             uint32_t numReplayedBytes = (*responseBuffer)->size();
@@ -686,7 +687,7 @@ GeminiMigration::pullAndReplay_sendPullRpcs()
     if (freePullRpcs.size() != 0) {
         // Identify the set of partitions on which a pull rpc can be
         // issued.
-        std::deque<Tub<RocksteadyHashPartition> *> candidatePartitions;
+        std::deque<Tub<GeminiHashPartition> *> candidatePartitions;
 
         for (uint32_t i = 0; i < MAX_NUM_PARTITIONS; i++) {
             // A partition is eligible for a pull rpc only if
@@ -704,8 +705,8 @@ GeminiMigration::pullAndReplay_sendPullRpcs()
         // Sort the set of candidate partitions on the number of bytes pulled
         // so far.
         std::sort(candidatePartitions.begin(), candidatePartitions.end(),
-                  [](const Tub<RocksteadyHashPartition> *leftPartition,
-                     const Tub<RocksteadyHashPartition> *rightPartition) -> bool {
+                  [](const Tub<GeminiHashPartition> *leftPartition,
+                     const Tub<GeminiHashPartition> *rightPartition) -> bool {
                       return (*leftPartition)->totalPulledBytes <
                              (*rightPartition)->totalPulledBytes;
                   });
@@ -715,7 +716,7 @@ GeminiMigration::pullAndReplay_sendPullRpcs()
                (candidatePartitions.size() != 0)) {
             // Get a pull rpc and partition to issue it on.
             Tub<GeminiPullRpc> *pullRpc = freePullRpcs.front();
-            Tub<RocksteadyHashPartition> *partition =
+            Tub<GeminiHashPartition> *partition =
                 candidatePartitions.front();
 
             uint64_t currentHTBucket = (*partition)->currentHTBucket;
@@ -725,7 +726,7 @@ GeminiMigration::pullAndReplay_sendPullRpcs()
             (*responseBuffer).construct();
 
             // Issue the rpc.
-            (*pullRpc).construct(context, sourceServerId, tableId, startKeyHash,
+            (*pullRpc).construct(context, sourceSession, tableId, startKeyHash,
                                  endKeyHash, currentHTBucket,
                                  currentHTBucketEntry,
                                  endHTBucket,
@@ -762,7 +763,7 @@ GeminiMigration::pullAndReplay_sendReplayRpcs()
 
     if (freeReplayRpcs.size() != 0) {
         // Identify the set of partitions eligible for a replay.
-        std::deque<Tub<RocksteadyHashPartition> *> candidatePartitions;
+        std::deque<Tub<GeminiHashPartition> *> candidatePartitions;
 
         // A partition is eligible for a replay only if
         // - it still exists.
@@ -781,8 +782,8 @@ GeminiMigration::pullAndReplay_sendReplayRpcs()
         // Sort the set of candidate partitions on the number of bytes
         // replayed so far.
         std::sort(candidatePartitions.begin(), candidatePartitions.end(),
-                  [](const Tub<RocksteadyHashPartition> *leftPartition,
-                     const Tub<RocksteadyHashPartition> *rightPartition) -> bool {
+                  [](const Tub<GeminiHashPartition> *leftPartition,
+                     const Tub<GeminiHashPartition> *rightPartition) -> bool {
                       return (*leftPartition)->totalReplayedBytes <
                              (*rightPartition)->totalReplayedBytes;
                   });
@@ -793,7 +794,7 @@ GeminiMigration::pullAndReplay_sendReplayRpcs()
             // Get a replay rpc and a partition to issue it on.
             Tub<GeminiReplayRpc> *replayRpc = freeReplayRpcs.front();
             Tub<SideLog> *sideLog = freeSideLogs.front();
-            Tub<RocksteadyHashPartition> *partition =
+            Tub<GeminiHashPartition> *partition =
                 candidatePartitions.front();
             Tub<Buffer> *responseBuffer =
                 (*partition)->freeReplayBuffers.front();
