@@ -117,7 +117,6 @@ cpu_range_migrate = '24-47'
 ids = [
     (7, server_port, cpu_range_migrate, 0), (9, server_port, cpu_range, 0),
     (5, server_port, cpu_range, 0), (6, server_port, cpu_range, 0),
-    (7, server_port, cpu_range_serve, 1),
     (4, server_port, cpu_range, 0),
     (10, server_port, cpu_range, 0), (11, server_port, cpu_range, 0),
     (12, server_port, cpu_range, 0), (14, server_port, cpu_range, 0),

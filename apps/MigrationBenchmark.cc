@@ -1145,9 +1145,9 @@ class GeminiClient : public RAMCloud::WorkloadGenerator::Client {
         }
     };
 
-    GeminiClient (RamCloud *ramcloud, int clientIndex, Migration *migration,
-                     uint16_t keyLength, uint32_t valueLength,
-                     uint32_t numObjects, uint64_t time)
+    GeminiClient(RamCloud *ramcloud, int clientIndex, Migration *migration,
+                 uint16_t keyLength, uint32_t valueLength,
+                 uint32_t numObjects, uint64_t time)
         : ramcloud(ramcloud), clientIndex(clientIndex), migration(migration),
           controlHubId(), keyLength(keyLength), valueLength(valueLength),
           numObjects(numObjects), experimentStartTime(0), migrationId(),
@@ -1196,7 +1196,7 @@ class GeminiClient : public RAMCloud::WorkloadGenerator::Client {
             while (true) {
                 try {
                     controlHubId = client->getTableId(testControlHub.c_str());
-                    pressTableId = client->getTableId("press table");
+                    pressTableId = client->getTableId(tableName.c_str());
                     break;
                 } catch (TableDoesntExistException &e) {
                 }
@@ -1251,9 +1251,9 @@ class GeminiClient : public RAMCloud::WorkloadGenerator::Client {
                      migration->targetServerId.indexNumber());
 
         geminiMigration.construct(ramcloud, migration->tableId,
-                                      migration->firstKey, migration->lastKey,
-                                      migration->sourceServerId,
-                                      migration->targetServerId);
+                                  migration->firstKey, migration->lastKey,
+                                  migration->sourceServerId,
+                                  migration->targetServerId);
         geminiMigration->wait();
         geminiMigration.destroy();
         migrationStartTime = Cycles::rdtsc();
@@ -1319,7 +1319,7 @@ class GeminiClient : public RAMCloud::WorkloadGenerator::Client {
     uint64_t time;
     Tub<GeminiMigrateTabletRpc> geminiMigration;
 
-    DISALLOW_COPY_AND_ASSIGN(GeminiClient )
+    DISALLOW_COPY_AND_ASSIGN(GeminiClient)
 };
 
 void geminiBasic()
@@ -1328,18 +1328,18 @@ void geminiBasic()
 
     const uint16_t keyLength = 30;
     const uint32_t valueLength = 100;
-    GeminiClient ::Migration
+    GeminiClient::Migration
         migration(tableId, firstKey, lastKey, ServerId(1, 0),
                   ServerId(newOwnerMasterId, 0), false);
     GeminiClient basicClient(client.get(), clientIndex, &migration,
-                                 keyLength, valueLength, objectCount, 7);
+                             keyLength, valueLength, objectCount, 7);
     RAMCloud::WorkloadGenerator workloadGenerator(
         "YCSB-B", targetOps, objectCount, objectSize, &basicClient);
 
     bool issueMigration = false;
     if (clientIndex == 0)
         issueMigration = true;
-    workloadGenerator.run(issueMigration);
+    workloadGenerator.asyncRun(issueMigration);
 
     std::vector<RAMCloud::WorkloadGenerator::TimeDist> result;
     std::vector<RAMCloud::WorkloadGenerator::TimeDist> readResult;
