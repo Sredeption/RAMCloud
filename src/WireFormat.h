@@ -709,6 +709,8 @@ struct GeminiPrepForMigration {
         uint64_t tableId;      // Table that the tablet belongs to.
         uint64_t startKeyHash; // Lower bound on the tablet's hash space.
         uint64_t endKeyHash;   // Upper bound on the tablet's hash space.
+        uint64_t sourceServerId;
+        uint64_t targetServerId;
     } __attribute__((packed));
     struct Response {
         ResponseCommon common;

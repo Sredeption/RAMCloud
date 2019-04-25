@@ -1,6 +1,5 @@
 #include <cstring>
 #include <string>
-#include <list>
 #include "WorkloadGenerator.h"
 #include "RawMetrics.h"
 
@@ -135,102 +134,6 @@ void WorkloadGenerator::run(bool issueMigration)
         }
 
 
-    }
-}
-
-void WorkloadGenerator::asyncRun(bool issueMigration)
-{
-    char value[objectSize];
-    uint64_t finishTryTime = 1;
-    uint64_t stop = 0;
-    const uint64_t hundredMS = Cycles::fromMicroseconds(100000);
-    const uint64_t oneSecond = Cycles::fromSeconds(1);
-
-    client->setup(objectCount, objectSize);
-
-    int readThreshold = (RAND_MAX / 100) * readPercent;
-
-    RamCloud *ramcloud = client->getRamCloud();
-    uint64_t tableId = client->getTableId();
-
-    std::list<Buffer *> freeBuffers;
-    int concurrency = 2;
-    for (int i = 0; i < concurrency; i++) {
-        freeBuffers.push_back(new Buffer());
-    }
-
-    int operationInFlight = 0;
-
-    std::list<std::pair<ReadRpc *, std::pair<uint64_t, Buffer *> >> readQueue;
-    std::list<std::pair<WriteRpc *, uint64_t >> writeQueue;
-
-    experimentStartTime = Cycles::rdtsc();
-    RAMCLOUD_LOG(WARNING, "benchmark start");
-    while (true) {
-
-        string keyStr = std::to_string(generator->nextNumber());
-        if (operationInFlight < concurrency) {
-            operationInFlight++;
-            if (rand() <= readThreshold) {
-                Buffer *buffer = freeBuffers.front();
-                freeBuffers.pop_front();
-                readQueue.emplace_back(
-                    new ReadRpc(ramcloud, tableId, keyStr.c_str(),
-                                (uint16_t) keyStr.size(),
-                                buffer),
-                    std::pair<uint64_t, Buffer *>(Cycles::rdtsc(), buffer));
-            } else {
-                writeQueue.emplace_back(
-                    new WriteRpc(ramcloud, tableId, keyStr.c_str(),
-                                 (uint16_t) keyStr.size(), value, objectSize),
-                    Cycles::rdtsc());
-            }
-        }
-
-        bool exists;
-        ramcloud->poll();
-        for (auto op = readQueue.begin(); op != readQueue.end();) {
-            if (op->first->isReady()) {
-                op->first->wait(NULL, &exists);
-
-                stop = Cycles::rdtsc();
-                samples.emplace_back(op->second.first, stop, READ,
-                                     op->first->keyHash);
-                freeBuffers.push_back(op->second.second);
-                operationInFlight--;
-                delete op->first;
-                op = readQueue.erase(op);
-            } else {
-                op++;
-            }
-        }
-
-        for (auto op = writeQueue.begin(); op != writeQueue.end();) {
-            if (op->first->isReady()) {
-                op->first->wait();
-                stop = Cycles::rdtsc();
-                samples.emplace_back(op->second, stop, WRITE,
-                                     op->first->keyHash);
-                operationInFlight--;
-                delete op->first;
-                op = writeQueue.erase(op);
-            } else {
-                op++;
-            }
-        }
-
-        stop = Cycles::rdtsc();
-        if (issueMigration && stop > experimentStartTime + oneSecond) {
-            issueMigration = false;
-            client->startMigration();
-        }
-        if (stop > experimentStartTime + finishTryTime * hundredMS) {
-            finishTryTime++;
-            if (client->isFinished()) {
-                RAMCLOUD_LOG(WARNING, "finish");
-                break;
-            }
-        }
     }
 }
 

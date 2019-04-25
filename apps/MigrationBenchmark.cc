@@ -25,6 +25,8 @@
 #include "ShortMacros.h"
 #include "WorkloadGenerator.h"
 #include "TpcC.h"
+#include "MigrationClient.h"
+#include "GeminiMigrationManager.h"
 
 using namespace RAMCloud;
 
@@ -1044,7 +1046,7 @@ void rocksteadyBasic()
     bool issueMigration = false;
     if (clientIndex == 0)
         issueMigration = true;
-    workloadGenerator.asyncRun(issueMigration);
+    workloadGenerator.asyncRun<ReadRpc>(issueMigration);
 
     std::vector<RAMCloud::WorkloadGenerator::TimeDist> result;
     std::vector<RAMCloud::WorkloadGenerator::TimeDist> readResult;
@@ -1334,12 +1336,17 @@ void geminiBasic()
     GeminiClient basicClient(client.get(), clientIndex, &migration,
                              keyLength, valueLength, objectCount, 7);
     RAMCloud::WorkloadGenerator workloadGenerator(
-        "YCSB-B", targetOps, objectCount, objectSize, &basicClient);
+        "YCSB-A", targetOps, objectCount, objectSize, &basicClient);
 
     bool issueMigration = false;
     if (clientIndex == 0)
         issueMigration = true;
-    workloadGenerator.asyncRun(issueMigration);
+
+#ifdef SPLIT_COPY
+    workloadGenerator.asyncRun<MigrationReadTask<ReadRpc, MigrationReadRpc>>(issueMigration);
+#else
+    workloadGenerator.asyncRun<ReadRpc>(issueMigration);
+#endif
 
     std::vector<RAMCloud::WorkloadGenerator::TimeDist> result;
     std::vector<RAMCloud::WorkloadGenerator::TimeDist> readResult;

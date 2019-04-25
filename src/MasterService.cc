@@ -621,7 +621,7 @@ MasterService::geminiMigrateTablet(
     {
         Dispatch::Lock(context->auxDispatch);
         migrationStarted = context->geminiMigrationManager->startMigration(
-                sourceServerId, tableId, startKeyHash, endKeyHash);
+                sourceServerId, serverId, tableId, startKeyHash, endKeyHash);
     }
 
     if (migrationStarted) {
@@ -672,9 +672,22 @@ MasterService::geminiPrepForMigration(
         return;
     }
 
-    bool changedState = tabletManager.changeState(tableId, startKeyHash,
-                                endKeyHash, TabletManager::NORMAL,
-                                TabletManager::LOCKED_FOR_MIGRATION);
+    bool changedState;
+#ifndef SPLIT_COPY
+    changedState = tabletManager.changeState(tableId, startKeyHash,
+                                             endKeyHash, TabletManager::NORMAL,
+                                             TabletManager::LOCKED_FOR_MIGRATION);
+#else
+    changedState = tabletManager.changeState(tableId, startKeyHash,
+                                             endKeyHash, TabletManager::NORMAL,
+                                             TabletManager::MIGRATION_SOURCE);
+    tabletManager.migrateTablet(tableId, startKeyHash,
+                                endKeyHash, 0,
+                                reqHdr->sourceServerId,
+                                reqHdr->targetServerId,
+                                TabletManager::MIGRATION_SOURCE);
+#endif
+
     if (!changedState) {
         LOG(WARNING, "Failed to lock tablet for migration: "
                 "tablet [0x%lx, 0x%lx] in table %lu", startKeyHash,
@@ -1953,7 +1966,8 @@ MasterService::read(const WireFormat::Read::Request* reqHdr,
         key, rpc->replyPayload, &rejectRules, &respHdr->version, valueOnly,
         &tablet);
     if (tablet.state == TabletManager::MIGRATION_SOURCE ||
-        tablet.state == TabletManager::MIGRATION_TARGET) {
+        tablet.state == TabletManager::MIGRATION_TARGET ||
+        tablet.state == TabletManager::ROCKSTEADY_MIGRATING ) {
         respHdr->migrating = true;
         respHdr->sourceId = tablet.sourceId;
         respHdr->targetId = tablet.targetId;
@@ -2346,9 +2360,7 @@ MasterService::rocksteadyDropSourceTablet(
         return;
     }
 
-    // If ROCKSTEADY_SOURCE_OWNS_TABLET is defined, the tablet was never
-    // locked for migration to begin with.
-#ifndef ROCKSTEADY_SOURCE_OWNS_TABLET
+#ifndef SPLIT_COPY
     if (sourceTablet.state != TabletManager::LOCKED_FOR_MIGRATION) {
         LOG(NOTICE, "Received a rocksteady drop tablet request on a tablet"
                 " that was not previously locked for migration: tablet[0x%lx,"
@@ -2356,7 +2368,15 @@ MasterService::rocksteadyDropSourceTablet(
         respHdr->common.status = STATUS_INTERNAL_ERROR;
         return;
     }
-#endif // ROCKSTEADY_SOURCE_OWNS_TABLET
+#else
+    if (sourceTablet.state != TabletManager::MIGRATION_SOURCE) {
+        LOG(NOTICE, "Received a rocksteady drop tablet request on a tablet"
+                " that was not previously locked for migration: tablet[0x%lx,"
+                " 0x%lx], tableId %lu", startKeyHash, endKeyHash, tableId);
+        respHdr->common.status = STATUS_INTERNAL_ERROR;
+        return;
+    }
+#endif
 
     bool removed = tabletManager.deleteTablet(tableId, startKeyHash,
             endKeyHash);
@@ -2490,9 +2510,7 @@ MasterService::rocksteadyMigrationPullHashes(
         return;
     }
 
-#ifndef ROCKSTEADY_SOURCE_OWNS_TABLET
-    // Check if the tablet was previously locked for migration only if
-    // ROCKSTEADY_SOURCE_OWNS_TABLET is not defined.
+#ifndef SPLIT_COPY
     if (sourceTablet.state != TabletManager::LOCKED_FOR_MIGRATION) {
         LOG(WARNING, "Migration Pull Hashes request for a tablet that was"
                 " not previously locked for migration: requested region"
@@ -2501,7 +2519,16 @@ MasterService::rocksteadyMigrationPullHashes(
         respHdr->common.status = STATUS_INTERNAL_ERROR;
         return;
     }
-#endif // ROCKSTEADY_SOURCE_OWNS_TABLET
+    #else
+    if (sourceTablet.state != TabletManager::MIGRATION_SOURCE) {
+        LOG(WARNING, "Migration Pull Hashes request for a tablet that was"
+                " not previously locked for migration: requested region"
+                " [0x%lx, 0x%lx], table %lu, and hash table bucket %lu",
+                startKeyHash, endKeyHash, tableId, currentHTBucket);
+        respHdr->common.status = STATUS_INTERNAL_ERROR;
+        return;
+    }
+#endif
 
     // Check to ensure that the set of hash table buckets to be scanned
     // will not overflow this master's hash table.

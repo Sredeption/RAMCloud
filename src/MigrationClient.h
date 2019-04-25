@@ -68,7 +68,7 @@ class MigrationReadTask {
     };
     RamCloud *ramcloud;
     uint64_t tableId;
-    const void *key;
+    void *key;
     uint16_t keyLength;
     Buffer *value;
     const RejectRules *rejectRules;
@@ -86,16 +86,25 @@ class MigrationReadTask {
     DISALLOW_COPY_AND_ASSIGN(MigrationReadTask)
 
   PUBLIC:
+    KeyHash keyHash;
 
     MigrationReadTask(
         RamCloud *ramcloud, uint64_t tableId, const void *key,
         uint16_t keyLength, Buffer *value,
         const RejectRules *rejectRules = NULL)
-        : ramcloud(ramcloud), tableId(tableId), key(key), keyLength(keyLength),
+        : ramcloud(ramcloud), tableId(tableId), key(NULL), keyLength(keyLength),
           value(value), rejectRules(rejectRules), readRpc(), sourceReadRpc(),
           targetReadRpc(), state(INIT), sourceBuffer(), targetBuffer(),
-          finishTime(), version(), objectExists(false)
+          finishTime(), version(), objectExists(false), keyHash()
     {
+        this->key = std::malloc(keyLength);
+        std::memcpy(this->key, key, keyLength);
+        keyHash = Key::getHash(tableId, key, keyLength);
+    }
+
+    ~MigrationReadTask()
+    {
+        std::free(key);
     }
 
     void performTask()
@@ -208,10 +217,6 @@ class MigrationReadTask {
         if (objectExists)
             *objectExists = this->objectExists;
     }
-};
-
-class MigrationReadKeysAndValueTask {
-
 };
 
 }

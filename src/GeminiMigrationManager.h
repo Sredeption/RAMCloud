@@ -6,6 +6,8 @@
 #include "ServerId.h"
 #include "ObjectManager.h"
 
+#define SPLIT_COPY
+
 namespace RAMCloud {
 
 class GeminiMigration;
@@ -18,8 +20,9 @@ class GeminiMigrationManager : Dispatch::Poller {
 
     int poll();
 
-    bool startMigration(ServerId sourceServerId, uint64_t tableId,
-                        uint64_t startKeyHash, uint64_t endKeyHash);
+    bool startMigration(ServerId sourceServerId, ServerId targetServerId,
+                        uint64_t tableId, uint64_t startKeyHash,
+                        uint64_t endKeyHash);
 
     bool requestPriorityHash(uint64_t tableId, uint64_t startKeyHash,
                              uint64_t endKeyHash, uint64_t priorityHash);
@@ -45,8 +48,8 @@ class GeminiMigrationManager : Dispatch::Poller {
 class GeminiMigration {
   public:
     explicit GeminiMigration(Context *context, string localLocator,
-                             ServerId sourceServerId, uint64_t tableId,
-                             uint64_t startKeyHash,
+                             ServerId sourceServerId, ServerId targetServerId,
+                             uint64_t tableId, uint64_t startKeyHash,
                              uint64_t endKeyHash);
 
     ~GeminiMigration();
@@ -87,6 +90,8 @@ class GeminiMigration {
     const string localLocator;
 
     const ServerId sourceServerId;
+
+    const ServerId targetServerId;
 
     const uint64_t tableId;
 
@@ -198,7 +203,7 @@ class GeminiMigration {
     class GeminiHashPartition {
       public:
         explicit GeminiHashPartition(uint64_t startHTBucket,
-                                         uint64_t endHTBucket)
+                                     uint64_t endHTBucket)
             : startHTBucket(startHTBucket), endHTBucket(endHTBucket),
               currentHTBucket(startHTBucket), currentHTBucketEntry(0),
               totalPulledBytes(0), totalReplayedBytes(0), allDataPulled(false),

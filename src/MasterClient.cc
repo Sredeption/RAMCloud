@@ -227,17 +227,20 @@ GetHeadOfLogRpc::wait()
 }
 
 GeminiPrepForMigrationRpc::GeminiPrepForMigrationRpc(
-        Context* context, ServerId sourceServerId, uint64_t tableId,
-        uint64_t startKeyHash, uint64_t endKeyHash)
+    Context *context, ServerId sourceServerId, ServerId targetServerId,
+    uint64_t tableId,
+    uint64_t startKeyHash, uint64_t endKeyHash)
     : ServerIdRpcWrapper(context, sourceServerId,
-            sizeof(WireFormat::GeminiPrepForMigration::Response))
+                         sizeof(WireFormat::GeminiPrepForMigration::Response))
 {
-    WireFormat::GeminiPrepForMigration::Request* reqHdr(
-            allocHeader<WireFormat::GeminiPrepForMigration>(
-                    sourceServerId));
+    WireFormat::GeminiPrepForMigration::Request *reqHdr(
+        allocHeader<WireFormat::GeminiPrepForMigration>(
+            sourceServerId));
     reqHdr->tableId = tableId;
     reqHdr->startKeyHash = startKeyHash;
     reqHdr->endKeyHash = endKeyHash;
+    reqHdr->sourceServerId = sourceServerId.getId();
+    reqHdr->targetServerId = targetServerId.getId();
     send();
 }
 

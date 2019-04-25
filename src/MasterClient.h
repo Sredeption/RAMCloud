@@ -186,8 +186,8 @@ class GetHeadOfLogRpc : public ServerIdRpcWrapper {
 
 class GeminiPrepForMigrationRpc : public ServerIdRpcWrapper {
   public:
-    GeminiPrepForMigrationRpc(Context *context,
-                              ServerId sourceServerId, uint64_t tableId,
+    GeminiPrepForMigrationRpc(Context *context, ServerId sourceServerId,
+                              ServerId targetServerId, uint64_t tableId,
                               uint64_t startKeyHash, uint64_t endKeyHash);
 
     ~GeminiPrepForMigrationRpc()

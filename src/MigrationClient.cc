@@ -26,7 +26,6 @@ void MigrationClient::putTablet(uint64_t tableId, const void *key,
     tableMap.emplace(
         TabletKey{tablet.tableId, tablet.startKeyHash},
         MigratingTablet(tablet, sourceId, targetId));
-    RAMCLOUD_LOG(NOTICE, "%lu to migrating", tablet.tableId);
 //    MigratingTablet &migratingTablet = result.first->second;
 //    CoordinatorClient::migrationGetLocator(
 //        ramcloud->clientContext,

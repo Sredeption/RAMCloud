@@ -75,6 +75,7 @@ int GeminiMigrationManager::poll()
 }
 
 bool GeminiMigrationManager::startMigration(ServerId sourceServerId,
+                                            ServerId targetServerId,
                                             uint64_t tableId,
                                             uint64_t startKeyHash,
                                             uint64_t endKeyHash)
@@ -108,6 +109,7 @@ bool GeminiMigrationManager::startMigration(ServerId sourceServerId,
     GeminiMigration *newMigration = new GeminiMigration(context,
                                                         this->localLocator,
                                                         sourceServerId,
+                                                        targetServerId,
                                                         tableId, startKeyHash,
                                                         endKeyHash);
     newMigration->migrationStartTS = Cycles::rdtsc();
@@ -139,10 +141,12 @@ bool GeminiMigrationManager::requestPriorityHash(uint64_t tableId,
 
 GeminiMigration::GeminiMigration(Context *context,
                                  string localLocator, ServerId sourceServerId,
+                                 ServerId targetServerId,
                                  uint64_t tableId, uint64_t startKeyHash,
                                  uint64_t endKeyHash)
     : context(context), tabletManager(), objectManager(),
       localLocator(localLocator), sourceServerId(sourceServerId),
+      targetServerId(targetServerId),
       tableId(tableId), startKeyHash(startKeyHash), endKeyHash(endKeyHash),
       phase(GeminiMigration::SETUP), sourceNumHTBuckets(), sourceSafeVersion(),
       sourceAuxLocator(), sourceSession(), prepareSourceRpc(),
@@ -317,6 +321,11 @@ GeminiMigration::prepare()
                          endKeyHash,
                          tableId, head.getSegmentId(), head.getSegmentOffset());
 
+            tabletManager->migrateTablet(
+                tableId, startKeyHash, endKeyHash, 0,
+                sourceServerId.getId(),
+                targetServerId.getId(), TabletManager::ROCKSTEADY_MIGRATING);
+
             // Initiate ownership transfer for the tablet under migration.
             uint64_t ctimeSegmentId = head.getSegmentId();
             uint64_t ctimeSegmentOffset = head.getSegmentOffset();
@@ -362,7 +371,8 @@ GeminiMigration::prepare()
     } else {
         // Send out the prepare rpc if it hasn't been sent out yet.
         prepareSourceRpc.construct(
-            context, sourceServerId, tableId, startKeyHash, endKeyHash);
+            context, sourceServerId, targetServerId, tableId, startKeyHash,
+            endKeyHash);
 
         RAMCLOUD_LOG(ll, "Sent out a prepare-for-migration request to"
                          " master %lu for tablet[0x%lx, 0x%lx] in table %lu.",

@@ -358,7 +358,9 @@ ObjectManager::readObject(Key& key, Buffer* outBuffer,
             // before the end of this method, setting this flag allows us to
             // increment this key's read count correctly if the read is
             // successfull.
+#ifndef SPLIT_COPY
             isRocksteady = true;
+#endif
         } else if (t.state == TabletManager::NORMAL) {
             // The tablet is in the NORMAL state. This is possible if the
             // tablet changed state from ROCKSTEADY_MIGRATION to NORMAL in
@@ -413,17 +415,6 @@ ObjectManager::readObject(Key& key, Buffer* outBuffer,
             }
         } else {
             // This is the normal case for when a lookup failed.
-            return STATUS_OBJECT_DOESNT_EXIST;
-        }
-    }
-
-    if (tablet != NULL) {
-        MigrationTargetManager::Migration *migration =
-            migrationTargetManager->getMigration(tablet->migrationId);
-
-        if (migration != NULL &&
-            tablet->state == TabletManager::MIGRATION_TARGET &&
-            version <= migration->getSafeVersion()) {
             return STATUS_OBJECT_DOESNT_EXIST;
         }
     }
