@@ -836,10 +836,10 @@ ClientTransactionTask::PrepareRpc::wait()
 
     WireFormat::TxPrepare::Response* respHdr =
             response->getStart<WireFormat::TxPrepare::Response>();
-    if (respHdr->vote == WireFormat::TxPrepare::ABORT) {
-        RAMCLOUD_LOG(NOTICE, "abort server:%s",
-                     session->serviceLocator.c_str());
-    }
+//    if (respHdr->vote == WireFormat::TxPrepare::ABORT) {
+//        RAMCLOUD_LOG(NOTICE, "abort server:%s",
+//                     session->serviceLocator.c_str());
+//    }
     return respHdr->vote;
 }
 

@@ -514,9 +514,6 @@ tpcc_oneClient(double runSeconds, TPCC::Driver *driver,
 
     uint32_t W_ID = clientIndex % (driver->getContext()->numWarehouse) + 1;
 
-    uint64_t prevIncoming = metrics->transport.receive.byteCount;
-    uint64_t prevOutcoming = metrics->transport.transmit.byteCount;
-
     while (true) {
         if (Cycles::rdtsc() - start > runCycles) {
             break;
@@ -567,15 +564,6 @@ tpcc_oneClient(double runSeconds, TPCC::Driver *driver,
         }
     }
 
-    uint64_t currentIncoming = metrics->transport.receive.byteCount;
-    uint64_t currentOutcoming = metrics->transport.transmit.byteCount;
-
-    RAMCLOUD_LOG(NOTICE, "%lf, %lf",
-                 static_cast<double > (currentIncoming -
-                                       prevIncoming) / 1024 / 102,
-                 static_cast<double >                        (
-                     currentOutcoming - prevOutcoming) / 1024 /
-                 102);
     double interval = Cycles::toSeconds(Cycles::rdtsc() - start);
     double tput = (double) total / interval;
     double avgLatency = totalLatency / (double) total;
@@ -730,8 +718,9 @@ class TpccClient {
         }
     };
 
-    TpccClient(RamCloud *ramcloud, uint64_t controlTable)
-        : ramcloud(ramcloud), controlTable(controlTable)
+    TpccClient(RamCloud *ramcloud, uint64_t controlTable, uint64_t time)
+        : ramcloud(ramcloud), controlTable(controlTable), time(time),
+          geminiMigration()
     {
 
     };
@@ -771,21 +760,26 @@ class TpccClient {
                 tpcc_oneClient(0.1, &driver, true);
             }
 
-            uint64_t migrationId = ramcloud->backupMigrate(
-                driver.getTableId(1), firstKey, lastKey, server2, false);
-            RAMCLOUD_LOG(NOTICE, "Issuing migration request:");
+            RAMCLOUD_LOG(WARNING, "Issuing migration request:");
             RAMCLOUD_LOG(NOTICE, "  table (%lu)", driver.getTableId(1));
             RAMCLOUD_LOG(NOTICE, "  first key %lu", firstKey);
             RAMCLOUD_LOG(NOTICE, "  last key  %lx", lastKey);
             RAMCLOUD_LOG(NOTICE, "  recipient master id %u",
                          server2.indexNumber());
+
+            geminiMigration.construct(ramcloud, driver.getTableId(1),
+                                      firstKey, lastKey,
+                                      server1,
+                                      server2);
+            geminiMigration->wait();
+            geminiMigration.destroy();
+            uint64_t experimentEndTime =
+                Cycles::rdtsc() + time * Cycles::fromSeconds(1);
+
             while (true) {
                 tpcc_oneClient(0.1, &driver, true, true);
-                bool isFinished = ramcloud->migrationQuery(migrationId);
-                if (isFinished) {
-                    RAMCLOUD_LOG(NOTICE, "migration %lu finished", migrationId);
+                if (Cycles::rdtsc() > experimentEndTime)
                     break;
-                }
             }
 
             for (int k = 0; k < 50; k++) {
@@ -828,9 +822,13 @@ class TpccClient {
         }
     };
 
+    DISALLOW_COPY_AND_ASSIGN(TpccClient)
+
   PRIVATE:
     RamCloud *ramcloud;
     uint64_t controlTable;
+    uint64_t time;
+    Tub<GeminiMigrateTabletRpc> geminiMigration;
 };
 
 class RamcloudClient : public RAMCloud::WorkloadGenerator::Client {
@@ -1025,7 +1023,7 @@ void basic_tpcc()
     ServerId server4 = ServerId(4u, 0u);
     controlTable = client->createTableToServer(testControlHub.c_str(),
                                                server4);
-    TpccClient tpccClient(client.get(), controlTable);
+    TpccClient tpccClient(client.get(), controlTable, 6);
     tpccClient.run();
 }
 
@@ -1336,14 +1334,15 @@ void geminiBasic()
     GeminiClient basicClient(client.get(), clientIndex, &migration,
                              keyLength, valueLength, objectCount, 7);
     RAMCloud::WorkloadGenerator workloadGenerator(
-        "YCSB-A", targetOps, objectCount, objectSize, &basicClient);
+        "YCSB-B", targetOps, objectCount, objectSize, &basicClient);
 
     bool issueMigration = false;
     if (clientIndex == 0)
         issueMigration = true;
 
 #ifdef SPLIT_COPY
-    workloadGenerator.asyncRun<MigrationReadTask<ReadRpc, MigrationReadRpc>>(issueMigration);
+    workloadGenerator.asyncRun<MigrationReadTask<ReadRpc, MigrationReadRpc>>(
+        issueMigration);
 #else
     workloadGenerator.asyncRun<ReadRpc>(issueMigration);
 #endif
@@ -1443,8 +1442,8 @@ try
 //    basic();
 //    rocksteadyBasic();
 //    ramcloudBasic();
-//    basic_tpcc();
-    geminiBasic();
+    basic_tpcc();
+//    geminiBasic();
 
     return 0;
 } catch (ClientException &e) {

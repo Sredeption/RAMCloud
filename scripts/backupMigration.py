@@ -151,7 +151,7 @@ if __name__ == '__main__':
     parser.add_option('-o', '--numOverwrite', type=int,
                       metavar='N', dest='num_overwrites', default=1,
                       help='Number of writes per key')
-    parser.add_option('-t', '--timeout', type=int, default=100,
+    parser.add_option('-t', '--timeout', type=int, default=1000,
                       metavar='SECS',
                       help="Abort if the client application doesn't finish within "
                            'SECS seconds')
