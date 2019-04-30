@@ -1593,7 +1593,8 @@ ObjectManager::prepareOp(PreparedOp& newOp, RejectRules* rejectRules,
         return STATUS_UNKNOWN_TABLET;
     if (tablet.state != TabletManager::NORMAL &&
         tablet.state != TabletManager::MIGRATION_SOURCE_PREP &&
-        tablet.state != TabletManager::MIGRATION_TARGET){
+        tablet.state != TabletManager::MIGRATION_TARGET &&
+        tablet.state != TabletManager::ROCKSTEADY_MIGRATING){
         return STATUS_UNKNOWN_TABLET;
     }
 
@@ -1605,18 +1606,18 @@ ObjectManager::prepareOp(PreparedOp& newOp, RejectRules* rejectRules,
         writePrepareFail(rpcResult, rpcResultPtr);
         return STATUS_OK;
     }
-    if (tablet.state == TabletManager::MIGRATION_TARGET &&
-        migrationTargetManager->isLocked(tablet.migrationId, key)) {
-        ServerId sourceServerId(tablet.sourceId);
-        vector<WireFormat::MigrationIsLocked::Range> ranges;
-        bool isLocked = MasterClient::migrationIsLocked(
-            context, sourceServerId, tablet.migrationId, key, ranges);
-        migrationTargetManager->update(tablet.migrationId, ranges);
-        if (isLocked) {
-            writePrepareFail(rpcResult, rpcResultPtr);
-            return STATUS_OK;
-        }
-    }
+//    if (tablet.state == TabletManager::MIGRATION_TARGET &&
+//        migrationTargetManager->isLocked(tablet.migrationId, key)) {
+//        ServerId sourceServerId(tablet.sourceId);
+//        vector<WireFormat::MigrationIsLocked::Range> ranges;
+//        bool isLocked = MasterClient::migrationIsLocked(
+//            context, sourceServerId, tablet.migrationId, key, ranges);
+//        migrationTargetManager->update(tablet.migrationId, ranges);
+//        if (isLocked) {
+//            writePrepareFail(rpcResult, rpcResultPtr);
+//            return STATUS_OK;
+//        }
+//    }
 
     LogEntryType currentType = LOG_ENTRY_TYPE_INVALID;
     Buffer currentBuffer;
@@ -1695,8 +1696,8 @@ ObjectManager::prepareOp(PreparedOp& newOp, RejectRules* rejectRules,
                      keyLength, reinterpret_cast<const char*>(keyString));
     } else if (tablet.state == TabletManager::MIGRATION_SOURCE_PREP ||
                tablet.state == TabletManager::MIGRATION_SOURCE) {
-        migrationSourceManager->lock(tablet.migrationId, key,
-            transactionManager->getTimestamp(newOp.getTransactionId()));
+//        migrationSourceManager->lock(tablet.migrationId, key,
+//            transactionManager->getTimestamp(newOp.getTransactionId()));
     }
 
     *newOpPtr = appends[0].reference.toInteger();
@@ -1934,7 +1935,8 @@ ObjectManager::commitRead(PreparedOp& op, Log::Reference& refToPreparedOp)
     if (tablet.state != TabletManager::NORMAL &&
         tablet.state != TabletManager::MIGRATION_SOURCE &&
         tablet.state != TabletManager::MIGRATION_SOURCE_PREP &&
-        tablet.state != TabletManager::MIGRATION_TARGET)
+        tablet.state != TabletManager::MIGRATION_TARGET &&
+        tablet.state != TabletManager::ROCKSTEADY_MIGRATING)
         return STATUS_UNKNOWN_TABLET;
 
     PreparedOpTombstone prepOpTombstone(op, log.getSegmentId(refToPreparedOp));
@@ -2012,7 +2014,8 @@ ObjectManager::commitRemove(PreparedOp& op,
     if (tablet.state != TabletManager::NORMAL &&
         tablet.state != TabletManager::MIGRATION_SOURCE &&
         tablet.state != TabletManager::MIGRATION_SOURCE_PREP &&
-        tablet.state != TabletManager::MIGRATION_TARGET)
+        tablet.state != TabletManager::MIGRATION_TARGET &&
+        tablet.state != TabletManager::ROCKSTEADY_MIGRATING)
         return STATUS_UNKNOWN_TABLET;
 
     LogEntryType type;
@@ -2127,7 +2130,8 @@ ObjectManager::commitWrite(PreparedOp& op,
     if (tablet.state != TabletManager::NORMAL &&
         tablet.state != TabletManager::MIGRATION_SOURCE &&
         tablet.state != TabletManager::MIGRATION_SOURCE_PREP &&
-        tablet.state != TabletManager::MIGRATION_TARGET)
+        tablet.state != TabletManager::MIGRATION_TARGET &&
+        tablet.state != TabletManager::ROCKSTEADY_MIGRATING)
         return STATUS_UNKNOWN_TABLET;
 
     LogEntryType type;

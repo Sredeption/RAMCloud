@@ -568,7 +568,7 @@ tpcc_oneClient(double runSeconds, TPCC::Driver *driver,
     double tput = (double) total / interval;
     double avgLatency = totalLatency / (double) total;
 
-    RAMCLOUD_LOG(NOTICE, "%.2lf, %.2lf", tput, avgLatency);
+    RAMCLOUD_LOG(NOTICE, "%.2lf, %.2lf, %d", tput, avgLatency, stat.txAbortCount[4]);
     return stat;
 }
 
@@ -1080,14 +1080,14 @@ void ramcloudBasic()
         migration(tableId, firstKey, lastKey, ServerId(1, 0),
                   ServerId(newOwnerMasterId, 0), false);
     RamcloudClient basicClient(client.get(), clientIndex, &migration,
-                               keyLength, valueLength, objectCount, 7);
+                               keyLength, valueLength, objectCount, 25);
     RAMCloud::WorkloadGenerator workloadGenerator(
-        "YCSB-B", targetOps, objectCount, objectSize, &basicClient);
+        "YCSB-A", targetOps, objectCount, objectSize, &basicClient);
 
     bool issueMigration = false;
     if (clientIndex == 0)
         issueMigration = true;
-    workloadGenerator.run(issueMigration);
+    workloadGenerator.asyncRun<ReadRpc>(issueMigration);
 
     std::vector<RAMCloud::WorkloadGenerator::TimeDist> result;
     std::vector<RAMCloud::WorkloadGenerator::TimeDist> readResult;

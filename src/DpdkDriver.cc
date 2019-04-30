@@ -160,7 +160,7 @@ DpdkDriver::DpdkDriver(Context* context, int port)
 
         nameBuffer[sizeof(nameBuffer) - 1] = 0; // Needed if name was too long.
         const char *argv[] = {"rc", "--file-prefix", nameBuffer, "-c", "1",
-                              "-n", "1", "-m", "512", NULL};
+                              "-n", "1", NULL};
         int argc = static_cast<int>(sizeof(argv) / sizeof(argv[0])) - 1;
 
         rte_openlog_stream(fileLogger.getFile());

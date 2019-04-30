@@ -241,10 +241,6 @@ LockTable::tryAcquireLock(Key& key, Log::Reference lockObjectRef)
 
     lockNum++;
     currentLockNum++;
-    uint64_t  ln= lockNum.load();
-    if (ln % 10000==0){
-        RAMCLOUD_LOG(NOTICE,"Lock num:%lu, current lock num:%lu", ln, currentLockNum.load());
-    }
 
     return true;
 }
