@@ -11,6 +11,7 @@
 
 #include "Cycles.h"
 #include "RamCloud.h"
+#include "PerfStats.h"
 
 namespace RAMCloud {
 
@@ -63,7 +64,7 @@ class WorkloadGenerator {
   private:
     class ZipfianGenerator {
       public:
-        explicit ZipfianGenerator(uint64_t n, double theta = 0.99)
+        explicit ZipfianGenerator(uint64_t n, double theta = 0.01)
             : n(n), theta(theta), alpha(1 / (1 - theta)), zetan(zeta(n, theta)),
               eta((1 - std::pow(2.0 / static_cast<double>(n), 1 - theta)) /
                   (1 - zeta(2, theta) / zetan))
@@ -233,6 +234,12 @@ class WorkloadGenerator {
 
         experimentStartTime = Cycles::rdtsc();
         RAMCLOUD_LOG(WARNING, "benchmark start");
+
+        uint64_t timestamp = 0;
+        uint64_t bandwidth = PerfStats::threadStats.networkOutputBytes +
+                             PerfStats::threadStats.networkInputBytes;
+        uint64_t lastTime = experimentStartTime;
+
         while (true) {
 
             string keyStr = std::to_string(generator->nextNumber());
@@ -288,6 +295,18 @@ class WorkloadGenerator {
             }
 
             stop = Cycles::rdtsc();
+            if (Cycles::toMicroseconds(stop - lastTime) > 100000) {
+                uint64_t current = PerfStats::threadStats.networkOutputBytes +
+                                   PerfStats::threadStats.networkInputBytes;
+                timestamp++;
+
+                RAMCLOUD_LOG(NOTICE, "%lu: %lf", timestamp,
+                             static_cast<double > (current - bandwidth) / 1024 /
+                             102);
+
+                bandwidth = current;
+                lastTime = stop;
+            }
             if (issueMigration && stop > experimentStartTime + oneSecond) {
                 issueMigration = false;
                 client->startMigration();

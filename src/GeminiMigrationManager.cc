@@ -9,7 +9,8 @@ GeminiMigrationManager::GeminiMigrationManager(
     Context *context, string localLocator)
     : Dispatch::Poller(context->auxDispatch, "GeminiMigrationManager"),
       context(context), tombstoneProtector(), localLocator(localLocator),
-      migrationsInProgress(), active(false)
+      migrationsInProgress(), active(false), timestamp(0), lastTime(0),
+      bandwidth(0)
 {
 
 }
@@ -70,7 +71,18 @@ int GeminiMigrationManager::poll()
     }
 
     active = false;
+    uint64_t stop = Cycles::rdtsc();
+    if (Cycles::toMicroseconds(stop - lastTime) > 100000) {
+        timestamp++;
 
+        uint64_t current = PerfStats::threadStats.networkInputBytes;
+        RAMCLOUD_LOG(NOTICE, "%lu: %lf", timestamp,
+                     static_cast<double > (current - bandwidth) / 1024 /
+                     102);
+        bandwidth = current;
+        lastTime = stop;
+
+    }
     return workPerformed == 0 ? 0 : 1;
 }
 

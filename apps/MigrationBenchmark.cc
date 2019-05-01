@@ -59,6 +59,45 @@ string status = "status";
 string filling = "filling";
 string ending = "ending";
 
+void printStatistics(RAMCloud::WorkloadGenerator &workloadGenerator)
+{
+    std::vector<RAMCloud::WorkloadGenerator::TimeDist> result;
+    std::vector<RAMCloud::WorkloadGenerator::TimeDist> readSource;
+    std::vector<RAMCloud::WorkloadGenerator::TimeDist> writeSource;
+    std::vector<RAMCloud::WorkloadGenerator::TimeDist> readTarget;
+    std::vector<RAMCloud::WorkloadGenerator::TimeDist> writeTarget;
+    workloadGenerator.statistics(result, RAMCloud::WorkloadGenerator::ALL);
+    workloadGenerator.statistics(readSource,
+                                 RAMCloud::WorkloadGenerator::READ, 1);
+    workloadGenerator.statistics(writeSource,
+                                 RAMCloud::WorkloadGenerator::WRITE, 1);
+    workloadGenerator.statistics(readTarget,
+                                 RAMCloud::WorkloadGenerator::READ, 2);
+    workloadGenerator.statistics(writeTarget,
+                                 RAMCloud::WorkloadGenerator::WRITE, 2);
+    RAMCLOUD_LOG(WARNING,
+                 "    overall   |    target    |    source    ");
+    for (uint64_t i = 0; i < result.size(); i++) {
+        RAMCLOUD_LOG(NOTICE,
+                     "%lu:%lu, %lu, %lu, %lf | %lu, %lu, %lu, %.2lf | %lu, %lu, %lu, %.2lf | %lu, %lu, %lu, %.2lf | %lu, %lu, %lu, %.2lf",
+                     i, result[i].p50, result[i].p999, result[i].avg,
+                     static_cast<double>(result[i].bandwidth) / 100.,
+                     readSource[i].p50, readSource[i].p999,
+                     readSource[i].avg,
+                     static_cast<double>(readSource[i].bandwidth) / 100.,
+                     writeSource[i].p50, writeSource[i].p999,
+                     writeSource[i].avg,
+                     static_cast<double>(writeSource[i].bandwidth) / 100.,
+                     readTarget[i].p50, readTarget[i].p999,
+                     readTarget[i].avg,
+                     static_cast<double>(readTarget[i].bandwidth) / 100.,
+                     writeTarget[i].p50, writeTarget[i].p999,
+                     writeTarget[i].avg,
+                     static_cast<double>(writeTarget[i].bandwidth) / 100.
+        );
+    }
+}
+
 class BasicClient : public RAMCloud::WorkloadGenerator::Client {
 
   PUBLIC:
@@ -345,15 +384,11 @@ class RocksteadyClient : public RAMCloud::WorkloadGenerator::Client {
         if (clientIndex == 0) {
             ServerId server1 = ServerId(1u, 0u);
             ServerId server3 = ServerId(3u, 0u);
-            ServerId server5 = ServerId(5u, 0u);
-
 
             uint64_t migrationTableId =
                 client->createTableToServer(tableName.c_str(), server1);
 
-            pressTableId = client->createTableToServer("press table",
-                                                       server5);
-//            pressTableId = migrationTableId;
+            pressTableId = migrationTableId;
 
             migration->tableId = migrationTableId;
             controlHubId = client->createTableToServer(testControlHub.c_str(),
@@ -374,7 +409,7 @@ class RocksteadyClient : public RAMCloud::WorkloadGenerator::Client {
             while (true) {
                 try {
                     controlHubId = client->getTableId(testControlHub.c_str());
-                    pressTableId = client->getTableId("press table");
+                    pressTableId = client->getTableId(tableName.c_str());
                     break;
                 } catch (TableDoesntExistException &e) {
                 }
@@ -568,7 +603,8 @@ tpcc_oneClient(double runSeconds, TPCC::Driver *driver,
     double tput = (double) total / interval;
     double avgLatency = totalLatency / (double) total;
 
-    RAMCLOUD_LOG(NOTICE, "%.2lf, %.2lf, %d", tput, avgLatency, stat.txAbortCount[4]);
+    RAMCLOUD_LOG(NOTICE, "%.2lf, %.2lf, %d", tput, avgLatency,
+                 stat.txAbortCount[4]);
     return stat;
 }
 
@@ -720,7 +756,7 @@ class TpccClient {
 
     TpccClient(RamCloud *ramcloud, uint64_t controlTable, uint64_t time)
         : ramcloud(ramcloud), controlTable(controlTable), time(time),
-          geminiMigration()
+          geminiMigration(), ramcloudMigration()
     {
 
     };
@@ -773,6 +809,12 @@ class TpccClient {
                                       server2);
             geminiMigration->wait();
             geminiMigration.destroy();
+
+//            ramcloudMigration.construct(ramcloud, driver.getTableId(1),
+//                                    firstKey, lastKey,
+//                                    server2);
+//            ramcloudMigration->wait();
+//            ramcloudMigration.destroy();
             uint64_t experimentEndTime =
                 Cycles::rdtsc() + time * Cycles::fromSeconds(1);
 
@@ -829,6 +871,7 @@ class TpccClient {
     uint64_t controlTable;
     uint64_t time;
     Tub<GeminiMigrateTabletRpc> geminiMigration;
+    Tub<MigrateTabletRpc> ramcloudMigration;
 };
 
 class RamcloudClient : public RAMCloud::WorkloadGenerator::Client {
@@ -1039,7 +1082,7 @@ void rocksteadyBasic()
     RocksteadyClient basicClient(client.get(), clientIndex, &migration,
                                  keyLength, valueLength, objectCount, 7);
     RAMCloud::WorkloadGenerator workloadGenerator(
-        "YCSB-B", targetOps, objectCount, objectSize, &basicClient);
+        "YCSB-A", targetOps, objectCount, objectSize, &basicClient);
 
     bool issueMigration = false;
     if (clientIndex == 0)
@@ -1347,28 +1390,7 @@ void geminiBasic()
     workloadGenerator.asyncRun<ReadRpc>(issueMigration);
 #endif
 
-    std::vector<RAMCloud::WorkloadGenerator::TimeDist> result;
-    std::vector<RAMCloud::WorkloadGenerator::TimeDist> readResult;
-    std::vector<RAMCloud::WorkloadGenerator::TimeDist> writeResult;
-    workloadGenerator.statistics(result, RAMCloud::WorkloadGenerator::ALL);
-    workloadGenerator.statistics(readResult,
-                                 RAMCloud::WorkloadGenerator::ALL, 1);
-    workloadGenerator.statistics(writeResult,
-                                 RAMCloud::WorkloadGenerator::ALL, 2);
-    RAMCLOUD_LOG(WARNING,
-                 "    overall   |    target    |    source    ");
-    for (uint64_t i = 0; i < result.size(); i++) {
-        RAMCLOUD_LOG(NOTICE,
-                     "%lu:%lu, %lu, %lu, %lf | %lu, %lu, %lu, %lf | %lu, %lu, %lu, %lf",
-                     i, result[i].p50, result[i].p999, result[i].avg,
-                     static_cast<double>(result[i].bandwidth) / 100.,
-                     readResult[i].p50, readResult[i].p999,
-                     readResult[i].avg,
-                     static_cast<double>(readResult[i].bandwidth) / 100.,
-                     writeResult[i].p50, writeResult[i].p999,
-                     writeResult[i].avg,
-                     static_cast<double>(writeResult[i].bandwidth) / 100.);
-    }
+    printStatistics(workloadGenerator);
 }
 
 int
@@ -1442,8 +1464,8 @@ try
 //    basic();
 //    rocksteadyBasic();
 //    ramcloudBasic();
-    basic_tpcc();
-//    geminiBasic();
+//    basic_tpcc();
+    geminiBasic();
 
     return 0;
 } catch (ClientException &e) {
