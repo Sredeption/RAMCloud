@@ -75,6 +75,10 @@ class RocksteadyMigrationManager : Dispatch::Poller {
 
     bool active;
 
+    uint64_t timestamp;
+    uint64_t lastTime;
+    uint64_t bandwidth;
+
     DISALLOW_COPY_AND_ASSIGN(RocksteadyMigrationManager);
 };
 
