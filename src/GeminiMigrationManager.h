@@ -6,6 +6,8 @@
 #include "ServerId.h"
 #include "ObjectManager.h"
 
+#include <unordered_set>
+
 #define SPLIT_COPY
 
 namespace RAMCloud {
@@ -26,6 +28,10 @@ class GeminiMigrationManager : Dispatch::Poller {
 
     bool requestPriorityHash(uint64_t tableId, uint64_t startKeyHash,
                              uint64_t endKeyHash, uint64_t priorityHash);
+
+    bool lookupPriorityHashes(uint64_t hash);
+
+    uint64_t updateRegularPullProgress(int i);
 
   PRIVATE:
     // Shared RAMCloud information.
@@ -190,6 +196,8 @@ class GeminiMigration {
 
     std::vector<uint64_t> waitingPriorityHashes;
 
+    std::unordered_set<uint64_t> finishedPriorityHashes;
+
     std::vector<uint64_t> inProgressPriorityHashes;
 
     Tub<Buffer> priorityHashesRequestBuffer;
@@ -252,6 +260,7 @@ class GeminiMigration {
             freeReplayBuffers;
 
         friend class GeminiMigration;
+        friend class GeminiMigrationManager;
         DISALLOW_COPY_AND_ASSIGN(GeminiHashPartition);
     };
 

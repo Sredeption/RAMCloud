@@ -107,6 +107,7 @@ class MigrationReadTask {
         std::free(key);
     }
 
+
     void performTask()
     {
         if (state == INIT) {
@@ -124,6 +125,12 @@ class MigrationReadTask {
                 readRpc.construct(ramcloud, tableId, key, keyLength, value,
                                   rejectRules);
                 state = NORMAL;
+            }
+
+
+            KeyHash hash = Key(tableId, key, keyLength).getHash();
+            if (ramcloud->lookupRegularPullProgrss(hash)) {
+            } else if (ramcloud->lookupPriorityPullProgrss(hash)) {
             }
 
         }
@@ -175,6 +182,8 @@ class MigrationReadTask {
                 }
 
                 value->reset();
+
+                targetReadRpc->updateProgress();
 
                 uint64_t versionConclusion;
                 bool existsConclusion;

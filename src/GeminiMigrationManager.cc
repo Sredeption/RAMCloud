@@ -151,6 +151,25 @@ bool GeminiMigrationManager::requestPriorityHash(uint64_t tableId,
         "Received a priority hash for a tablet that is not under migration!");
 }
 
+
+bool
+GeminiMigrationManager::lookupPriorityHashes(uint64_t hash) {
+    for (auto &migration : migrationsInProgress) {
+        if (migration->finishedPriorityHashes.find(hash) != migration->finishedPriorityHashes.end()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+uint64_t
+GeminiMigrationManager::updateRegularPullProgress(int i) {
+    for (auto &migration : migrationsInProgress) {
+        return migration->partitions[i]->currentHTBucket;
+    }
+    return 0;
+}
+
 GeminiMigration::GeminiMigration(Context *context,
                                  string localLocator, ServerId sourceServerId,
                                  ServerId targetServerId,
@@ -163,7 +182,7 @@ GeminiMigration::GeminiMigration(Context *context,
       phase(GeminiMigration::SETUP), sourceNumHTBuckets(), sourceSafeVersion(),
       sourceAuxLocator(), sourceSession(), prepareSourceRpc(),
       getHeadOfLogRpc(), takeOwnershipRpc(),
-      priorityLock("priorityLock"), waitingPriorityHashes(),
+      priorityLock("priorityLock"), waitingPriorityHashes(), finishedPriorityHashes(),
       inProgressPriorityHashes(), priorityHashesRequestBuffer(),
       priorityHashesResponseBuffer(), priorityPullRpc(),
       priorityHashesSideLogCommitted(false), priorityHashesSideLog(),
@@ -180,6 +199,7 @@ GeminiMigration::GeminiMigration(Context *context,
 
     // Reserve space for the priority hashes.
     waitingPriorityHashes.reserve(MAX_PRIORITY_HASHES * 4);
+    finishedPriorityHashes.reserve(MAX_PRIORITY_HASHES * 4);
     inProgressPriorityHashes.reserve(MAX_PRIORITY_HASHES * 4);
 
     // To begin with, all pull rpcs are free.
@@ -483,6 +503,12 @@ GeminiMigration::pullAndReplay_priorityHashes()
     // If a priority request is in progress, check if it has completed.
     if (priorityPullRpc) {
         if (priorityPullRpc->isReady()) {
+
+            for (auto hash = inProgressPriorityHashes.begin();
+                 hash != inProgressPriorityHashes.end(); hash++) {
+                finishedPriorityHashes.insert(*hash);
+            }
+
             SegmentCertificate certificate;
             uint32_t numReturnedHashes = priorityPullRpc->wait(&certificate);
 
@@ -590,6 +616,13 @@ GeminiMigration::pullAndReplay_reapPullRpcs()
             (*partition)->currentHTBucket = nextHTBucket;
             (*partition)->currentHTBucketEntry = nextHTBucketEntry;
             (*partition)->totalPulledBytes += numReturnedBytes;
+
+            for (auto it = finishedPriorityHashes.begin();
+                 it != finishedPriorityHashes.end(); it++) {
+                if ((*partition)->startHTBucket <= *it && *it <= ((*partition)->currentHTBucket - 1)) {
+                    finishedPriorityHashes.erase(*it);
+                }
+            }
 
                 LOG(ll, "Pull request migrated %u Bytes in partition[%lu,"
                         " %lu] (migrating tablet[0x%lx, 0x%lx] in table %lu)."

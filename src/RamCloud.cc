@@ -62,6 +62,8 @@ RamCloud::RamCloud(CommandLineOptions* options)
     , rpcTracker(new RpcTracker())
     , transactionManager(new ClientTransactionManager())
     , migrationClient(new MigrationClient(this))
+    , partitions()
+    , finishedPriorityHashes()
 {
     coordinatorLocator = options->getExternalStorageLocator();
     if (coordinatorLocator.size() == 0) {
@@ -85,6 +87,8 @@ RamCloud::RamCloud(Context* context)
     , rpcTracker(new RpcTracker())
     , transactionManager(new ClientTransactionManager())
     , migrationClient(new MigrationClient(this))
+    , partitions()
+    , finishedPriorityHashes()
 {
     coordinatorLocator = context->options->getExternalStorageLocator();
     if (coordinatorLocator.size() == 0) {
@@ -105,6 +109,8 @@ RamCloud::RamCloud(const char* locator, const char* clusterName)
     , rpcTracker(new RpcTracker())
     , transactionManager(new ClientTransactionManager())
     , migrationClient(new MigrationClient(this))
+    , partitions()
+    , finishedPriorityHashes()
 {
     clientContext->coordinatorSession->setLocation(locator, clusterName);
 }
@@ -117,6 +123,8 @@ RamCloud::RamCloud(Context* context, const char* locator,
     , rpcTracker(new RpcTracker())
     , transactionManager(new ClientTransactionManager())
     , migrationClient(new MigrationClient(this))
+    , partitions()
+    , finishedPriorityHashes()
 {
     clientContext->coordinatorSession->setLocation(locator, clusterName);
 }
@@ -2278,6 +2286,7 @@ MigrationReadRpc::MigrationReadRpc(RamCloud *ramcloud, ServerId serverId,
                                    const RejectRules *rejectRules)
     : ServerIdRpcWrapper(ramcloud->clientContext, serverId,
                                sizeof(WireFormat::Read::Response), value)
+                               , ramcloud(ramcloud), hash(Key(tableId, key, keyLength).getHash())
 {
     value->reset();
     WireFormat::Read::Request *reqHdr(allocHeader<WireFormat::Read>());
@@ -2330,6 +2339,24 @@ MigrationReadRpc::wait(uint64_t *version, bool *objectExists, bool *migrating,
     response->truncateFront(sizeof(*respHdr));
     assert(respHdr->length == response->size());
     return true;
+}
+
+void MigrationReadRpc::updateProgress() {
+    const WireFormat::Read::Response *respHdr(
+        getResponseHeader<WireFormat::Read>());
+
+    for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
+        ramcloud->partitions[i]->currentHTBucket = respHdr->migrationPartitionsProgress[i];
+    }
+    if (respHdr->priorityPullDone == true) {
+        ramcloud->finishedPriorityHashes.insert(hash);
+    }
+    for (auto it = ramcloud->finishedPriorityHashes.begin();
+         it != ramcloud->finishedPriorityHashes.end(); it++) {
+        if (ramcloud->lookupRegularPullProgrss(*it)) {
+            ramcloud->finishedPriorityHashes.erase(*it);
+        }
+    }
 }
 
 /**
@@ -2430,6 +2457,7 @@ MigrationReadKeysAndValueRpc::MigrationReadKeysAndValueRpc(
     const RejectRules *rejectRules)
     : ServerIdRpcWrapper(ramcloud->clientContext, serverId,
                          sizeof(WireFormat::ReadKeysAndValue::Response), value)
+                         , ramcloud(ramcloud), hash(Key(tableId, key, keyLength).getHash())
 {
     value->reset();
     WireFormat::ReadKeysAndValue::Request *reqHdr(allocHeader<
@@ -2484,6 +2512,25 @@ bool MigrationReadKeysAndValueRpc::wait(uint64_t *version, bool *objectExists,
     assert(respHdr->length == response->size());
     return true;
 }
+
+void MigrationReadKeysAndValueRpc::updateProgress() {
+    const WireFormat::Read::Response *respHdr(
+        getResponseHeader<WireFormat::Read>());
+
+    for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
+        ramcloud->partitions[i]->currentHTBucket = respHdr->migrationPartitionsProgress[i];
+    }
+    if (respHdr->priorityPullDone == true) {
+        ramcloud->finishedPriorityHashes.insert(hash);
+    }
+    for (auto it = ramcloud->finishedPriorityHashes.begin();
+         it != ramcloud->finishedPriorityHashes.end(); it++) {
+        if (ramcloud->lookupRegularPullProgrss(*it)) {
+            ramcloud->finishedPriorityHashes.erase(*it);
+        }
+    }
+}
+
 /**
  * Delete an object from a table. If the object does not currently exist
  * then the operation succeeds without doing anything (unless rejectRules

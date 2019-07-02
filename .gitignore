@@ -32,3 +32,5 @@ tags
 # CMake
 CMakeLists.txt
 cmake-*/
+
+sync.sh

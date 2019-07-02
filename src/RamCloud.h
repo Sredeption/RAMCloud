@@ -30,6 +30,8 @@
 #include "ServerStatistics.pb.h"
 #include "ClientServerIdRpcWrapper.h"
 
+#include <unordered_set>
+
 namespace RAMCloud {
 class ClientLeaseAgent;
 class ClientTransactionManager;
@@ -218,6 +220,46 @@ class RamCloud {
     RpcTracker *rpcTracker;
     ClientTransactionManager *transactionManager;
     MigrationClient *migrationClient;
+
+    class migrationPartitionsProgrss {
+    public:
+        explicit migrationPartitionsProgrss(uint64_t startHTBucket,
+                                            uint64_t endHTBucket)
+            : startHTBucket(startHTBucket)
+            , endHTBucket(endHTBucket)
+            , currentHTBucket(startHTBucket)
+        {
+        }
+
+        ~migrationPartitionsProgrss() {}
+
+        const uint64_t startHTBucket;
+
+        const uint64_t endHTBucket;
+
+        uint64_t currentHTBucket;
+    };
+
+
+    Tub<migrationPartitionsProgrss> partitions[WireFormat::MAX_NUM_PARTITIONS];
+    std::unordered_set<uint64_t> finishedPriorityHashes;
+
+    bool lookupRegularPullProgrss(uint64_t hash) {
+        for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
+            if (partitions[i]->startHTBucket <= hash && hash < partitions[i]->currentHTBucket) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool
+    lookupPriorityPullProgrss(uint64_t hash) {
+        if (finishedPriorityHashes.find(hash) != finishedPriorityHashes.end()) {
+            return true;
+        }
+        return false;
+    }
 
   private:
     DISALLOW_COPY_AND_ASSIGN(RamCloud);
@@ -1055,8 +1097,12 @@ class MigrationReadRpc : public ServerIdRpcWrapper {
               bool *migrating = NULL, uint64_t *sourceId = NULL,
               uint64_t *targetId = NULL);
 
+    void updateProgress();
+
   PRIVATE:
     DISALLOW_COPY_AND_ASSIGN(MigrationReadRpc);
+    RamCloud *ramcloud;
+    KeyHash hash;
 };
 
 /**
@@ -1092,7 +1138,11 @@ class MigrationReadKeysAndValueRpc : public ServerIdRpcWrapper {
               bool *migrating = NULL, uint64_t *sourceId = NULL,
               uint64_t *targetId = NULL);
 
+    void updateProgress();
+
   PRIVATE:
+    RamCloud *ramcloud;
+    KeyHash hash;
     DISALLOW_COPY_AND_ASSIGN(MigrationReadKeysAndValueRpc);
 };
 

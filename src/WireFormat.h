@@ -1644,6 +1644,8 @@ struct ProxyPing {
     } __attribute__((packed));
 };
 
+static const uint32_t MAX_NUM_PARTITIONS = 8;
+
 struct Read {
     static const Opcode opcode = READ;
     static const ServiceType service = MASTER_SERVICE;
@@ -1664,6 +1666,9 @@ struct Read {
         bool migrating;
         uint64_t sourceId;
         uint64_t targetId;
+
+        uint64_t migrationPartitionsProgress[MAX_NUM_PARTITIONS];
+        bool priorityPullDone;
     } __attribute__((packed));
 };
 
