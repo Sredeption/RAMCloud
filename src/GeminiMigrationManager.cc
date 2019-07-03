@@ -621,7 +621,7 @@ GeminiMigration::pullAndReplay_reapPullRpcs()
 
             for (auto it = finishedPriorityHashes.begin();
                  it != finishedPriorityHashes.end(); it++) {
-                if ((*partition)->startHTBucket <= *it && *it <= ((*partition)->currentHTBucket - 1)) {
+                if ((*partition)->startHTBucket <= *it && *it < (*partition)->currentHTBucket) {
                     finishedPriorityHashes.erase(*it);
                 }
             }
