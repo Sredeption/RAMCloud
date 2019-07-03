@@ -1972,7 +1972,7 @@ MasterService::read(const WireFormat::Read::Request* reqHdr,
         respHdr->sourceId = tablet.sourceId;
         respHdr->targetId = tablet.targetId;
 
-        for (uint64_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
+        for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
             respHdr->migrationPartitionsProgress[i] = context->geminiMigrationManager->updateRegularPullProgress(i);
         }
 

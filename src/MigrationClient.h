@@ -49,14 +49,14 @@ class MigrationClient {
     DISALLOW_COPY_AND_ASSIGN(MigrationClient);
   PUBLIC:
 
-    class migrationPartitionsProgrss {
+    class migrationPartitionsProgress {
     public:
-        explicit migrationPartitionsProgrss(uint64_t startHTBucket,
+        explicit migrationPartitionsProgress(uint64_t startHTBucket,
                                             uint64_t endHTBucket)
             : startHTBucket(startHTBucket), endHTBucket(endHTBucket), currentHTBucket(startHTBucket) {
         }
 
-        ~migrationPartitionsProgrss() {}
+        ~migrationPartitionsProgress() {}
 
         const uint64_t startHTBucket;
 
@@ -66,10 +66,10 @@ class MigrationClient {
     };
 
 
-    Tub<migrationPartitionsProgrss> partitions[WireFormat::MAX_NUM_PARTITIONS];
+    Tub<migrationPartitionsProgress> partitions[WireFormat::MAX_NUM_PARTITIONS];
     std::unordered_set<uint64_t> finishedPriorityHashes;
 
-    bool lookupRegularPullProgrss(uint64_t hash) {
+    bool lookupRegularPullProgress(uint64_t hash) {
         for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
             if (partitions[i]->startHTBucket <= hash && hash < partitions[i]->currentHTBucket) {
                 return true;
@@ -79,7 +79,7 @@ class MigrationClient {
     }
 
     bool
-    lookupPriorityPullProgrss(uint64_t hash) {
+    lookupPriorityPullProgress(uint64_t hash) {
         if (finishedPriorityHashes.find(hash) != finishedPriorityHashes.end()) {
             return true;
         }
@@ -95,7 +95,7 @@ class MigrationClient {
         }
         for (auto it = finishedPriorityHashes.begin();
              it != finishedPriorityHashes.end(); it++) {
-            if (lookupRegularPullProgrss(*it)) {
+            if (lookupRegularPullProgress(*it)) {
                 finishedPriorityHashes.erase(*it);
             }
         }
@@ -181,8 +181,8 @@ class MigrationReadTask {
 
 
             KeyHash hash = Key(tableId, key, keyLength).getHash();
-            if (ramcloud->migrationClient->lookupRegularPullProgrss(hash)) {
-            } else if (ramcloud->migrationClient->lookupPriorityPullProgrss(hash)) {
+            if (ramcloud->migrationClient->lookupRegularPullProgress(hash)) {
+            } else if (ramcloud->migrationClient->lookupPriorityPullProgress(hash)) {
             }
 
         }

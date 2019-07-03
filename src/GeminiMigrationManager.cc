@@ -164,7 +164,7 @@ GeminiMigrationManager::lookupPriorityHashes(uint64_t hash) {
 }
 
 uint64_t
-GeminiMigrationManager::updateRegularPullProgress(uint64_t i) {
+GeminiMigrationManager::updateRegularPullProgress(uint32_t i) {
     SpinLock::Guard lock(progressLock);
     for (auto &migration : migrationsInProgress) {
         return migration->partitions[i]->currentHTBucket;
