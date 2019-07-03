@@ -39,8 +39,6 @@ class GeminiMigrationManager : Dispatch::Poller {
     // Shared RAMCloud information.
     Context *context;
 
-    SpinLock progressLock;
-
     Tub<ObjectManager::TombstoneProtector> tombstoneProtector;
 
     // Address of this RAMCloud master. Required by RocksteadyMigration.
@@ -197,6 +195,8 @@ class GeminiMigration {
     static const uint32_t MAX_PRIORITY_HASHES = 16;
 
     SpinLock priorityLock;
+
+    SpinLock progressLock;
 
     std::vector<uint64_t> waitingPriorityHashes;
 

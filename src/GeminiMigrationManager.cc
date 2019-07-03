@@ -8,7 +8,7 @@ namespace RAMCloud {
 GeminiMigrationManager::GeminiMigrationManager(
     Context *context, string localLocator)
     : Dispatch::Poller(context->auxDispatch, "GeminiMigrationManager"),
-      context(context), progressLock("progressLock"), tombstoneProtector(), localLocator(localLocator),
+      context(context), tombstoneProtector(), localLocator(localLocator),
       migrationsInProgress(), active(false), timestamp(0), lastTime(0),
       bandwidth(0)
 {
@@ -154,11 +154,12 @@ bool GeminiMigrationManager::requestPriorityHash(uint64_t tableId,
 
 bool
 GeminiMigrationManager::lookupPriorityHashes(uint64_t hash) {
-    SpinLock::Guard lock(progressLock);
     for (auto &migration : migrationsInProgress) {
+        migration->progressLock.lock();
         if (migration->finishedPriorityHashes.find(hash) != migration->finishedPriorityHashes.end()) {
             return true;
         }
+        migration->progressLock.unlock();
     }
     return false;
 }
@@ -177,7 +178,6 @@ GeminiMigrationManager::lookupRegularPullProgress(uint64_t hash) {
 
 uint64_t
 GeminiMigrationManager::updateRegularPullProgress(uint32_t i) {
-    SpinLock::Guard lock(progressLock);
     for (auto &migration : migrationsInProgress) {
         return migration->partitions[i]->currentHTBucket;
     }
@@ -196,7 +196,7 @@ GeminiMigration::GeminiMigration(Context *context,
       phase(GeminiMigration::SETUP), sourceNumHTBuckets(), sourceSafeVersion(),
       sourceAuxLocator(), sourceSession(), prepareSourceRpc(),
       getHeadOfLogRpc(), takeOwnershipRpc(),
-      priorityLock("priorityLock"), waitingPriorityHashes(), finishedPriorityHashes(),
+      priorityLock("priorityLock"), progressLock("progressLock"), waitingPriorityHashes(), finishedPriorityHashes(),
       inProgressPriorityHashes(), priorityHashesRequestBuffer(),
       priorityHashesResponseBuffer(), priorityPullRpc(),
       priorityHashesSideLogCommitted(false), priorityHashesSideLog(),
@@ -518,10 +518,12 @@ GeminiMigration::pullAndReplay_priorityHashes()
     if (priorityPullRpc) {
         if (priorityPullRpc->isReady()) {
 
+            progressLock.lock();
             for (auto hash = inProgressPriorityHashes.begin();
                  hash != inProgressPriorityHashes.end(); hash++) {
                 finishedPriorityHashes.insert(*hash);
             }
+            progressLock.unlock();
 
             SegmentCertificate certificate;
             uint32_t numReturnedHashes = priorityPullRpc->wait(&certificate);
@@ -631,12 +633,14 @@ GeminiMigration::pullAndReplay_reapPullRpcs()
             (*partition)->currentHTBucketEntry = nextHTBucketEntry;
             (*partition)->totalPulledBytes += numReturnedBytes;
 
+            progressLock.lock();
             for (auto it = finishedPriorityHashes.begin();
                  it != finishedPriorityHashes.end(); it++) {
                 if ((*partition)->startHTBucket <= *it && *it < (*partition)->currentHTBucket) {
                     finishedPriorityHashes.erase(*it);
                 }
             }
+            progressLock.unlock();
 
                 LOG(ll, "Pull request migrated %u Bytes in partition[%lu,"
                         " %lu] (migrating tablet[0x%lx, 0x%lx] in table %lu)."
