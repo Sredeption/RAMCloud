@@ -633,14 +633,14 @@ GeminiMigration::pullAndReplay_reapPullRpcs()
             (*partition)->currentHTBucketEntry = nextHTBucketEntry;
             (*partition)->totalPulledBytes += numReturnedBytes;
 
-            progressLock.lock();
             for (auto it = finishedPriorityHashes.begin();
                  it != finishedPriorityHashes.end(); it++) {
                 if ((*partition)->startHTBucket <= *it && *it < (*partition)->currentHTBucket) {
+                    progressLock.lock();
                     finishedPriorityHashes.erase(*it);
+                    progressLock.unlock();
                 }
             }
-            progressLock.unlock();
 
                 LOG(ll, "Pull request migrated %u Bytes in partition[%lu,"
                         " %lu] (migrating tablet[0x%lx, 0x%lx] in table %lu)."
