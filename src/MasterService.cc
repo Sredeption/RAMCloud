@@ -1971,6 +1971,15 @@ MasterService::read(const WireFormat::Read::Request* reqHdr,
         respHdr->migrating = true;
         respHdr->sourceId = tablet.sourceId;
         respHdr->targetId = tablet.targetId;
+
+        for (uint64_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
+            respHdr->migrationPartitionsProgress[i] = context->geminiMigrationManager->updateRegularPullProgress(i);
+        }
+
+        respHdr->priorityPullDone = false;
+        if (context->geminiMigrationManager->lookupPriorityHashes(key.getHash())) {
+            respHdr->priorityPullDone = true;
+        }
     } else {
         respHdr->migrating = false;
     }

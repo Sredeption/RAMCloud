@@ -62,8 +62,6 @@ RamCloud::RamCloud(CommandLineOptions* options)
     , rpcTracker(new RpcTracker())
     , transactionManager(new ClientTransactionManager())
     , migrationClient(new MigrationClient(this))
-    , partitions()
-    , finishedPriorityHashes()
 {
     coordinatorLocator = options->getExternalStorageLocator();
     if (coordinatorLocator.size() == 0) {
@@ -87,8 +85,6 @@ RamCloud::RamCloud(Context* context)
     , rpcTracker(new RpcTracker())
     , transactionManager(new ClientTransactionManager())
     , migrationClient(new MigrationClient(this))
-    , partitions()
-    , finishedPriorityHashes()
 {
     coordinatorLocator = context->options->getExternalStorageLocator();
     if (coordinatorLocator.size() == 0) {
@@ -109,8 +105,6 @@ RamCloud::RamCloud(const char* locator, const char* clusterName)
     , rpcTracker(new RpcTracker())
     , transactionManager(new ClientTransactionManager())
     , migrationClient(new MigrationClient(this))
-    , partitions()
-    , finishedPriorityHashes()
 {
     clientContext->coordinatorSession->setLocation(locator, clusterName);
 }
@@ -123,8 +117,6 @@ RamCloud::RamCloud(Context* context, const char* locator,
     , rpcTracker(new RpcTracker())
     , transactionManager(new ClientTransactionManager())
     , migrationClient(new MigrationClient(this))
-    , partitions()
-    , finishedPriorityHashes()
 {
     clientContext->coordinatorSession->setLocation(locator, clusterName);
 }
@@ -2345,18 +2337,8 @@ void MigrationReadRpc::updateProgress() {
     const WireFormat::Read::Response *respHdr(
         getResponseHeader<WireFormat::Read>());
 
-    for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
-        ramcloud->partitions[i]->currentHTBucket = respHdr->migrationPartitionsProgress[i];
-    }
-    if (respHdr->priorityPullDone == true) {
-        ramcloud->finishedPriorityHashes.insert(hash);
-    }
-    for (auto it = ramcloud->finishedPriorityHashes.begin();
-         it != ramcloud->finishedPriorityHashes.end(); it++) {
-        if (ramcloud->lookupRegularPullProgrss(*it)) {
-            ramcloud->finishedPriorityHashes.erase(*it);
-        }
-    }
+    ramcloud->migrationClient->updateProgress(respHdr, hash);
+
 }
 
 /**
@@ -2517,18 +2499,7 @@ void MigrationReadKeysAndValueRpc::updateProgress() {
     const WireFormat::Read::Response *respHdr(
         getResponseHeader<WireFormat::Read>());
 
-    for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
-        ramcloud->partitions[i]->currentHTBucket = respHdr->migrationPartitionsProgress[i];
-    }
-    if (respHdr->priorityPullDone == true) {
-        ramcloud->finishedPriorityHashes.insert(hash);
-    }
-    for (auto it = ramcloud->finishedPriorityHashes.begin();
-         it != ramcloud->finishedPriorityHashes.end(); it++) {
-        if (ramcloud->lookupRegularPullProgrss(*it)) {
-            ramcloud->finishedPriorityHashes.erase(*it);
-        }
-    }
+    ramcloud->migrationClient->updateProgress(respHdr, hash);
 }
 
 /**

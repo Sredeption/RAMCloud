@@ -8,7 +8,7 @@ namespace RAMCloud {
 GeminiMigrationManager::GeminiMigrationManager(
     Context *context, string localLocator)
     : Dispatch::Poller(context->auxDispatch, "GeminiMigrationManager"),
-      context(context), tombstoneProtector(), localLocator(localLocator),
+      context(context), progressLock("progressLock"), tombstoneProtector(), localLocator(localLocator),
       migrationsInProgress(), active(false), timestamp(0), lastTime(0),
       bandwidth(0)
 {
@@ -154,6 +154,7 @@ bool GeminiMigrationManager::requestPriorityHash(uint64_t tableId,
 
 bool
 GeminiMigrationManager::lookupPriorityHashes(uint64_t hash) {
+    SpinLock::Guard lock(progressLock);
     for (auto &migration : migrationsInProgress) {
         if (migration->finishedPriorityHashes.find(hash) != migration->finishedPriorityHashes.end()) {
             return true;
@@ -163,7 +164,8 @@ GeminiMigrationManager::lookupPriorityHashes(uint64_t hash) {
 }
 
 uint64_t
-GeminiMigrationManager::updateRegularPullProgress(int i) {
+GeminiMigrationManager::updateRegularPullProgress(uint64_t i) {
+    SpinLock::Guard lock(progressLock);
     for (auto &migration : migrationsInProgress) {
         return migration->partitions[i]->currentHTBucket;
     }

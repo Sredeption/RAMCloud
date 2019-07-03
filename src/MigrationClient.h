@@ -49,6 +49,58 @@ class MigrationClient {
     DISALLOW_COPY_AND_ASSIGN(MigrationClient);
   PUBLIC:
 
+    class migrationPartitionsProgrss {
+    public:
+        explicit migrationPartitionsProgrss(uint64_t startHTBucket,
+                                            uint64_t endHTBucket)
+            : startHTBucket(startHTBucket), endHTBucket(endHTBucket), currentHTBucket(startHTBucket) {
+        }
+
+        ~migrationPartitionsProgrss() {}
+
+        const uint64_t startHTBucket;
+
+        const uint64_t endHTBucket;
+
+        uint64_t currentHTBucket;
+    };
+
+
+    Tub<migrationPartitionsProgrss> partitions[WireFormat::MAX_NUM_PARTITIONS];
+    std::unordered_set<uint64_t> finishedPriorityHashes;
+
+    bool lookupRegularPullProgrss(uint64_t hash) {
+        for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
+            if (partitions[i]->startHTBucket <= hash && hash < partitions[i]->currentHTBucket) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool
+    lookupPriorityPullProgrss(uint64_t hash) {
+        if (finishedPriorityHashes.find(hash) != finishedPriorityHashes.end()) {
+            return true;
+        }
+        return false;
+    }
+
+    void updateProgress(const WireFormat::Read::Response *respHdr, uint64_t hash) {
+        for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
+            partitions[i]->currentHTBucket = respHdr->migrationPartitionsProgress[i];
+        }
+        if (respHdr->priorityPullDone == true) {
+            finishedPriorityHashes.insert(hash);
+        }
+        for (auto it = finishedPriorityHashes.begin();
+             it != finishedPriorityHashes.end(); it++) {
+            if (lookupRegularPullProgrss(*it)) {
+                finishedPriorityHashes.erase(*it);
+            }
+        }
+    }
+
     MigrationClient(RamCloud *ramcloud);
 
     void putTablet(uint64_t tableId, const void *key, uint16_t keyLength,
@@ -129,8 +181,8 @@ class MigrationReadTask {
 
 
             KeyHash hash = Key(tableId, key, keyLength).getHash();
-            if (ramcloud->lookupRegularPullProgrss(hash)) {
-            } else if (ramcloud->lookupPriorityPullProgrss(hash)) {
+            if (ramcloud->migrationClient->lookupRegularPullProgrss(hash)) {
+            } else if (ramcloud->migrationClient->lookupPriorityPullProgrss(hash)) {
             }
 
         }

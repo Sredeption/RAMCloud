@@ -31,11 +31,13 @@ class GeminiMigrationManager : Dispatch::Poller {
 
     bool lookupPriorityHashes(uint64_t hash);
 
-    uint64_t updateRegularPullProgress(int i);
+    uint64_t updateRegularPullProgress(uint64_t i);
 
   PRIVATE:
     // Shared RAMCloud information.
     Context *context;
+
+    SpinLock progressLock;
 
     Tub<ObjectManager::TombstoneProtector> tombstoneProtector;
 
