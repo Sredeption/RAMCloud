@@ -163,6 +163,18 @@ GeminiMigrationManager::lookupPriorityHashes(uint64_t hash) {
     return false;
 }
 
+bool
+GeminiMigrationManager::lookupRegularPullProgress(uint64_t hash) {
+    for (auto &migration : migrationsInProgress) {
+        for (uint32_t i = 0; i < MAX_NUM_PARTITIONS; ++i) {
+            if (migration->partitions[i]->startHTBucket <= hash && hash < migration->partitions[i]->currentHTBucket) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 uint64_t
 GeminiMigrationManager::updateRegularPullProgress(uint32_t i) {
     SpinLock::Guard lock(progressLock);

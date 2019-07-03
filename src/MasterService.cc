@@ -1977,8 +1977,13 @@ MasterService::read(const WireFormat::Read::Request* reqHdr,
         }
 
         respHdr->priorityPullDone = false;
-        if (context->geminiMigrationManager->lookupPriorityHashes(key.getHash())) {
-            respHdr->priorityPullDone = true;
+        if (respHdr->common.status == STATUS_OK) {
+            keyHash hash = key.getHash();
+            if (!context->geminiMigrationManager->lookupRegularPullProgress(hash)) {
+                if (context->geminiMigrationManager->lookupPriorityHashes(hash)) {
+                    respHdr->priorityPullDone = true;
+                }
+            }
         }
     } else {
         respHdr->migrating = false;

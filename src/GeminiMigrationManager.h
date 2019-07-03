@@ -29,6 +29,8 @@ class GeminiMigrationManager : Dispatch::Poller {
     bool requestPriorityHash(uint64_t tableId, uint64_t startKeyHash,
                              uint64_t endKeyHash, uint64_t priorityHash);
 
+    bool lookupRegularPullProgress(uint64_t hash);
+
     bool lookupPriorityHashes(uint64_t hash);
 
     uint64_t updateRegularPullProgress(uint32_t i);
