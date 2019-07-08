@@ -115,13 +115,10 @@ cpu_range_migrate = '24-47'
 #        (20, server_port, cpu_range), (21, server_port, cpu_range)]
 
 ids = [
-    (7, server_port, cpu_range_migrate, 0), (9, server_port, cpu_range, 0),
-    (5, server_port, cpu_range, 0), (6, server_port, cpu_range, 0),
-    (4, server_port, cpu_range, 0),
-    (10, server_port, cpu_range, 0), (11, server_port, cpu_range, 0),
-    (12, server_port, cpu_range, 0), (14, server_port, cpu_range, 0),
-    (15, server_port, cpu_range, 0), (16, server_port, cpu_range, 0),
-    (21, server_port, cpu_range, 0)]
+    (2, server_port, cpu_range_migrate, 0), (3, server_port, cpu_range, 0),
+    (4, server_port, cpu_range, 0), (5, server_port, cpu_range, 0),
+    (7, server_port, cpu_range, 0),
+    (8, server_port, cpu_range, 0)]
 
 for i in ids:
     hosts.append((

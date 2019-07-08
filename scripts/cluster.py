@@ -342,9 +342,9 @@ class Cluster(object):
             self.log_subdir, self.next_server_id, host[0], host[5])
 
         command = (
-                    'taskset -c %s %s %s -C %s -L %s -r %d -l %s --clusterName __unnamed__ '
+                    '%s %s -C %s -L %s -r %d -l %s --clusterName __unnamed__ '
                     '--logFile %s.log --preferredIndex %d --dpdkPort %d %s' %
-                    (host[4], prefix_command,
+                    (prefix_command,
                      server_binary, self.coordinator_locator,
                      server_locator(self.transport, host, port),
                      self.replicas,
