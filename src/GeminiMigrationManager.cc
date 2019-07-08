@@ -165,10 +165,10 @@ GeminiMigrationManager::lookupPriorityHashes(uint64_t hash) {
 }
 
 bool
-GeminiMigrationManager::lookupRegularPullProgress(uint64_t hash) {
+GeminiMigrationManager::lookupRegularPullProgress(uint64_t bucketIndex) {
     for (auto &migration : migrationsInProgress) {
         for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
-            if (migration->partitions[i]->startHTBucket <= hash && hash < migration->partitions[i]->currentHTBucket) {
+            if (migration->partitions[i]->startHTBucket <= bucketIndex && bucketIndex < migration->partitions[i]->currentHTBucket) {
                 return true;
             }
         }

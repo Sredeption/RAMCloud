@@ -1978,8 +1978,9 @@ MasterService::read(const WireFormat::Read::Request* reqHdr,
 
         respHdr->priorityPullDone = false;
         if (respHdr->common.status == STATUS_OK) {
+            uint64_t unused;
             KeyHash hash = key.getHash();
-            if (!context->geminiMigrationManager->lookupRegularPullProgress(hash)) {
+            if (!context->geminiMigrationManager->lookupRegularPullProgress(HashTable::findBucketIndex(16384UL, hash, &unused))) {
                 if (context->geminiMigrationManager->lookupPriorityHashes(hash)) {
                     respHdr->priorityPullDone = true;
                 }

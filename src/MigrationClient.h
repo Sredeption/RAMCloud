@@ -69,9 +69,9 @@ class MigrationClient {
     Tub<migrationPartitionsProgress> partitions[WireFormat::MAX_NUM_PARTITIONS];
     std::unordered_set<uint64_t> finishedPriorityHashes;
 
-    bool lookupRegularPullProgress(uint64_t hash) {
+    bool lookupRegularPullProgress(uint64_t bucketIndex) {
         for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
-            if (partitions[i]->startHTBucket <= hash && hash < partitions[i]->currentHTBucket) {
+            if (partitions[i]->startHTBucket <= bucketIndex && bucketIndex < partitions[i]->currentHTBucket) {
                 return true;
             }
         }
@@ -93,9 +93,10 @@ class MigrationClient {
         if (respHdr->priorityPullDone == true) {
             finishedPriorityHashes.insert(hash);
         }
+        uint64_t unused;
         for (auto it = finishedPriorityHashes.begin();
              it != finishedPriorityHashes.end(); it++) {
-            if (lookupRegularPullProgress(*it)) {
+            if (lookupRegularPullProgress(HashTable::findBucketIndex(16384UL, *it, &unused))) {
                 finishedPriorityHashes.erase(*it);
             }
         }
@@ -179,9 +180,10 @@ class MigrationReadTask {
                 state = NORMAL;
             }
 
-
+            uint64_t unused;
             KeyHash hash = Key(tableId, key, keyLength).getHash();
-            if (ramcloud->migrationClient->lookupRegularPullProgress(hash)) {
+            uint64_t bucket = HashTable::findBucketIndex(16384UL, hash, &unused);
+            if (ramcloud->migrationClient->lookupRegularPullProgress(bucket)) {
             } else if (ramcloud->migrationClient->lookupPriorityPullProgress(hash)) {
             }
 
