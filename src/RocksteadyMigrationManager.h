@@ -118,7 +118,7 @@ class RocksteadyMigration {
     int tearDown();
 
     // Change as necessary.
-    LogLevel ll = DEBUG;
+    LogLevel ll = NOTICE;
 
     Context *context;
 
