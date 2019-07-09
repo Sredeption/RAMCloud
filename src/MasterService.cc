@@ -1971,27 +1971,26 @@ MasterService::read(const WireFormat::Read::Request* reqHdr,
         respHdr->migrating = true;
         respHdr->sourceId = tablet.sourceId;
         respHdr->targetId = tablet.targetId;
-
-        for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
-            respHdr->migrationPartitionsProgress[i] = context->geminiMigrationManager->updateRegularPullProgress(i);
-        }
-
-        respHdr->priorityPullDone = false;
-        if (respHdr->common.status == STATUS_OK) {
-            uint64_t unused;
-            KeyHash hash = key.getHash();
-            if (!context->geminiMigrationManager->lookupRegularPullProgress(HashTable::findBucketIndex(16777216, hash, &unused))) {
-                if (context->geminiMigrationManager->lookupPriorityHashes(hash)) {
-                    respHdr->priorityPullDone = true;
-                }
-            }
-        }
     } else {
         respHdr->migrating = false;
     }
 
+    for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
+        respHdr->migrationPartitionsProgress[i] = context->geminiMigrationManager->updateRegularPullProgress(i);
+    }
+
+    respHdr->priorityPullDone = false;
+
     if (respHdr->common.status != STATUS_OK)
         return;
+
+    uint64_t unused;
+    KeyHash hash = key.getHash();
+    if (!context->geminiMigrationManager->lookupRegularPullProgress(HashTable::findBucketIndex(16777216, hash, &unused))) {
+        if (context->geminiMigrationManager->lookupPriorityHashes(hash)) {
+            respHdr->priorityPullDone = true;
+        }
+    }
 
     respHdr->length = rpc->replyPayload->size() - initialLength;
 #ifdef MIGRATION_PROFILE
