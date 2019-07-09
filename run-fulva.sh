@@ -20,4 +20,8 @@
 
     # the source tablet is in LOCKED_FOR_MIGRATION state
 
+
+    # logge is logged by struct timespec (clock_gettime(CLOCK_REALTIME, &now))
+    # now.tv_sec, now.tv_nsec
+
 python ./scripts/backupMigration.py -r 0 --servers=4 --clients=1 --dpdkPort=0 -T basic+dpdk --superuser
