@@ -118,7 +118,7 @@ ids = [
     (2, server_port, cpu_range_migrate, 0), (3, server_port, cpu_range, 0),
     (4, server_port, cpu_range, 0), (5, server_port, cpu_range, 0),
     (7, server_port, cpu_range, 0),
-    (8, server_port, cpu_range, 0)]
+    (8, server_port, cpu_range, 0), (9, server_port, cpu_range, 0)]
 
 for i in ids:
     hosts.append((
