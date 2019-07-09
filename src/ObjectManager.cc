@@ -415,6 +415,9 @@ ObjectManager::readObject(Key& key, Buffer* outBuffer,
             }
         } else {
             // This is the normal case for when a lookup failed.
+            context->geminiMigrationManager->requestPriorityHash(
+                t.tableId, t.startKeyHash, t.endKeyHash,
+                key.getHash());
             return STATUS_OBJECT_DOESNT_EXIST;
         }
     }
