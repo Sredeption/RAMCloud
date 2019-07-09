@@ -417,7 +417,8 @@ ObjectManager::readObject(Key& key, Buffer* outBuffer,
             // This is the normal case for when a lookup failed.
             TabletManager::Tablet t;
             bool tabletExists = tabletManager->getTablet(key, &t);
-            if (tabletExists) {
+            if (tabletExists && t.state ==
+                                TabletManager::ROCKSTEADY_MIGRATING) {
                 context->geminiMigrationManager->requestPriorityHash(
                     t.tableId, t.startKeyHash, t.endKeyHash,
                     key.getHash());
