@@ -69,6 +69,10 @@ class MigrationClient {
     Tub<migrationPartitionsProgress> partitions[WireFormat::MAX_NUM_PARTITIONS];
     std::unordered_set<uint64_t> finishedPriorityHashes;
 
+    uint64_t notFound;
+    uint64_t priorityPullFound;
+    uint64_t regularPullFound;
+    
     uint64_t findBucketIdx(uint64_t numBuckets, KeyHash keyHash) {
         uint64_t bucketHash = keyHash & 0x0000ffffffffffffUL;
         return (bucketHash & (numBuckets - 1));
@@ -189,7 +193,11 @@ class MigrationReadTask {
             KeyHash hash = Key(tableId, key, keyLength).getHash();
             uint64_t bucket = ramcloud->migrationClient->findBucketIdx(16777216, hash);
             if (ramcloud->migrationClient->lookupRegularPullProgress(bucket)) {
+                ramcloud->migrationClient->regularPullFound++;
             } else if (ramcloud->migrationClient->lookupPriorityPullProgress(hash)) {
+                ramcloud->migrationClient->priorityPullFound++;
+            } else {
+                ramcloud->migrationClient->notFound++;
             }
 
         }
