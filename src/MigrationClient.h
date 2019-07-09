@@ -94,7 +94,7 @@ class MigrationClient {
     void updateProgress(const WireFormat::Read::Response *respHdr, uint64_t hash) {
         for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
             partitions[i]->currentHTBucket = respHdr->migrationPartitionsProgress[i];
-            RAMCLOUD_LOG(NOTICE, "partition %lu currentHTBucket is %lu.", i, partitions[i]->currentHTBucket);
+            RAMCLOUD_LOG(NOTICE, "partition %u currentHTBucket is %lu.", i, partitions[i]->currentHTBucket);
         }
         if (respHdr->priorityPullDone == true) {
             finishedPriorityHashes.insert(hash);
