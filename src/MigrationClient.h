@@ -100,7 +100,7 @@ class MigrationClient {
         }
         for (auto it = finishedPriorityHashes.begin();
              it != finishedPriorityHashes.end(); it++) {
-            if (lookupRegularPullProgress(findBucketIdx(16384UL, *it))) {
+            if (lookupRegularPullProgress(findBucketIdx(16777216, *it))) {
                 finishedPriorityHashes.erase(*it);
             }
         }
@@ -185,7 +185,7 @@ class MigrationReadTask {
             }
 
             KeyHash hash = Key(tableId, key, keyLength).getHash();
-            uint64_t bucket = ramcloud->migrationClient->findBucketIdx(16384UL, hash);
+            uint64_t bucket = ramcloud->migrationClient->findBucketIdx(16777216, hash);
             if (ramcloud->migrationClient->lookupRegularPullProgress(bucket)) {
             } else if (ramcloud->migrationClient->lookupPriorityPullProgress(hash)) {
             }

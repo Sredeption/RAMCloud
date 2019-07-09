@@ -13,7 +13,7 @@ MigrationClient::MigrationClient(RAMCloud::RamCloud *ramcloud)
       partitions(),
       finishedPriorityHashes()
 {
-    uint64_t sourceNumHTBuckets = 16384UL;
+    uint64_t sourceNumHTBuckets = 16777216;
     for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; i++) {
         uint64_t partitionStartHTBucket =
             i * (sourceNumHTBuckets / WireFormat::MAX_NUM_PARTITIONS);
