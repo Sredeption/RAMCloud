@@ -2272,6 +2272,30 @@ RamCloud::readMigrating(uint64_t tableId, const void *key, uint16_t keyLength,
 
 }
 
+uint64_t
+RamCloud::getNotFound(Ramcloud *ramcloud)
+{
+    uint64_t ret = ramcloud->migrationClient->notFound;
+    ramcloud->migrationClient->notFound = 0;
+    return ret;
+}
+
+uint64_t
+RamCloud::getRegularPullFound(Ramcloud *ramcloud)
+{
+    uint64_t ret = ramcloud->migrationClient->regularPullFound;
+    ramcloud->migrationClient->regularPullFound = 0;
+    return ret;
+}
+
+uint64_t
+RamCloud::getPriorityPullFound(Ramcloud *ramcloud)
+{
+    uint64_t ret = ramcloud->migrationClient->priorityPullFound;
+    ramcloud->migrationClient->priorityPullFound = 0;
+    return ret;
+}
+
 MigrationReadRpc::MigrationReadRpc(RamCloud *ramcloud, ServerId serverId,
                                    uint64_t tableId, const void *key,
                                    uint16_t keyLength, Buffer *value,

@@ -301,14 +301,10 @@ class WorkloadGenerator {
                 timestamp++;
 
                 RAMCLOUD_LOG(NOTICE, "notFound: %lu, regularPullFound: %lu, priorityPullFound: %lu, %lu: %lf",
-                             ramcloud->migrationClient->notFound,
-                             ramcloud->migrationClient->regularPullFound,
-                             ramcloud->migrationClient->priorityPullFound,
+                             ramcloud->getNotFound(ramcloud),
+                             ramcloud->getRegularPullFound(ramcloud),
+                             ramcloud->getPriorityPullFound(ramcloud),
                              timestamp, static_cast<double > (current - bandwidth) / 1024 / 102);
-
-                ramcloud->migrationClient->notFound = 0;
-                ramcloud->migrationClient->regularPullFound = 0;
-                ramcloud->migrationClient->priorityPullFound = 0;
 
                 bandwidth = current;
                 lastTime = stop;
