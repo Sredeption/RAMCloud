@@ -13,6 +13,11 @@
     # };
     
     # In rocksteady, the target tablet is in ROCKSTEADY_MIGRATING state
+    # // Add the tablet to the target. The tablet starts off in state
+    # // ROCKSTEADY_MIGRATION.
+    # tabletManager->addTablet(tableId, startKeyHash, endKeyHash,
+    #         TabletManager::ROCKSTEADY_MIGRATING);
+
     # the source tablet is in LOCKED_FOR_MIGRATION state
 
 python ./scripts/backupMigration.py -r 0 --servers=4 --clients=1 --dpdkPort=0 -T basic+dpdk --superuser
