@@ -507,13 +507,6 @@ GeminiMigration::pullAndReplay_priorityHashes()
     if (priorityPullRpc) {
         if (priorityPullRpc->isReady()) {
 
-            progressLock.lock();
-            for (auto hash = inProgressPriorityHashes.begin();
-                 hash != inProgressPriorityHashes.end(); hash++) {
-                finishedPriorityHashes.insert(*hash);
-            }
-            progressLock.unlock();
-
             SegmentCertificate certificate;
             uint32_t numReturnedHashes = priorityPullRpc->wait(&certificate);
 
@@ -547,6 +540,13 @@ GeminiMigration::pullAndReplay_priorityHashes()
     // If a replay request is in progress, check if it has completed.
     if (priorityReplayRpc) {
         if (priorityReplayRpc->isReady()) {
+            progressLock.lock();
+            for (auto hash = inProgressPriorityHashes.begin();
+                 hash != inProgressPriorityHashes.end(); hash++) {
+                finishedPriorityHashes.insert(*hash);
+            }
+            progressLock.unlock();
+
             // If the replay completed, clear out inProgressPriorityHashes.
             inProgressPriorityHashes.clear();
 
@@ -622,15 +622,6 @@ GeminiMigration::pullAndReplay_reapPullRpcs()
             (*partition)->currentHTBucketEntry = nextHTBucketEntry;
             (*partition)->totalPulledBytes += numReturnedBytes;
 
-            for (auto it = finishedPriorityHashes.begin();
-                 it != finishedPriorityHashes.end(); it++) {
-                if ((*partition)->startHTBucket <= *it && *it < (*partition)->currentHTBucket) {
-                    progressLock.lock();
-                    finishedPriorityHashes.erase(*it);
-                    progressLock.unlock();
-                }
-            }
-
                 LOG(ll, "Pull request migrated %u Bytes in partition[%lu,"
                         " %lu] (migrating tablet[0x%lx, 0x%lx] in table %lu)."
                         " Partition has %lu buffers scheduled for replay and"
@@ -695,6 +686,15 @@ GeminiMigration::pullAndReplay_reapReplayRpcs()
                     (*partition)->endHTBucket, startKeyHash, endKeyHash,
                     tableId, (*partition)->freeReplayBuffers.size(),
                     (*partition)->freePullBuffers.size() + 1);
+
+            for (auto it = finishedPriorityHashes.begin();
+                 it != finishedPriorityHashes.end(); it++) {
+                if ((*partition)->startHTBucket <= *it && *it < (*partition)->currentHTBucket) {
+                    progressLock.lock();
+                    finishedPriorityHashes.erase(*it);
+                    progressLock.unlock();
+                }
+            }
 
             // Free up the response buffer so that it can be used for a pull
             // rpc.
