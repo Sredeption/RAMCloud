@@ -144,10 +144,12 @@ bool GeminiMigrationManager::requestPriorityHash(uint64_t tableId,
 bool
 GeminiMigrationManager::lookupPriorityHashes(uint64_t hash) {
     for (auto &migration : migrationsInProgress) {
-        SpinLock::Guard lock(migration->progressLock);
+        migration->progressLock.lock();
         if (migration->finishedPriorityHashes.find(hash) != migration->finishedPriorityHashes.end()) {
+            migration->progressLock.unlock();
             return true;
         }
+        migration->progressLock.unlock();
     }
     return false;
 }
