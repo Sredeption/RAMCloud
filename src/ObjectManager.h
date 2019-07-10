@@ -89,8 +89,8 @@ class ObjectManager : public LogEntryHandlers,
                 RpcResult* rpcResult = NULL, uint64_t* rpcResultPtr = NULL);
     void removeOrphanedObjects();
     void replaySegment(SideLog* sideLog, SegmentIterator& it,
-                std::unordered_map<uint64_t, uint64_t>* nextNodeIdMap);
-    void replaySegment(SideLog* sideLog, SegmentIterator& it);
+                std::unordered_map<uint64_t, uint64_t>* nextNodeIdMap, bool priorityReplay = false);
+    void replaySegment(SideLog* sideLog, SegmentIterator& it, bool priorityReplay = false);
     void syncChanges();
     Status writeObject(Object& newObject, RejectRules* rejectRules,
                 uint64_t* outVersion, Buffer* removedObjBuffer = NULL,

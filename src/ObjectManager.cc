@@ -664,9 +664,9 @@ class DelayedIncrementer {
  *       to be replayed into the log.
  */
 void
-ObjectManager::replaySegment(SideLog* sideLog, SegmentIterator& it)
+ObjectManager::replaySegment(SideLog* sideLog, SegmentIterator& it, bool priorityReplay)
 {
-    replaySegment(sideLog, it, NULL);
+    replaySegment(sideLog, it, NULL, priorityReplay);
 }
 
 /**
@@ -699,7 +699,7 @@ ObjectManager::replaySegment(SideLog* sideLog, SegmentIterator& it)
  */
 void
 ObjectManager::replaySegment(SideLog* sideLog, SegmentIterator& it,
-    std::unordered_map<uint64_t, uint64_t>* nextNodeIdMap)
+    std::unordered_map<uint64_t, uint64_t>* nextNodeIdMap, bool priorityReplay)
 {
     uint64_t startReplicationTicks = metrics->master.replicaManagerTicks;
     uint64_t startReplicationPostingWriteRpcTicks =

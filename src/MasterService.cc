@@ -2612,7 +2612,7 @@ MasterService::rocksteadyMigrationPriorityReplay(
     SegmentIterator segmentIt(bufferMemory, bufferLength, certificate);
     segmentIt.checkMetadataIntegrity();
 
-    objectManager.replaySegment(replaySideLog->get(), segmentIt);
+    objectManager.replaySegment(replaySideLog->get(), segmentIt, true);
 
     respHdr->numReplayedBytes = bufferLength;
     respHdr->common.status = STATUS_OK;
