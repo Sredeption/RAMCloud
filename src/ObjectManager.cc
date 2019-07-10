@@ -843,8 +843,6 @@ ObjectManager::replaySegment(SideLog* sideLog, SegmentIterator& it,
                 }
             }
 
-            replayObj.setPriorityReplayDone(1);
-            
             // Add the incoming object or tombstone to our log and update
             // the hash table to refer to it.
             Log::Reference newObjReference;
@@ -860,6 +858,13 @@ ObjectManager::replaySegment(SideLog* sideLog, SegmentIterator& it,
                                       1);
             }
             replace(lock, key, newObjReference);
+
+            if (priorityReplay) {
+                Buffer newlyReplayedBuffer;
+                sideLog->getEntry(newObjReference, newlyReplayedBuffer);
+                Object o(newlyReplayedBuffer);
+                o.setPriorityReplayDone(1);
+            }
 
             // JIRA Issue: RAM-674:
             // If master runs out of space during recovery, this master
@@ -1381,7 +1386,6 @@ ObjectManager::writeObject(Object& newObject, RejectRules* rejectRules,
 
     newObject.setVersion(newObjectVersion);
     newObject.setTimestamp(WallTime::secondsTimestamp());
-
     newObject.setPriorityReplayDone(removedObjPriorityReplay);
 
     assert(currentVersion == VERSION_NONEXISTENT ||
