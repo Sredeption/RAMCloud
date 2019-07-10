@@ -140,20 +140,6 @@ bool GeminiMigrationManager::requestPriorityHash(uint64_t tableId,
         "Received a priority hash for a tablet that is not under migration!");
 }
 
-
-bool
-GeminiMigrationManager::lookupPriorityHashes(uint64_t hash) {
-    for (auto &migration : migrationsInProgress) {
-        migration->progressLock.lock();
-        if (migration->finishedPriorityHashes.find(hash) != migration->finishedPriorityHashes.end()) {
-            migration->progressLock.unlock();
-            return true;
-        }
-        migration->progressLock.unlock();
-    }
-    return false;
-}
-
 bool
 GeminiMigrationManager::lookupRegularPullProgress(uint64_t bucketIndex) {
     for (auto &migration : migrationsInProgress) {
@@ -186,7 +172,7 @@ GeminiMigration::GeminiMigration(Context *context,
       phase(GeminiMigration::SETUP), sourceNumHTBuckets(), sourceSafeVersion(),
       sourceAuxLocator(), sourceSession(), prepareSourceRpc(),
       getHeadOfLogRpc(), takeOwnershipRpc(),
-      priorityLock("priorityLock"), progressLock("progressLock"), waitingPriorityHashes(), finishedPriorityHashes(),
+      priorityLock("priorityLock"), waitingPriorityHashes(),
       inProgressPriorityHashes(), priorityHashesRequestBuffer(),
       priorityHashesResponseBuffer(), priorityPullRpc(),
       priorityHashesSideLogCommitted(false), priorityHashesSideLog(),
@@ -203,7 +189,6 @@ GeminiMigration::GeminiMigration(Context *context,
 
     // Reserve space for the priority hashes.
     waitingPriorityHashes.reserve(MAX_PRIORITY_HASHES * 4);
-    finishedPriorityHashes.reserve(MAX_PRIORITY_HASHES * 4);
     inProgressPriorityHashes.reserve(MAX_PRIORITY_HASHES * 4);
 
     // To begin with, all pull rpcs are free.
@@ -541,13 +526,6 @@ GeminiMigration::pullAndReplay_priorityHashes()
     // If a replay request is in progress, check if it has completed.
     if (priorityReplayRpc) {
         if (priorityReplayRpc->isReady()) {
-            progressLock.lock();
-            for (auto hash = inProgressPriorityHashes.begin();
-                 hash != inProgressPriorityHashes.end(); hash++) {
-                finishedPriorityHashes.insert(*hash);
-            }
-            progressLock.unlock();
-
             // If the replay completed, clear out inProgressPriorityHashes.
             inProgressPriorityHashes.clear();
 
@@ -687,17 +665,6 @@ GeminiMigration::pullAndReplay_reapReplayRpcs()
                     (*partition)->endHTBucket, startKeyHash, endKeyHash,
                     tableId, (*partition)->freeReplayBuffers.size(),
                     (*partition)->freePullBuffers.size() + 1);
-
-            for (auto it = finishedPriorityHashes.begin();
-                 it != finishedPriorityHashes.end(); it++) {
-                uint64_t unused;
-                uint64_t bucketIdx = HashTable::findBucketIndex(sourceNumHTBuckets, *it, &unused);
-                if ((*partition)->startHTBucket <= bucketIdx && bucketIdx < (*partition)->currentHTBucket) {
-                    progressLock.lock();
-                    finishedPriorityHashes.erase(*it);
-                    progressLock.unlock();
-                }
-            }
 
             // Free up the response buffer so that it can be used for a pull
             // rpc.

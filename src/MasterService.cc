@@ -1987,9 +1987,6 @@ MasterService::read(const WireFormat::Read::Request* reqHdr,
     uint64_t unused;
     KeyHash hash = key.getHash();
     if (!context->geminiMigrationManager->lookupRegularPullProgress(HashTable::findBucketIndex(16777216, hash, &unused))) {
-        if (context->geminiMigrationManager->lookupPriorityHashes(hash)) {
-            respHdr->priorityPullDone = true;
-        }
     }
 
     respHdr->length = rpc->replyPayload->size() - initialLength;

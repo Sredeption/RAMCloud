@@ -91,7 +91,7 @@ class GeminiMigration {
     int tearDown();
 
     // Change as necessary.
-    LogLevel ll = NOTICE;
+    LogLevel ll = DEBUG;
 
     Context *context;
 
@@ -196,11 +196,7 @@ class GeminiMigration {
 
     SpinLock priorityLock;
 
-    SpinLock progressLock;
-
     std::vector<uint64_t> waitingPriorityHashes;
-
-    std::unordered_set<uint64_t> finishedPriorityHashes;
 
     std::vector<uint64_t> inProgressPriorityHashes;
 
