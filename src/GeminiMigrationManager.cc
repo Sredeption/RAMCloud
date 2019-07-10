@@ -690,7 +690,9 @@ GeminiMigration::pullAndReplay_reapReplayRpcs()
 
             for (auto it = finishedPriorityHashes.begin();
                  it != finishedPriorityHashes.end(); it++) {
-                if ((*partition)->startHTBucket <= *it && *it < (*partition)->currentHTBucket) {
+                uint64_t unused;
+                uint64_t bucketIdx = HashTable::findBucketIndex(sourceNumHTBuckets, *it, &unused);
+                if ((*partition)->startHTBucket <= bucketIdx && bucketIdx < (*partition)->currentHTBucket) {
                     progressLock.lock();
                     finishedPriorityHashes.erase(*it);
                     progressLock.unlock();
