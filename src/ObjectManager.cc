@@ -859,6 +859,20 @@ ObjectManager::replaySegment(SideLog* sideLog, SegmentIterator& it,
             }
             replace(lock, key, newObjReference);
 
+
+            LogEntryType unusedCurrentType;
+            Buffer newplyReplayedBuffer;
+            Log::Reference unusedCurrentReference;
+            if (lookup(lock, key, unusedCurrentType, newplyReplayedBuffer, 0,
+                                                        &unusedCurrentReference)) {
+
+                if (unusedCurrentType == LOG_ENTRY_TYPE_OBJTOMB) {
+                } else {
+                    Object newlyReplayedObject(newplyReplayedBuffer);
+                    newlyReplayedObject.setPriorityReplayDone(1);
+                }
+            }
+
             // JIRA Issue: RAM-674:
             // If master runs out of space during recovery, this master
             // should abort the recovery. Coordinator will then try
