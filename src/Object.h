@@ -118,7 +118,8 @@ class Object {
     KeyCount getKeyCount();
     const void* getValue(uint32_t *valueLength = NULL);
     bool getValueOffset(uint32_t *offset);
-    bool getPriorityReplayDone();
+    uint32_t getPriorityReplayDone();
+    void setPriorityReplayDone(uint32_t priorityReplayDone);
     uint32_t getValueLength();
 
     uint32_t getKeysAndValueLength();
@@ -156,7 +157,7 @@ class Object {
               timestamp(timestamp),
               version(version),
               tableId(tableId),
-              priorityReplayDone(false)
+              priorityReplayDone(0)
         {
         }
 
@@ -175,14 +176,14 @@ class Object {
         /// Table to which this object belongs.
         uint64_t tableId;
 
-        bool priorityReplayDone;
+        uint32_t priorityReplayDone;
 
         /// Following this class will be the number of keys, key lengths,
         /// the keys and finally the value. This member is only here to denote
         /// this.
         char keysAndData[0];
     } __attribute__((__packed__));
-    static_assert(sizeof(Header) == 24,
+    static_assert(sizeof(Header) == 28,
         "Unexpected serialized Object size");
 
 

@@ -332,6 +332,10 @@ ObjectManager::readObject(Key& key, Buffer* outBuffer,
                 RejectRules* rejectRules, uint64_t* outVersion,
                 bool valueOnly, TabletManager::Tablet *tablet, bool* respHdrPriorityReplay)
 {
+    if (respHdrPriorityReplay != NULL) {
+        *respHdrPriorityReplay = false;
+    }
+
     objectMap.prefetchBucket(key.getHash());
     HashTableBucketLock lock(*this, key);
 
@@ -458,7 +462,9 @@ ObjectManager::readObject(Key& key, Buffer* outBuffer,
             object.getKeysAndValueLength() - valueLength;
 
     if (respHdrPriorityReplay != NULL) {
-        *respHdrPriorityReplay = object.getPriorityReplayDone();
+        if (object.getPriorityReplayDone()) {
+            *respHdrPriorityReplay = true;
+        }
     }
 
     return STATUS_OK;
@@ -835,10 +841,6 @@ ObjectManager::replaySegment(SideLog* sideLog, SegmentIterator& it,
                     sideLog->free(currentReference);
                     liveObjectCount--;
                 }
-            }
-
-            if (priorityReplay) {
-                recoveryObj->priorityReplayDone = true;
             }
 
             // Add the incoming object or tombstone to our log and update
@@ -1343,6 +1345,7 @@ ObjectManager::writeObject(Object& newObject, RejectRules* rejectRules,
 
     HashTable::Candidates currentHashTableEntry;
 
+    uint32_t removedObjPriorityReplay = 0;
     if (lookup(lock, key, currentType, currentBuffer, 0,
                &currentReference, &currentHashTableEntry)) {
         if (currentType == LOG_ENTRY_TYPE_OBJTOMB) {
@@ -1356,6 +1359,7 @@ ObjectManager::writeObject(Object& newObject, RejectRules* rejectRules,
             if (removedObjBuffer != NULL) {
                 removedObjBuffer->append(&currentBuffer);
             }
+            removedObjPriorityReplay = currentObject.getPriorityReplayDone();
         }
     }
 
@@ -1375,6 +1379,8 @@ ObjectManager::writeObject(Object& newObject, RejectRules* rejectRules,
 
     newObject.setVersion(newObjectVersion);
     newObject.setTimestamp(WallTime::secondsTimestamp());
+
+    newObject.setPriorityReplayDone(removedObjPriorityReplay);
 
     assert(currentVersion == VERSION_NONEXISTENT ||
            newObject.getVersion() > currentVersion);

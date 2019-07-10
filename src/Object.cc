@@ -666,10 +666,19 @@ Object::getValueOffset(uint32_t *offset)
 /**
  * Obtain the length of the object's value
  */
-bool
+uint32_t
 Object::getPriorityReplayDone()
 {
     return header.priorityReplayDone;
+}
+
+/**
+ * Obtain the length of the object's value
+ */
+void
+Object::setPriorityReplayDone(uint32_t priorityReplayDone)
+{
+    header.priorityReplayDone = priorityReplayDone;
 }
 
 /**
