@@ -861,9 +861,10 @@ ObjectManager::replaySegment(SideLog* sideLog, SegmentIterator& it,
 
             if (priorityReplay) {
                 Buffer newlyReplayedBuffer;
-                sideLog->getEntry(newObjReference, newlyReplayedBuffer);
-                Object o(newlyReplayedBuffer);
-                o.setPriorityReplayDone(1);
+                if (sideLog->getEntry(newObjReference, newlyReplayedBuffer) == LOG_ENTRY_TYPE_OBJ) {
+                    Object o(newlyReplayedBuffer);
+                    o.setPriorityReplayDone(1);
+                }
             }
 
             // JIRA Issue: RAM-674:
