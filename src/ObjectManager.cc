@@ -330,7 +330,7 @@ ObjectManager::prefetchHashTableBucket(SegmentIterator* it)
 Status
 ObjectManager::readObject(Key& key, Buffer* outBuffer,
                 RejectRules* rejectRules, uint64_t* outVersion,
-                bool valueOnly, TabletManager::Tablet *tablet)
+                bool valueOnly, TabletManager::Tablet *tablet, bool* respHdrPriorityReplay)
 {
     objectMap.prefetchBucket(key.getHash());
     HashTableBucketLock lock(*this, key);
@@ -456,6 +456,10 @@ ObjectManager::readObject(Key& key, Buffer* outBuffer,
     PerfStats::threadStats.readObjectBytes += valueLength;
     PerfStats::threadStats.readKeyBytes +=
             object.getKeysAndValueLength() - valueLength;
+
+    if (respHdrPriorityReplay != NULL) {
+        *respHdrPriorityReplay = object.getPriorityReplayDone();
+    }
 
     return STATUS_OK;
 }
@@ -831,6 +835,10 @@ ObjectManager::replaySegment(SideLog* sideLog, SegmentIterator& it,
                     sideLog->free(currentReference);
                     liveObjectCount--;
                 }
+            }
+
+            if (priorityReplay) {
+                recoveryObj->priorityReplayDone = true;
             }
 
             // Add the incoming object or tombstone to our log and update

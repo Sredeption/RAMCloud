@@ -1964,7 +1964,7 @@ MasterService::read(const WireFormat::Read::Request* reqHdr,
     TabletManager::Tablet tablet;
     respHdr->common.status = objectManager.readObject(
         key, rpc->replyPayload, &rejectRules, &respHdr->version, valueOnly,
-        &tablet);
+        &tablet, &respHdr->priorityPullDone);
     if (tablet.state == TabletManager::MIGRATION_SOURCE ||
         tablet.state == TabletManager::MIGRATION_TARGET ||
         tablet.state == TabletManager::ROCKSTEADY_MIGRATING ) {
@@ -1979,15 +1979,8 @@ MasterService::read(const WireFormat::Read::Request* reqHdr,
         respHdr->migrationPartitionsProgress[i] = context->geminiMigrationManager->updateRegularPullProgress(i);
     }
 
-    respHdr->priorityPullDone = false;
-
     if (respHdr->common.status != STATUS_OK)
         return;
-
-    uint64_t unused;
-    KeyHash hash = key.getHash();
-    if (!context->geminiMigrationManager->lookupRegularPullProgress(HashTable::findBucketIndex(16777216, hash, &unused))) {
-    }
 
     respHdr->length = rpc->replyPayload->size() - initialLength;
 #ifdef MIGRATION_PROFILE

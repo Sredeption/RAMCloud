@@ -83,7 +83,7 @@ class ObjectManager : public LogEntryHandlers,
     void prefetchHashTableBucket(SegmentIterator* it);
     Status readObject(Key& key, Buffer* outBuffer,
                 RejectRules* rejectRules, uint64_t* outVersion,
-                bool valueOnly = false, TabletManager::Tablet *tablet=NULL);
+                bool valueOnly = false, TabletManager::Tablet *tablet = NULL, bool* respHdrPriorityReplay = NULL);
     Status removeObject(Key& key, RejectRules* rejectRules,
                 uint64_t* outVersion, Buffer* removedObjBuffer = NULL,
                 RpcResult* rpcResult = NULL, uint64_t* rpcResultPtr = NULL);

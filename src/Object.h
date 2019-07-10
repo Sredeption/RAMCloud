@@ -118,6 +118,7 @@ class Object {
     KeyCount getKeyCount();
     const void* getValue(uint32_t *valueLength = NULL);
     bool getValueOffset(uint32_t *offset);
+    bool getPriorityReplayDone();
     uint32_t getValueLength();
 
     uint32_t getKeysAndValueLength();
@@ -154,7 +155,8 @@ class Object {
             : checksum(0),
               timestamp(timestamp),
               version(version),
-              tableId(tableId)
+              tableId(tableId),
+              priorityReplayDone(false)
         {
         }
 
@@ -172,6 +174,8 @@ class Object {
 
         /// Table to which this object belongs.
         uint64_t tableId;
+
+        bool priorityReplayDone;
 
         /// Following this class will be the number of keys, key lengths,
         /// the keys and finally the value. This member is only here to denote
