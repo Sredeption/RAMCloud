@@ -83,7 +83,7 @@ class GeminiMigration {
     int tearDown();
 
     // Change as necessary.
-    LogLevel ll = DEBUG;
+    LogLevel ll = NOTICE;
 
     Context *context;
 
