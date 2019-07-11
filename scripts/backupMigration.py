@@ -79,7 +79,7 @@ def backup_migrate(num_servers,
     # Allocate enough memory on recovery masters to handle several
     # recovery partitions (most recoveries will only have one recovery
     # partition per master, which is about 500 MB).
-    args['master_args'] = '-t 18000 --segmentFrames 8192'
+    args['master_args'] = '-t 18000 --totalMasterMemory=57344 --segmentFrames=46080 --maxCores=9 --maxNonVolatileBuffers=0 -d'
     if master_args:
         args['master_args'] += ' ' + master_args
     args['client'] = ('%s -l %s' %

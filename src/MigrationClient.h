@@ -100,7 +100,7 @@ class MigrationClient {
             partitions[i]->currentHTBucket = respHdr->migrationPartitionsProgress[i];
             // RAMCLOUD_LOG(NOTICE, "partition %u currentHTBucket is %lu.", i, partitions[i]->currentHTBucket);
         }
-        if (respHdr->priorityPullDone == true) {
+        if (respHdr->common.status == STATUS_OK && !lookupRegularPullProgress(findBucketIdx(16777216, hash))) {
             finishedPriorityHashes.insert(hash);
             // RAMCLOUD_LOG(NOTICE, "hash %lx has been priority pulled.", hash);
         }
