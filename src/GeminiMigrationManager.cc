@@ -143,7 +143,7 @@ bool GeminiMigrationManager::requestPriorityHash(uint64_t tableId,
 uint64_t
 GeminiMigrationManager::updateRegularPullProgress(uint32_t i) {
     for (auto &migration : migrationsInProgress) {
-        for (std::map<uint64_t,uint64_t>::iterator it = migration->partitionsMap.begin(), j = 0; ; ++it, j++) {
+        for (std::map<uint64_t,uint64_t>::iterator it = migration->partitionsMap.begin(), uint32_t j = 0; ; ++it, j++) {
             if (j != i)
                 continue;
             

@@ -83,7 +83,7 @@ class GeminiMigration {
     int pullAndReplay_sendReplayRpcs();
 
     int sideLogCommit();
-partitionsTab
+
     int tearDown();
 
     // Change as necessary.
