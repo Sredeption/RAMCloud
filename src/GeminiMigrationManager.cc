@@ -143,13 +143,7 @@ bool GeminiMigrationManager::requestPriorityHash(uint64_t tableId,
 uint64_t
 GeminiMigrationManager::updateRegularPullProgress(uint32_t i) {
     for (auto &migration : migrationsInProgress) {
-        uint32_t j = 0;
-        for (std::map<uint64_t,uint64_t>::iterator it = migration->partitionsMap.begin(); ; ++it, j++) {
-            if (j != i)
-                continue;
-            
-            return it->second;
-        }
+        migration->partitionsArray[i].load(std::memory_order_relaxed);
     }
     return 0;
 }
@@ -170,7 +164,7 @@ GeminiMigration::GeminiMigration(Context *context,
       inProgressPriorityHashes(), priorityHashesRequestBuffer(),
       priorityHashesResponseBuffer(), priorityPullRpc(),
       priorityHashesSideLogCommitted(false), priorityHashesSideLog(),
-      partitions(), partitionsMap(), numCompletedPartitions(0), pullRpcs(), freePullRpcs(),
+      partitions(), partitionsArray(), numCompletedPartitions(0), pullRpcs(), freePullRpcs(),
       busyPullRpcs(), priorityReplayRpc(), replayRpcs(), freeReplayRpcs(),
       busyReplayRpcs(), sideLogs(), freeSideLogs(), tookOwnership(false),
       droppedSourceTablet(false), dropSourceTabletRpc(), nextSideLogCommit(0),
@@ -313,7 +307,7 @@ GeminiMigration::prepare()
                              partitionEndHTBucket, startKeyHash, endKeyHash,
                              tableId);
 
-                partitionsMap[partitionStartHTBucket] = 0;
+                partitionsArray[i].store(0, std::memory_order_relaxed);
             }
 
             // The destination can now start migrating data.
@@ -669,7 +663,7 @@ GeminiMigration::pullAndReplay_reapReplayRpcs()
             (*partition)->totalReplayedBytes += numReplayedBytes;
             (*partition)->numReplaysInProgress--;
 
-            partitionsMap[(*partition)->startHTBucket] = (*partition)->currentHTBucket;
+            partitionsArray[(*partition)->startHTBucket / (sourceNumHTBuckets / MAX_NUM_PARTITIONS)].store((*partition)->currentHTBucket, std::memory_order_relaxed);
 
             // All data within this partition has been pulled and replayed.
             if (((*partition)->allDataPulled == true) &&

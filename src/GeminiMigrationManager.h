@@ -263,7 +263,7 @@ class GeminiMigration {
 
     Tub<GeminiHashPartition> partitions[MAX_NUM_PARTITIONS];
 
-    std::map<uint64_t, uint64_t> partitionsMap;
+    std::atomic<uint64_t> partitionsArray[MAX_NUM_PARTITIONS];
 
     uint32_t numCompletedPartitions;
 
