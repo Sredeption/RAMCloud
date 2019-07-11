@@ -1975,8 +1975,10 @@ MasterService::read(const WireFormat::Read::Request* reqHdr,
         respHdr->migrating = false;
     }
 
-    for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
-        respHdr->migrationPartitionsProgress[i] = context->geminiMigrationManager->updateRegularPullProgress(i);
+    if (tablet.state == TabletManager::ROCKSTEADY_MIGRATING) {
+        for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
+            respHdr->migrationPartitionsProgress[i] = context->geminiMigrationManager->updateRegularPullProgress(i);
+        }
     }
 
     if (respHdr->common.status != STATUS_OK)

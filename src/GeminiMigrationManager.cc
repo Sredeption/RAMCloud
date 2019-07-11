@@ -143,7 +143,9 @@ bool GeminiMigrationManager::requestPriorityHash(uint64_t tableId,
 uint64_t
 GeminiMigrationManager::updateRegularPullProgress(uint32_t i) {
     for (auto &migration : migrationsInProgress) {
-        return migration->partitions[i]->currentHTBucket;
+        if (migration->partitions[i]) {
+            return migration->partitions[i]->currentHTBucket;
+        }
     }
     return 0;
 }

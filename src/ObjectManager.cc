@@ -343,6 +343,7 @@ ObjectManager::readObject(Key& key, Buffer* outBuffer,
     if (!tabletManager->checkAndIncrementReadCount(key, tablet)) {
         // Check if the key belongs to a tablet under migration by the
         // rocksteady migration protocol.
+        tabletManager->getTablet(key, tablet);
         TabletManager::Tablet t;
         bool tabletExists = tabletManager->getTablet(key, &t);
 
