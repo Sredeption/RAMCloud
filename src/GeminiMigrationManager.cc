@@ -143,8 +143,11 @@ bool GeminiMigrationManager::requestPriorityHash(uint64_t tableId,
 uint64_t
 GeminiMigrationManager::updateRegularPullProgress(uint32_t i) {
     for (auto &migration : migrationsInProgress) {
-        if (migration->partitions[i]) {
-            return migration->partitions[i]->currentHTBucket;
+        for (std::map<uint64_t,uint64_t>::iterator it = migration->partitionsMap.begin(), j = 0; ; ++it, j++) {
+            if (j != i)
+                continue;
+            
+            return it->second;
         }
     }
     return 0;
@@ -166,7 +169,7 @@ GeminiMigration::GeminiMigration(Context *context,
       inProgressPriorityHashes(), priorityHashesRequestBuffer(),
       priorityHashesResponseBuffer(), priorityPullRpc(),
       priorityHashesSideLogCommitted(false), priorityHashesSideLog(),
-      partitions(), numCompletedPartitions(0), pullRpcs(), freePullRpcs(),
+      partitions(), partitionsMap(), numCompletedPartitions(0), pullRpcs(), freePullRpcs(),
       busyPullRpcs(), priorityReplayRpc(), replayRpcs(), freeReplayRpcs(),
       busyReplayRpcs(), sideLogs(), freeSideLogs(), tookOwnership(false),
       droppedSourceTablet(false), dropSourceTabletRpc(), nextSideLogCommit(0),
@@ -308,6 +311,8 @@ GeminiMigration::prepare()
                              partitionStartHTBucket,
                              partitionEndHTBucket, startKeyHash, endKeyHash,
                              tableId);
+
+                partitionsMap[partitionStartHTBucket] = 0;
             }
 
             // The destination can now start migrating data.
@@ -662,6 +667,8 @@ GeminiMigration::pullAndReplay_reapReplayRpcs()
             (*partition)->freePullBuffers.push_back(responseBuffer);
             (*partition)->totalReplayedBytes += numReplayedBytes;
             (*partition)->numReplaysInProgress--;
+
+            partitionsMap[(*partition)->startHTBucket] = (*partition)->currentHTBucket;
 
             // All data within this partition has been pulled and replayed.
             if (((*partition)->allDataPulled == true) &&

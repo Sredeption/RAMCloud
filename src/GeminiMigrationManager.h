@@ -83,7 +83,7 @@ class GeminiMigration {
     int pullAndReplay_sendReplayRpcs();
 
     int sideLogCommit();
-
+partitionsTab
     int tearDown();
 
     // Change as necessary.
@@ -256,13 +256,14 @@ class GeminiMigration {
             freeReplayBuffers;
 
         friend class GeminiMigration;
-        friend class GeminiMigrationManager;
         DISALLOW_COPY_AND_ASSIGN(GeminiHashPartition);
     };
 
     static const uint32_t MAX_NUM_PARTITIONS = 8;
 
     Tub<GeminiHashPartition> partitions[MAX_NUM_PARTITIONS];
+
+    std::map<uint64_t, uint64_t> partitionsMap;
 
     uint32_t numCompletedPartitions;
 
