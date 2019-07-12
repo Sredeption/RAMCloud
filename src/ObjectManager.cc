@@ -414,6 +414,8 @@ ObjectManager::readObject(Key& key, Buffer* outBuffer,
                 return STATUS_OBJECT_DOESNT_EXIST;
             }
         } else {
+            TabletManager::Tablet t;
+            bool tabletExists = tabletManager->getTablet(key, &t);
             if (tabletExists && t.state ==
                                 TabletManager::ROCKSTEADY_MIGRATING) {
                 {

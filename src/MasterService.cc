@@ -2436,14 +2436,14 @@ MasterService::rocksteadyMigrationPriorityHashes(
     // If ROCKSTEADY_SOURCE_OWNS_TABLET is defined, then do not check for a
     // locked tablet.
 #ifndef ROCKSTEADY_SOURCE_OWNS_TABLET
-    if (sourceTablet.state != TabletManager::LOCKED_FOR_MIGRATION) {
-        LOG(NOTICE, "Received a priority hashes migration request for a"
-                " tablet that was not previously locked for migration:"
-                " tablet[0x%lx, 0x%lx], tableId %lu", startKeyHash,
-                endKeyHash, tableId);
-        respHdr->common.status = STATUS_INTERNAL_ERROR;
-        return;
-    }
+    // if (sourceTablet.state != TabletManager::LOCKED_FOR_MIGRATION) {
+    //     LOG(NOTICE, "Received a priority hashes migration request for a"
+    //             " tablet that was not previously locked for migration:"
+    //             " tablet[0x%lx, 0x%lx], tableId %lu", startKeyHash,
+    //             endKeyHash, tableId);
+    //     respHdr->common.status = STATUS_INTERNAL_ERROR;
+    //     return;
+    // }
 #endif // ROCKSTEADY_SOURCE_OWNS_TABLET
 
     numReturnedLogEntries = objectManager.rocksteadyMigrationPriorityHashes(
