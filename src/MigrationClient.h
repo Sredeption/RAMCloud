@@ -68,6 +68,15 @@ class MigrationClient {
     Tub<migrationPartitionsProgress> partitions[WireFormat::MAX_NUM_PARTITIONS];
     uint64_t sourceNumHTBuckets;
 
+    bool lookupRegularPullProgress(uint64_t bucketIndex) {
+        for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
+            if (partitions[i]->startHTBucket <= bucketIndex && bucketIndex < partitions[i]->currentHTBucket) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     void updateProgress(const WireFormat::Read::Response *respHdr, uint64_t hash) {
         for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
             partitions[i]->currentHTBucket = respHdr->partitionsProgress[i];

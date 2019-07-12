@@ -1054,7 +1054,7 @@ class MigrationReadRpc : public ServerIdRpcWrapper {
     bool wait(uint64_t *version = NULL, bool *objectExists = NULL,
               bool *migrating = NULL, uint64_t *sourceId = NULL,
               uint64_t *targetId = NULL);
-
+    void updateProgress();
   PRIVATE:
     RamCloud *ramcloud;
     KeyHash hash;
@@ -1093,7 +1093,7 @@ class MigrationReadKeysAndValueRpc : public ServerIdRpcWrapper {
     bool wait(uint64_t *version = NULL, bool *objectExists = NULL,
               bool *migrating = NULL, uint64_t *sourceId = NULL,
               uint64_t *targetId = NULL);
-
+    void updateProgress();
   PRIVATE:
     RamCloud *ramcloud;
     KeyHash hash;
