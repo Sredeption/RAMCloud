@@ -304,7 +304,7 @@ class WorkloadGenerator {
                              ramcloud->getNotFound(ramcloud),
                              ramcloud->getRegularPullFound(ramcloud),
                              ramcloud->getPriorityPullFound(ramcloud),
-                             ramcloud->getpriorityHashSize(ramcloud),
+                             ramcloud->getPriorityHashSize(ramcloud),
                              timestamp, static_cast<double > (current - bandwidth) / 1024 / 102);
 
                 bandwidth = current;

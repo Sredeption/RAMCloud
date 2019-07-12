@@ -2529,7 +2529,7 @@ RamCloud::getPriorityPullFound(RamCloud *ramcloud)
 uint64_t
 RamCloud::getPriorityHashSize(RamCloud *ramcloud)
 {
-    return ramcloud>migrationClient->finishedPriorityHashes.size();
+    return ramcloud->migrationClient->finishedPriorityHashes.size();
 }
 
 /**
