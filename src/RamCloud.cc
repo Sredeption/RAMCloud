@@ -2526,6 +2526,12 @@ RamCloud::getPriorityPullFound(RamCloud *ramcloud)
     return ret;
 }
 
+uint64_t
+RamCloud::getPriorityHashSize(RamCloud *ramcloud)
+{
+    return ramcloud>migrationClient->finishedPriorityHashes.size();
+}
+
 /**
  * Delete an object from a table. If the object does not currently exist
  * then the operation succeeds without doing anything (unless rejectRules
