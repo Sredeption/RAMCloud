@@ -6,6 +6,8 @@
 #include "RamCloud.h"
 #include "Dispatch.h"
 
+#include <unordered_set>
+
 namespace RAMCloud {
 
 class MigrationClient {
@@ -66,8 +68,11 @@ class MigrationClient {
     };
 
     Tub<migrationPartitionsProgress> partitions[WireFormat::MAX_NUM_PARTITIONS];
+    std::unordered_set<uint64_t> finishedPriorityHashes;
+
     uint64_t notFound;
     uint64_t regularPullFound;
+    uint64_t priorityPullFound;
     uint64_t sourceNumHTBuckets;
 
     uint64_t findBucketIdx(uint64_t numBuckets, KeyHash keyHash) {
@@ -84,10 +89,26 @@ class MigrationClient {
         return false;
     }
 
+    bool lookupPriorityPullProgress(uint64_t hash) {
+        if (finishedPriorityHashes.find(hash) != finishedPriorityHashes.end()) {
+            return true;
+        }
+        return false;
+    }
+
     void updateProgress(const WireFormat::Read::Response *respHdr, uint64_t hash) {
         for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
             partitions[i]->currentHTBucket = respHdr->partitionsProgress[i];
             // RAMCLOUD_LOG(NOTICE, "partition %u currentHTBucket is %lu.", i, partitions[i]->currentHTBucket);
+        }
+        if (respHdr->common.status == STATUS_OK && !lookupRegularPullProgress(findBucketIdx(sourceNumHTBuckets, hash))) {
+            finishedPriorityHashes.insert(hash);
+        }
+        for (auto it = finishedPriorityHashes.begin();
+             it != finishedPriorityHashes.end(); it++) {
+             if (lookupRegularPullProgress(findBucketIdx(sourceNumHTBuckets, *it))) {
+                finishedPriorityHashes.erase(*it);
+            }
         }
     }
 
@@ -172,6 +193,8 @@ class MigrationReadTask {
             uint64_t bucket = ramcloud->migrationClient->findBucketIdx(ramcloud->migrationClient->sourceNumHTBuckets, hash);
             if (ramcloud->migrationClient->lookupRegularPullProgress(bucket)) {
                 ramcloud->migrationClient->regularPullFound++;
+            } else if (ramcloud->migrationClient->lookupPriorityPullProgress(hash)) {
+                ramcloud->migrationClient->priorityPullFound++;
             } else {
                 ramcloud->migrationClient->notFound++;
             }

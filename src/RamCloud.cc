@@ -2518,6 +2518,14 @@ RamCloud::getRegularPullFound(RamCloud *ramcloud)
     return ret;
 }
 
+uint64_t
+RamCloud::getPriorityPullFound(RamCloud *ramcloud)
+{
+    uint64_t ret = ramcloud->migrationClient->priorityPullFound;
+    ramcloud->migrationClient->priorityPullFound = 0;
+    return ret;
+}
+
 /**
  * Delete an object from a table. If the object does not currently exist
  * then the operation succeeds without doing anything (unless rejectRules

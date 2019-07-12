@@ -11,8 +11,10 @@ MigrationClient::MigrationClient(RAMCloud::RamCloud *ramcloud)
     : ramcloud(ramcloud),
       tableMap(),
       partitions(),
+      finishedPriorityHashes(),
       notFound(0),
       regularPullFound(0),
+      priorityPullFound(0),
       sourceNumHTBuckets(67108864)
 {
     for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; i++) {
