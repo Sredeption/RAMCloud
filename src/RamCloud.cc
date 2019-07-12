@@ -2278,8 +2278,11 @@ MigrationReadRpc::MigrationReadRpc(RamCloud *ramcloud, ServerId serverId,
                                    const RejectRules *rejectRules)
     : ServerIdRpcWrapper(ramcloud->clientContext, serverId,
                                sizeof(WireFormat::Read::Response), value)
-                               , ramcloud(ramcloud), hash(Key(tableId, key, keyLength).getHash())
+                               , hash(), bucketIdx(), ramcloud(ramcloud)
 {
+    hash = Key(tableId, key, keyLength).getHash();
+    bucketIdx = ramcloud->migrationClient->findBucketIdx(ramcloud->migrationClient->sourceNumHTBuckets, hash);
+    
     value->reset();
     WireFormat::Read::Request *reqHdr(allocHeader<WireFormat::Read>());
     reqHdr->tableId = tableId;
@@ -2337,7 +2340,7 @@ void MigrationReadRpc::updateProgress() {
     const WireFormat::Read::Response *respHdr(
         getResponseHeader<WireFormat::Read>());
 
-    ramcloud->migrationClient->updateProgress(respHdr, hash);
+    ramcloud->migrationClient->updateProgress(respHdr, bucketIdx);
 
 }
 
@@ -2439,8 +2442,10 @@ MigrationReadKeysAndValueRpc::MigrationReadKeysAndValueRpc(
     const RejectRules *rejectRules)
     : ServerIdRpcWrapper(ramcloud->clientContext, serverId,
                          sizeof(WireFormat::ReadKeysAndValue::Response), value)
-                         , ramcloud(ramcloud), hash(Key(tableId, key, keyLength).getHash())
+                         , hash(), bucketIdx(), ramcloud(ramcloud)
 {
+    hash = Key(tableId, key, keyLength).getHash();
+    bucketIdx = ramcloud->migrationClient->findBucketIdx(ramcloud->migrationClient->sourceNumHTBuckets, hash);
     value->reset();
     WireFormat::ReadKeysAndValue::Request *reqHdr(allocHeader<
         WireFormat::ReadKeysAndValue>());
@@ -2499,7 +2504,7 @@ void MigrationReadKeysAndValueRpc::updateProgress() {
     const WireFormat::Read::Response *respHdr(
         getResponseHeader<WireFormat::Read>());
 
-    ramcloud->migrationClient->updateProgress(respHdr, hash);
+    ramcloud->migrationClient->updateProgress(respHdr, bucketIdx);
 }
 
 uint64_t

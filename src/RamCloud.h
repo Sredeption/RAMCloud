@@ -1059,9 +1059,11 @@ class MigrationReadRpc : public ServerIdRpcWrapper {
               bool *migrating = NULL, uint64_t *sourceId = NULL,
               uint64_t *targetId = NULL);
     void updateProgress();
+    
+    KeyHash hash;
+    uint64_t bucketIdx;
   PRIVATE:
     RamCloud *ramcloud;
-    KeyHash hash;
     DISALLOW_COPY_AND_ASSIGN(MigrationReadRpc);
 };
 
@@ -1098,9 +1100,11 @@ class MigrationReadKeysAndValueRpc : public ServerIdRpcWrapper {
               bool *migrating = NULL, uint64_t *sourceId = NULL,
               uint64_t *targetId = NULL);
     void updateProgress();
+
+    KeyHash hash;
+    uint64_t bucketIdx;
   PRIVATE:
     RamCloud *ramcloud;
-    KeyHash hash;
     DISALLOW_COPY_AND_ASSIGN(MigrationReadKeysAndValueRpc);
 };
 
