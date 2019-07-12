@@ -68,6 +68,11 @@ class MigrationClient {
     Tub<migrationPartitionsProgress> partitions[WireFormat::MAX_NUM_PARTITIONS];
     uint64_t sourceNumHTBuckets;
 
+    uint64_t findBucketIdx(uint64_t numBuckets, KeyHash keyHash) {
+        uint64_t bucketHash = keyHash & 0x0000ffffffffffffUL;
+        return (bucketHash & (numBuckets - 1));
+    }
+
     bool lookupRegularPullProgress(uint64_t bucketIndex) {
         for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
             if (partitions[i]->startHTBucket <= bucketIndex && bucketIndex < partitions[i]->currentHTBucket) {
@@ -80,7 +85,7 @@ class MigrationClient {
     void updateProgress(const WireFormat::Read::Response *respHdr, uint64_t hash) {
         for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
             partitions[i]->currentHTBucket = respHdr->partitionsProgress[i];
-            RAMCLOUD_LOG(NOTICE, "partition %u currentHTBucket is %lu.", i, partitions[i]->currentHTBucket);
+            // RAMCLOUD_LOG(NOTICE, "partition %u currentHTBucket is %lu.", i, partitions[i]->currentHTBucket);
         }
     }
 
@@ -161,6 +166,10 @@ class MigrationReadTask {
                 state = NORMAL;
             }
 
+            KeyHash hash = Key(tableId, key, keyLength).getHash();
+            uint64_t bucket = ramcloud->migrationClient->findBucketIdx(ramcloud->migrationClient->sourceNumHTBuckets, hash);
+            if (ramcloud->migrationClient->lookupRegularPullProgress(bucket)) {
+            }
         }
 
         if (state == NORMAL) {
