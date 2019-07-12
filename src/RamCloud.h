@@ -137,6 +137,8 @@ class RamCloud {
     void readMigrating(uint64_t tableId, const void *key, uint16_t keyLength,
                        Buffer *value, const RejectRules *rejectRules = NULL,
                        uint64_t *version = NULL, bool *objectExists = NULL);
+    uint64_t getRegularPullFound(RamCloud *ramcloud);
+    uint64_t getNotFound(RamCloud *ramcloud);
     void readKeysAndValue(uint64_t tableId, const void* key, uint16_t keyLength,
             ObjectBuffer* value, const RejectRules* rejectRules = NULL,
             uint64_t* version = NULL, bool* objectExists = NULL);

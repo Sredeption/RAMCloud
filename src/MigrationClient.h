@@ -66,6 +66,8 @@ class MigrationClient {
     };
 
     Tub<migrationPartitionsProgress> partitions[WireFormat::MAX_NUM_PARTITIONS];
+    uint64_t notFound;
+    uint64_t regularPullFound;
     uint64_t sourceNumHTBuckets;
 
     uint64_t findBucketIdx(uint64_t numBuckets, KeyHash keyHash) {
@@ -169,6 +171,9 @@ class MigrationReadTask {
             KeyHash hash = Key(tableId, key, keyLength).getHash();
             uint64_t bucket = ramcloud->migrationClient->findBucketIdx(ramcloud->migrationClient->sourceNumHTBuckets, hash);
             if (ramcloud->migrationClient->lookupRegularPullProgress(bucket)) {
+                ramcloud->migrationClient->regularPullFound++;
+            } else {
+                ramcloud->migrationClient->notFound++;
             }
         }
 

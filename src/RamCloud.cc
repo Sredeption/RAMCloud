@@ -2502,6 +2502,22 @@ void MigrationReadKeysAndValueRpc::updateProgress() {
     ramcloud->migrationClient->updateProgress(respHdr, hash);
 }
 
+uint64_t
+RamCloud::getNotFound(RamCloud *ramcloud)
+{
+    uint64_t ret = ramcloud->migrationClient->notFound;
+    ramcloud->migrationClient->notFound = 0;
+    return ret;
+}
+
+uint64_t
+RamCloud::getRegularPullFound(RamCloud *ramcloud)
+{
+    uint64_t ret = ramcloud->migrationClient->regularPullFound;
+    ramcloud->migrationClient->regularPullFound = 0;
+    return ret;
+}
+
 /**
  * Delete an object from a table. If the object does not currently exist
  * then the operation succeeds without doing anything (unless rejectRules

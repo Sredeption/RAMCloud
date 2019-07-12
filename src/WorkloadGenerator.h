@@ -300,9 +300,10 @@ class WorkloadGenerator {
                                    PerfStats::threadStats.networkInputBytes;
                 timestamp++;
 
-                RAMCLOUD_LOG(NOTICE, "%lu: %lf", timestamp,
-                             static_cast<double > (current - bandwidth) / 1024 /
-                             102);
+                RAMCLOUD_LOG(NOTICE, "notFound: %lu, regularPullFound: %lu, %lu: %lf",
+                             ramcloud->getNotFound(ramcloud),
+                             ramcloud->getRegularPullFound(ramcloud),
+                             timestamp, static_cast<double > (current - bandwidth) / 1024 / 102);
 
                 bandwidth = current;
                 lastTime = stop;
