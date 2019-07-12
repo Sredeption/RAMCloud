@@ -1975,6 +1975,8 @@ MasterService::read(const WireFormat::Read::Request* reqHdr,
         respHdr->migrating = false;
     }
 
+    respHdr->dummy = context->geminiMigrationManager->updateRegularPullProgress(0);
+
     if (respHdr->common.status != STATUS_OK)
         return;
 

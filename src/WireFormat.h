@@ -1664,6 +1664,8 @@ struct Read {
         bool migrating;
         uint64_t sourceId;
         uint64_t targetId;
+
+        uint64_t dummy;
     } __attribute__((packed));
 };
 
