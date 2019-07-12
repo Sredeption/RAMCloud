@@ -49,6 +49,32 @@ class MigrationClient {
     DISALLOW_COPY_AND_ASSIGN(MigrationClient);
   PUBLIC:
 
+    class migrationPartitionsProgress {
+    public:
+        explicit migrationPartitionsProgress(uint64_t startHTBucket,
+                                            uint64_t endHTBucket)
+            : startHTBucket(startHTBucket), endHTBucket(endHTBucket), currentHTBucket(startHTBucket) {
+        }
+
+        ~migrationPartitionsProgress() {}
+
+        const uint64_t startHTBucket;
+
+        const uint64_t endHTBucket;
+
+        uint64_t currentHTBucket;
+    };
+
+    Tub<migrationPartitionsProgress> partitions[WireFormat::MAX_NUM_PARTITIONS];
+    uint64_t sourceNumHTBuckets;
+
+    void updateProgress(const WireFormat::Read::Response *respHdr, uint64_t hash) {
+        for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
+            partitions[i]->currentHTBucket = respHdr->partitionsProgress[i];
+            RAMCLOUD_LOG(NOTICE, "partition %u currentHTBucket is %lu.", i, partitions[i]->currentHTBucket);
+        }
+    }
+
     MigrationClient(RamCloud *ramcloud);
 
     void putTablet(uint64_t tableId, const void *key, uint16_t keyLength,
@@ -173,6 +199,8 @@ class MigrationReadTask {
                     state = INIT;
                     return;
                 }
+
+                targetReadRpc->updateProgress();
 
                 value->reset();
 

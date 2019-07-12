@@ -2278,6 +2278,7 @@ MigrationReadRpc::MigrationReadRpc(RamCloud *ramcloud, ServerId serverId,
                                    const RejectRules *rejectRules)
     : ServerIdRpcWrapper(ramcloud->clientContext, serverId,
                                sizeof(WireFormat::Read::Response), value)
+                               , ramcloud(ramcloud), hash(Key(tableId, key, keyLength).getHash())
 {
     value->reset();
     WireFormat::Read::Request *reqHdr(allocHeader<WireFormat::Read>());
@@ -2330,6 +2331,14 @@ MigrationReadRpc::wait(uint64_t *version, bool *objectExists, bool *migrating,
     response->truncateFront(sizeof(*respHdr));
     assert(respHdr->length == response->size());
     return true;
+}
+
+void MigrationReadRpc::updateProgress() {
+    const WireFormat::Read::Response *respHdr(
+        getResponseHeader<WireFormat::Read>());
+
+    ramcloud->migrationClient->updateProgress(respHdr, hash);
+
 }
 
 /**
@@ -2430,6 +2439,7 @@ MigrationReadKeysAndValueRpc::MigrationReadKeysAndValueRpc(
     const RejectRules *rejectRules)
     : ServerIdRpcWrapper(ramcloud->clientContext, serverId,
                          sizeof(WireFormat::ReadKeysAndValue::Response), value)
+                         , ramcloud(ramcloud), hash(Key(tableId, key, keyLength).getHash())
 {
     value->reset();
     WireFormat::ReadKeysAndValue::Request *reqHdr(allocHeader<
@@ -2484,6 +2494,14 @@ bool MigrationReadKeysAndValueRpc::wait(uint64_t *version, bool *objectExists,
     assert(respHdr->length == response->size());
     return true;
 }
+
+void MigrationReadKeysAndValueRpc::updateProgress() {
+    const WireFormat::Read::Response *respHdr(
+        getResponseHeader<WireFormat::Read>());
+
+    ramcloud->migrationClient->updateProgress(respHdr, hash);
+}
+
 /**
  * Delete an object from a table. If the object does not currently exist
  * then the operation succeeds without doing anything (unless rejectRules

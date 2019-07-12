@@ -9,9 +9,20 @@ namespace RAMCloud {
 
 MigrationClient::MigrationClient(RAMCloud::RamCloud *ramcloud)
     : ramcloud(ramcloud),
-      tableMap()
+      tableMap(),
+      partitions(),
+      sourceNumHTBuckets(67108864)
 {
+    for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; i++) {
+        uint64_t partitionStartHTBucket =
+            i * (sourceNumHTBuckets / WireFormat::MAX_NUM_PARTITIONS);
+        uint64_t partitionEndHTBucket =
+            ((i + 1) * (sourceNumHTBuckets /
+                        WireFormat::MAX_NUM_PARTITIONS)) - 1;
 
+        partitions[i].construct(partitionStartHTBucket,
+                                partitionEndHTBucket);
+    }
 }
 
 void MigrationClient::putTablet(uint64_t tableId, const void *key,

@@ -1056,6 +1056,8 @@ class MigrationReadRpc : public ServerIdRpcWrapper {
               uint64_t *targetId = NULL);
 
   PRIVATE:
+    RamCloud *ramcloud;
+    KeyHash hash;
     DISALLOW_COPY_AND_ASSIGN(MigrationReadRpc);
 };
 
@@ -1093,6 +1095,8 @@ class MigrationReadKeysAndValueRpc : public ServerIdRpcWrapper {
               uint64_t *targetId = NULL);
 
   PRIVATE:
+    RamCloud *ramcloud;
+    KeyHash hash;
     DISALLOW_COPY_AND_ASSIGN(MigrationReadKeysAndValueRpc);
 };
 

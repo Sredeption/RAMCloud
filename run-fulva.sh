@@ -28,4 +28,7 @@
     
     # Notice the --seconds parameter, it means "For doWorkload based workloads, exit benchmarks after about this many seconds."
 
+    # Clients send multiple requests but there is only single thread managing this (calling isReady()/wait())
+    # So it is thread safe to maintain a hash map in performTask()
+
 python ./scripts/backupMigration.py -r 0 --servers=4 --clients=1 --dpdkPort=0 -T basic+dpdk --superuser
