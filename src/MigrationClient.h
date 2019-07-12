@@ -104,10 +104,11 @@ class MigrationClient {
         if (respHdr->common.status == STATUS_OK && !lookupRegularPullProgress(findBucketIdx(sourceNumHTBuckets, hash))) {
             finishedPriorityHashes.insert(hash);
         }
-        for (auto it = finishedPriorityHashes.begin();
-             it != finishedPriorityHashes.end(); it++) {
-             if (lookupRegularPullProgress(findBucketIdx(sourceNumHTBuckets, *it))) {
-                finishedPriorityHashes.erase(*it);
+        for (auto it = finishedPriorityHashes.begin(); it != finishedPriorityHashes.end();) {
+            if (lookupRegularPullProgress(findBucketIdx(sourceNumHTBuckets, *it))) {
+                it = finishedPriorityHashes.erase(it);
+            } else {
+                ++it;
             }
         }
     }
