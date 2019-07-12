@@ -414,6 +414,16 @@ ObjectManager::readObject(Key& key, Buffer* outBuffer,
                 return STATUS_OBJECT_DOESNT_EXIST;
             }
         } else {
+            if (tabletExists && t.state ==
+                                TabletManager::ROCKSTEADY_MIGRATING) {
+                {
+                    // The tablet is still under migration. Request for a priority
+                    // migration and ask the client to retry after some time.
+                    context->geminiMigrationManager->requestPriorityHash(
+                        t.tableId, t.startKeyHash, t.endKeyHash,
+                        key.getHash());
+                }
+            }
             // This is the normal case for when a lookup failed.
             return STATUS_OBJECT_DOESNT_EXIST;
         }

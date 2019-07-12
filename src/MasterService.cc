@@ -1975,7 +1975,7 @@ MasterService::read(const WireFormat::Read::Request* reqHdr,
         respHdr->migrating = false;
     }
 
-    for (uint32_t i = 0; i < MAX_NUM_PARTITIONS; ++i) {
+    for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
         respHdr->partitionsProgress[i] = context->geminiMigrationManager->updateRegularPullProgress(i);
     }
 
