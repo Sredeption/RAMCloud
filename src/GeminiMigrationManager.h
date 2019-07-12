@@ -27,7 +27,7 @@ class GeminiMigrationManager : Dispatch::Poller {
     bool requestPriorityHash(uint64_t tableId, uint64_t startKeyHash,
                              uint64_t endKeyHash, uint64_t priorityHash);
 
-    uint64_t updateRegularPullProgress();
+    uint64_t updateRegularPullProgress(uint32_t i);
 
   PRIVATE:
     // Shared RAMCloud information.

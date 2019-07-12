@@ -140,11 +140,11 @@ bool GeminiMigrationManager::requestPriorityHash(uint64_t tableId,
         "Received a priority hash for a tablet that is not under migration!");
 }
 
-uint64_t GeminiMigrationManager::updateRegularPullProgress()
+uint64_t GeminiMigrationManager::updateRegularPullProgress(uint32_t i)
 {
     for (auto &migration : migrationsInProgress) {
-        if (migration->partitions[6]) {
-            return migration->partitions[6]->currentHTBucket;
+        if (migration->partitions[i]) {
+            return migration->partitions[i]->currentHTBucket;
         }
         
     }

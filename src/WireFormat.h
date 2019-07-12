@@ -1644,6 +1644,7 @@ struct ProxyPing {
     } __attribute__((packed));
 };
 
+static const uint32_t MAX_NUM_PARTITIONS = 8;
 struct Read {
     static const Opcode opcode = READ;
     static const ServiceType service = MASTER_SERVICE;
@@ -1665,7 +1666,8 @@ struct Read {
         uint64_t sourceId;
         uint64_t targetId;
 
-        uint64_t dummy;
+        uint64_t partitionsProgress[MAX_NUM_PARTITIONS];
+
     } __attribute__((packed));
 };
 
