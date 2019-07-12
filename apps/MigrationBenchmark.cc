@@ -1080,7 +1080,7 @@ void rocksteadyBasic()
         migration(tableId, firstKey, lastKey, ServerId(1, 0),
                   ServerId(newOwnerMasterId, 0), false);
     RocksteadyClient basicClient(client.get(), clientIndex, &migration,
-                                 keyLength, valueLength, objectCount, 20);
+                                 keyLength, valueLength, objectCount, 7);
     RAMCloud::WorkloadGenerator workloadGenerator(
         "YCSB-A", targetOps, objectCount, objectSize, &basicClient);
 
@@ -1375,7 +1375,7 @@ void geminiBasic()
         migration(tableId, firstKey, lastKey, ServerId(1, 0),
                   ServerId(newOwnerMasterId, 0), false);
     GeminiClient basicClient(client.get(), clientIndex, &migration,
-                             keyLength, valueLength, objectCount, 7);
+                             keyLength, valueLength, objectCount, 20);
     RAMCloud::WorkloadGenerator workloadGenerator(
         "YCSB-B", targetOps, objectCount, objectSize, &basicClient);
 
