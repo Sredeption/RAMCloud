@@ -2282,7 +2282,7 @@ MigrationReadRpc::MigrationReadRpc(RamCloud *ramcloud, ServerId serverId,
 {
     hash = Key(tableId, key, keyLength).getHash();
     bucketIdx = ramcloud->migrationClient->findBucketIdx(ramcloud->migrationClient->sourceNumHTBuckets, hash);
-    
+
     value->reset();
     WireFormat::Read::Request *reqHdr(allocHeader<WireFormat::Read>());
     reqHdr->tableId = tableId;
@@ -2340,7 +2340,7 @@ void MigrationReadRpc::updateProgress() {
     const WireFormat::Read::Response *respHdr(
         getResponseHeader<WireFormat::Read>());
 
-    ramcloud->migrationClient->updateProgress(respHdr, bucketIdx);
+    ramcloud->migrationClient->updateProgress(respHdr, hash, bucketIdx);
 
 }
 
@@ -2504,7 +2504,7 @@ void MigrationReadKeysAndValueRpc::updateProgress() {
     const WireFormat::Read::Response *respHdr(
         getResponseHeader<WireFormat::Read>());
 
-    ramcloud->migrationClient->updateProgress(respHdr, bucketIdx);
+    ramcloud->migrationClient->updateProgress(respHdr, hash, bucketIdx);
 }
 
 uint64_t

@@ -96,7 +96,7 @@ class MigrationClient {
         return false;
     }
 
-    void updateProgress(const WireFormat::Read::Response *respHdr, uint64_t bucket) {
+    void updateProgress(const WireFormat::Read::Response *respHdr, uint64_t hash, uint64_t bucket) {
         for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
             partitions[i]->currentHTBucket = respHdr->partitionsProgress[i];
             // RAMCLOUD_LOG(NOTICE, "partition %u currentHTBucket is %lu.", i, partitions[i]->currentHTBucket);
@@ -190,9 +190,9 @@ class MigrationReadTask {
                 state = NORMAL;
             }
 
-            if (ramcloud->migrationClient->lookupRegularPullProgress(targetReadRpc->bucketIdx) {
+            if (ramcloud->migrationClient->lookupRegularPullProgress(targetReadRpc->bucketIdx)) {
                 ramcloud->migrationClient->regularPullFound++;
-            } else if (ramcloud->migrationClient->lookupPriorityPullProgress(targetReadRpc->hash) {
+            } else if (ramcloud->migrationClient->lookupPriorityPullProgress(targetReadRpc->hash)) {
                 ramcloud->migrationClient->priorityPullFound++;
             } else {
                 ramcloud->migrationClient->notFound++;
