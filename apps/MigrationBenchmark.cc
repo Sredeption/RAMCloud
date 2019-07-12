@@ -1080,7 +1080,7 @@ void rocksteadyBasic()
         migration(tableId, firstKey, lastKey, ServerId(1, 0),
                   ServerId(newOwnerMasterId, 0), false);
     RocksteadyClient basicClient(client.get(), clientIndex, &migration,
-                                 keyLength, valueLength, objectCount, 7);
+                                 keyLength, valueLength, objectCount, 20);
     RAMCloud::WorkloadGenerator workloadGenerator(
         "YCSB-A", targetOps, objectCount, objectSize, &basicClient);
 
@@ -1418,7 +1418,7 @@ try
          "First key of the tablet range to migrate")
         ("lastKey,z",
          ProgramOptions::value<uint64_t>(&lastKey)->
-             default_value((~0ul) / 2),
+             default_value((~0ul) / 100 * 99),
          "Last key of the tablet range to migrate")
         ("recipient,r",
          ProgramOptions::value<uint32_t>(&newOwnerMasterId)->
