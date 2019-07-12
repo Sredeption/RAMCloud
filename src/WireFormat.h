@@ -1668,7 +1668,6 @@ struct Read {
         uint64_t targetId;
 
         uint64_t migrationPartitionsProgress[MAX_NUM_PARTITIONS];
-        bool priorityPullDone;
     } __attribute__((packed));
 };
 

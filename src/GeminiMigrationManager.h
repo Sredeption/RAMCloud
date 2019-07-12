@@ -29,10 +29,6 @@ class GeminiMigrationManager : Dispatch::Poller {
     bool requestPriorityHash(uint64_t tableId, uint64_t startKeyHash,
                              uint64_t endKeyHash, uint64_t priorityHash);
 
-    bool lookupRegularPullProgress(uint64_t bucketIndex);
-
-    bool lookupPriorityHashes(uint64_t hash);
-
     uint64_t updateRegularPullProgress(uint32_t i);
 
   PRIVATE:
@@ -260,13 +256,14 @@ class GeminiMigration {
             freeReplayBuffers;
 
         friend class GeminiMigration;
-        friend class GeminiMigrationManager;
         DISALLOW_COPY_AND_ASSIGN(GeminiHashPartition);
     };
 
     static const uint32_t MAX_NUM_PARTITIONS = 8;
 
     Tub<GeminiHashPartition> partitions[MAX_NUM_PARTITIONS];
+
+    std::atomic<uint64_t> partitionsArray[MAX_NUM_PARTITIONS];
 
     uint32_t numCompletedPartitions;
 

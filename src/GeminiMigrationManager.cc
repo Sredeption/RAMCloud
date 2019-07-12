@@ -140,22 +140,10 @@ bool GeminiMigrationManager::requestPriorityHash(uint64_t tableId,
         "Received a priority hash for a tablet that is not under migration!");
 }
 
-bool
-GeminiMigrationManager::lookupRegularPullProgress(uint64_t bucketIndex) {
-    for (auto &migration : migrationsInProgress) {
-        for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
-            if (migration->partitions[i]->startHTBucket <= bucketIndex && bucketIndex < migration->partitions[i]->currentHTBucket) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
 uint64_t
 GeminiMigrationManager::updateRegularPullProgress(uint32_t i) {
     for (auto &migration : migrationsInProgress) {
-        return migration->partitions[i]->currentHTBucket;
+        migration->partitionsArray[i].load(std::memory_order_relaxed);
     }
     return 0;
 }
@@ -176,7 +164,7 @@ GeminiMigration::GeminiMigration(Context *context,
       inProgressPriorityHashes(), priorityHashesRequestBuffer(),
       priorityHashesResponseBuffer(), priorityPullRpc(),
       priorityHashesSideLogCommitted(false), priorityHashesSideLog(),
-      partitions(), numCompletedPartitions(0), pullRpcs(), freePullRpcs(),
+      partitions(), partitionsArray(), numCompletedPartitions(0), pullRpcs(), freePullRpcs(),
       busyPullRpcs(), priorityReplayRpc(), replayRpcs(), freeReplayRpcs(),
       busyReplayRpcs(), sideLogs(), freeSideLogs(), tookOwnership(false),
       droppedSourceTablet(false), dropSourceTabletRpc(), nextSideLogCommit(0),
@@ -318,6 +306,8 @@ GeminiMigration::prepare()
                              partitionStartHTBucket,
                              partitionEndHTBucket, startKeyHash, endKeyHash,
                              tableId);
+
+                partitionsArray[i].store(0, std::memory_order_relaxed);
             }
 
             // The destination can now start migrating data.
@@ -672,6 +662,8 @@ GeminiMigration::pullAndReplay_reapReplayRpcs()
             (*partition)->freePullBuffers.push_back(responseBuffer);
             (*partition)->totalReplayedBytes += numReplayedBytes;
             (*partition)->numReplaysInProgress--;
+
+            partitionsArray[(*partition)->startHTBucket / (sourceNumHTBuckets / MAX_NUM_PARTITIONS)].store((*partition)->currentHTBucket, std::memory_order_relaxed);
 
             // All data within this partition has been pulled and replayed.
             if (((*partition)->allDataPulled == true) &&

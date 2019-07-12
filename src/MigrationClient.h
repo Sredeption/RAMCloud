@@ -72,6 +72,7 @@ class MigrationClient {
     uint64_t notFound;
     uint64_t priorityPullFound;
     uint64_t regularPullFound;
+    uint64_t sourceNumHTBuckets;
     
     uint64_t findBucketIdx(uint64_t numBuckets, KeyHash keyHash) {
         uint64_t bucketHash = keyHash & 0x0000ffffffffffffUL;
@@ -100,13 +101,13 @@ class MigrationClient {
             partitions[i]->currentHTBucket = respHdr->migrationPartitionsProgress[i];
             // RAMCLOUD_LOG(NOTICE, "partition %u currentHTBucket is %lu.", i, partitions[i]->currentHTBucket);
         }
-        if (respHdr->priorityPullDone == true) {
+        if (respHdr->common.status == STATUS_OK && !lookupRegularPullProgress(findBucketIdx(sourceNumHTBuckets, hash))) {
             finishedPriorityHashes.insert(hash);
             // RAMCLOUD_LOG(NOTICE, "hash %lx has been priority pulled.", hash);
         }
         for (auto it = finishedPriorityHashes.begin();
              it != finishedPriorityHashes.end(); it++) {
-            if (lookupRegularPullProgress(findBucketIdx(16777216, *it))) {
+            if (lookupRegularPullProgress(findBucketIdx(sourceNumHTBuckets, *it))) {
                 finishedPriorityHashes.erase(*it);
             }
         }
@@ -191,7 +192,7 @@ class MigrationReadTask {
             }
 
             KeyHash hash = Key(tableId, key, keyLength).getHash();
-            uint64_t bucket = ramcloud->migrationClient->findBucketIdx(16777216, hash);
+            uint64_t bucket = ramcloud->migrationClient->findBucketIdx(ramcloud->migrationClient->sourceNumHTBuckets, hash);
             if (ramcloud->migrationClient->lookupRegularPullProgress(bucket)) {
                 ramcloud->migrationClient->regularPullFound++;
             } else if (ramcloud->migrationClient->lookupPriorityPullProgress(hash)) {
