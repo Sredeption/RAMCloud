@@ -104,6 +104,13 @@ class MigrationClient {
         if (respHdr->common.status == STATUS_OK && !lookupRegularPullProgress(findBucketIdx(sourceNumHTBuckets, hash))) {
             finishedPriorityHashes.insert(hash);
         }
+        // for (auto it = finishedPriorityHashes.begin(); it != finishedPriorityHashes.end();) {
+        //     if (lookupRegularPullProgress(findBucketIdx(sourceNumHTBuckets, *it))) {
+        //         it = finishedPriorityHashes.erase(it);
+        //     } else {
+        //         ++it;
+        //     }
+        // }
     }
 
     MigrationClient(RamCloud *ramcloud);
