@@ -2521,7 +2521,7 @@ uint64_t MigrationReadKeysAndValueRpc::getHash() {
 }
 
 uint64_t MigrationReadKeysAndValueRpc::getBucketIdx() {
-    return hash;
+    return bucketIdx;
 }
 
 uint64_t
