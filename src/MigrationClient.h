@@ -184,18 +184,18 @@ class MigrationReadTask {
                     ramcloud, migratingTablet->targetId, tableId, key,
                     keyLength, &targetBuffer, rejectRules);
                 state = MIGRATING;
+
+                if (ramcloud->migrationClient->lookupRegularPullProgress(targetReadRpc->getBucketIdx())) {
+                    ramcloud->migrationClient->regularPullFound++;
+                } else if (ramcloud->migrationClient->lookupPriorityPullProgress(targetReadRpc->getHash())) {
+                    ramcloud->migrationClient->priorityPullFound++;
+                } else {
+                    ramcloud->migrationClient->notFound++;
+                }
             } else {
                 readRpc.construct(ramcloud, tableId, key, keyLength, value,
                                   rejectRules);
                 state = NORMAL;
-            }
-
-            if (ramcloud->migrationClient->lookupRegularPullProgress(targetReadRpc->bucketIdx)) {
-                ramcloud->migrationClient->regularPullFound++;
-            } else if (ramcloud->migrationClient->lookupPriorityPullProgress(targetReadRpc->hash)) {
-                ramcloud->migrationClient->priorityPullFound++;
-            } else {
-                ramcloud->migrationClient->notFound++;
             }
         }
 

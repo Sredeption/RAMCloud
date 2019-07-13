@@ -2278,7 +2278,7 @@ MigrationReadRpc::MigrationReadRpc(RamCloud *ramcloud, ServerId serverId,
                                    const RejectRules *rejectRules)
     : ServerIdRpcWrapper(ramcloud->clientContext, serverId,
                                sizeof(WireFormat::Read::Response), value)
-                               , hash(), bucketIdx(), ramcloud(ramcloud)
+                               , ramcloud(ramcloud), hash(), bucketIdx()
 {
     hash = Key(tableId, key, keyLength).getHash();
     bucketIdx = ramcloud->migrationClient->findBucketIdx(ramcloud->migrationClient->sourceNumHTBuckets, hash);
@@ -2342,6 +2342,14 @@ void MigrationReadRpc::updateProgress() {
 
     ramcloud->migrationClient->updateProgress(respHdr, hash, bucketIdx);
 
+}
+
+uint64_t MigrationReadRpc::getHash() {
+    return hash;
+}
+
+uint64_t MigrationReadRpc::getBucketIdx() {
+    return bucketIdx;
 }
 
 /**
@@ -2442,10 +2450,11 @@ MigrationReadKeysAndValueRpc::MigrationReadKeysAndValueRpc(
     const RejectRules *rejectRules)
     : ServerIdRpcWrapper(ramcloud->clientContext, serverId,
                          sizeof(WireFormat::ReadKeysAndValue::Response), value)
-                         , hash(), bucketIdx(), ramcloud(ramcloud)
+                         , ramcloud(ramcloud), hash(), bucketIdx()
 {
     hash = Key(tableId, key, keyLength).getHash();
     bucketIdx = ramcloud->migrationClient->findBucketIdx(ramcloud->migrationClient->sourceNumHTBuckets, hash);
+
     value->reset();
     WireFormat::ReadKeysAndValue::Request *reqHdr(allocHeader<
         WireFormat::ReadKeysAndValue>());
@@ -2505,6 +2514,14 @@ void MigrationReadKeysAndValueRpc::updateProgress() {
         getResponseHeader<WireFormat::Read>());
 
     ramcloud->migrationClient->updateProgress(respHdr, hash, bucketIdx);
+}
+
+uint64_t MigrationReadKeysAndValueRpc::getHash() {
+    return hash;
+}
+
+uint64_t MigrationReadKeysAndValueRpc::getBucketIdx() {
+    return hash;
 }
 
 uint64_t
