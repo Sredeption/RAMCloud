@@ -1966,7 +1966,7 @@ MasterService::read(const WireFormat::Read::Request* reqHdr,
         key, rpc->replyPayload, &rejectRules, &respHdr->version, valueOnly,
         &tablet);
     
-    resphdr->migrating = false;
+    respHdr->migrating = false;
     
     if (tablet.state == TabletManager::MIGRATION_SOURCE ||
         tablet.state == TabletManager::MIGRATION_TARGET) {
@@ -1976,7 +1976,7 @@ MasterService::read(const WireFormat::Read::Request* reqHdr,
     }
 
     if (tablet.state == TabletManager::ROCKSTEADY_MIGRATING) {
-        resphdr->migrating = true;
+        respHdr->migrating = true;
     }
 
     for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
@@ -2050,7 +2050,7 @@ MasterService::readKeysAndValue(
         key, rpc->replyPayload, &rejectRules, &respHdr->version,
         false, &tablet);
 
-    resphdr->migrating = false;
+    respHdr->migrating = false;
     
     if (tablet.state == TabletManager::MIGRATION_SOURCE ||
         tablet.state == TabletManager::MIGRATION_TARGET) {
@@ -2060,7 +2060,7 @@ MasterService::readKeysAndValue(
     }
 
     if (tablet.state == TabletManager::ROCKSTEADY_MIGRATING) {
-        resphdr->migrating = true;
+        respHdr->migrating = true;
     }
 
     if (respHdr->common.status != STATUS_OK)
