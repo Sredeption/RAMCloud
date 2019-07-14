@@ -2305,13 +2305,6 @@ MigrationReadRpc::wait(uint64_t *version, bool *objectExists, bool *migrating,
     if (version != NULL)
         *version = respHdr->version;
 
-    if (respHdr->common.status == STATUS_UNKNOWN_TABLET) {
-        if (migrating) {
-            *migrating = false;
-        }
-        return false;
-    }
-
     if (respHdr->common.status != STATUS_OK) {
         if (objectExists != NULL &&
             respHdr->common.status == STATUS_OBJECT_DOESNT_EXIST) {
@@ -2477,13 +2470,6 @@ bool MigrationReadKeysAndValueRpc::wait(uint64_t *version, bool *objectExists,
         getResponseHeader<WireFormat::ReadKeysAndValue>());
     if (version != NULL)
         *version = respHdr->version;
-
-    if (respHdr->common.status == STATUS_UNKNOWN_TABLET) {
-        if (migrating) {
-            *migrating = false;
-        }
-        return false;
-    }
 
     if (respHdr->common.status != STATUS_OK) {
         if (objectExists != NULL &&

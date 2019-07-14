@@ -50,4 +50,7 @@
     # or target tells the client migrating=false via the respHdr.
     # Then we remove the migrating tablet from tableMap.
 
+    # We should let the target tell client that migration is finished instead of source
+    # because during the migration the clients might always only send requests to the target thanks to the migration progress tracking
+
 python ./scripts/backupMigration.py -r 0 --servers=4 --clients=1 --dpdkPort=0 -T basic+dpdk --superuser

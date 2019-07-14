@@ -233,7 +233,8 @@ class MigrationReadTask {
                     &sourceVersion, &sourceObjectExists, &migrating,
                     &sourceId, &targetId);
                 success = success && targetReadRpc->wait(
-                    &targetVersion, &targetObjectExists, &migrating);
+                    &targetVersion, &targetObjectExists, &migrating,
+                    &sourceId, &targetId);
 
                 if (!migrating) {
                     ramcloud->migrationClient->removeTablet(tableId, key,

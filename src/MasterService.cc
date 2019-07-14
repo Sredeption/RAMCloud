@@ -1965,14 +1965,18 @@ MasterService::read(const WireFormat::Read::Request* reqHdr,
     respHdr->common.status = objectManager.readObject(
         key, rpc->replyPayload, &rejectRules, &respHdr->version, valueOnly,
         &tablet);
+    
+    resphdr->migrating = false;
+    
     if (tablet.state == TabletManager::MIGRATION_SOURCE ||
-        tablet.state == TabletManager::MIGRATION_TARGET ||
-        tablet.state == TabletManager::ROCKSTEADY_MIGRATING) {
+        tablet.state == TabletManager::MIGRATION_TARGET) {
         respHdr->migrating = true;
         respHdr->sourceId = tablet.sourceId;
         respHdr->targetId = tablet.targetId;
-    } else {
-        respHdr->migrating = false;
+    }
+
+    if (tablet.state == TabletManager::ROCKSTEADY_MIGRATING) {
+        resphdr->migrating = true;
     }
 
     for (uint32_t i = 0; i < WireFormat::MAX_NUM_PARTITIONS; ++i) {
@@ -2045,15 +2049,20 @@ MasterService::readKeysAndValue(
     respHdr->common.status = objectManager.readObject(
         key, rpc->replyPayload, &rejectRules, &respHdr->version,
         false, &tablet);
+
+    resphdr->migrating = false;
+    
     if (tablet.state == TabletManager::MIGRATION_SOURCE ||
-        tablet.state == TabletManager::MIGRATION_TARGET ||
-        tablet.state == TabletManager::ROCKSTEADY_MIGRATING) {
+        tablet.state == TabletManager::MIGRATION_TARGET) {
         respHdr->migrating = true;
         respHdr->sourceId = tablet.sourceId;
         respHdr->targetId = tablet.targetId;
-    } else {
-        respHdr->migrating = false;
     }
+
+    if (tablet.state == TabletManager::ROCKSTEADY_MIGRATING) {
+        resphdr->migrating = true;
+    }
+
     if (respHdr->common.status != STATUS_OK)
         return;
 
