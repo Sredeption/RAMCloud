@@ -1967,7 +1967,7 @@ MasterService::read(const WireFormat::Read::Request* reqHdr,
         &tablet);
     if (tablet.state == TabletManager::MIGRATION_SOURCE ||
         tablet.state == TabletManager::MIGRATION_TARGET ||
-        tablet.state == TabletManager::ROCKSTEADY_MIGRATING ) {
+        tablet.state == TabletManager::ROCKSTEADY_MIGRATING) {
         respHdr->migrating = true;
         respHdr->sourceId = tablet.sourceId;
         respHdr->targetId = tablet.targetId;
@@ -2046,7 +2046,8 @@ MasterService::readKeysAndValue(
         key, rpc->replyPayload, &rejectRules, &respHdr->version,
         false, &tablet);
     if (tablet.state == TabletManager::MIGRATION_SOURCE ||
-        tablet.state == TabletManager::MIGRATION_TARGET) {
+        tablet.state == TabletManager::MIGRATION_TARGET ||
+        tablet.state == TabletManager::ROCKSTEADY_MIGRATING) {
         respHdr->migrating = true;
         respHdr->sourceId = tablet.sourceId;
         respHdr->targetId = tablet.targetId;

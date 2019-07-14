@@ -176,13 +176,9 @@ class MigrationReadTask {
             MigrationClient::MigratingTablet *migratingTablet =
                 ramcloud->migrationClient->getTablet(tableId, key, keyLength);
             if (migratingTablet) {
-                sourceReadRpc.construct(
-                    ramcloud, migratingTablet->sourceId, tableId, key,
-                    keyLength, &sourceBuffer, rejectRules);
                 targetReadRpc.construct(
                     ramcloud, migratingTablet->targetId, tableId, key,
                     keyLength, &targetBuffer, rejectRules);
-                state = MIGRATING;
 
                 if (ramcloud->migrationClient->lookupRegularPullProgress(targetReadRpc->getBucketIdx())) {
                     ramcloud->migrationClient->regularPullFound++;
@@ -191,6 +187,11 @@ class MigrationReadTask {
                 } else {
                     ramcloud->migrationClient->notFound++;
                 }
+
+                sourceReadRpc.construct(
+                    ramcloud, migratingTablet->sourceId, tableId, key,
+                    keyLength, &sourceBuffer, rejectRules);
+                state = MIGRATING;
             } else {
                 readRpc.construct(ramcloud, tableId, key, keyLength, value,
                                   rejectRules);
@@ -232,7 +233,7 @@ class MigrationReadTask {
                     &sourceVersion, &sourceObjectExists, &migrating,
                     &sourceId, &targetId);
                 success = success && targetReadRpc->wait(
-                    &targetVersion, &targetObjectExists);
+                    &targetVersion, &targetObjectExists, &migrating);
 
                 if (!migrating) {
                     ramcloud->migrationClient->removeTablet(tableId, key,

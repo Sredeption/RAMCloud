@@ -341,6 +341,7 @@ ObjectManager::readObject(Key& key, Buffer* outBuffer,
 
     // If the tablet doesn't exist in the NORMAL state, we must plead ignorance.
     if (!tabletManager->checkAndIncrementReadCount(key, tablet)) {
+        tabletManager->getTablet(key, tablet);
         // Check if the key belongs to a tablet under migration by the
         // rocksteady migration protocol.
         TabletManager::Tablet t;
