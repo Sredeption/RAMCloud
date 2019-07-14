@@ -81,7 +81,7 @@ class MigrationClient {
     }
 
     bool lookupRegularPullProgress(uint64_t bucketIndex) {
-        uint32_t partitionIdx = bucketIndex / (sourceNumHTBuckets / WireFormat::MAX_NUM_PARTITIONS);
+        uint64_t partitionIdx = bucketIndex / (sourceNumHTBuckets / WireFormat::MAX_NUM_PARTITIONS);
         if (partitions[partitionIdx]->startHTBucket <= bucketIndex && bucketIndex < partitions[partitionIdx]->currentHTBucket) {
             return true;
         }
