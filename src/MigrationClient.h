@@ -145,6 +145,7 @@ class MigrationReadTask {
 
     uint64_t version;
     bool objectExists;
+    bool sendToBoth;
 
     DISALLOW_COPY_AND_ASSIGN(MigrationReadTask)
 
@@ -158,7 +159,7 @@ class MigrationReadTask {
         : ramcloud(ramcloud), tableId(tableId), key(NULL), keyLength(keyLength),
           value(value), rejectRules(rejectRules), readRpc(), sourceReadRpc(),
           targetReadRpc(), state(INIT), sourceBuffer(), targetBuffer(),
-          finishTime(), version(), objectExists(false), keyHash()
+          finishTime(), version(), objectExists(false), sendToBoth(false), keyHash()
     {
         this->key = std::malloc(keyLength);
         std::memcpy(this->key, key, keyLength);
@@ -186,11 +187,11 @@ class MigrationReadTask {
                     ramcloud->migrationClient->priorityPullFound++;
                 } else {
                     ramcloud->migrationClient->notFound++;
+                    sendToBoth = true;
+                    sourceReadRpc.construct(
+                        ramcloud, migratingTablet->sourceId, tableId, key,
+                        keyLength, &sourceBuffer, rejectRules);
                 }
-
-                sourceReadRpc.construct(
-                    ramcloud, migratingTablet->sourceId, tableId, key,
-                    keyLength, &sourceBuffer, rejectRules);
                 state = MIGRATING;
             } else {
                 readRpc.construct(ramcloud, tableId, key, keyLength, value,
@@ -219,55 +220,99 @@ class MigrationReadTask {
         }
 
         if (state == MIGRATING) {
-            if (sourceReadRpc->isReady() && targetReadRpc->isReady()) {
-                bool migrating;
-                uint64_t sourceId;
-                uint64_t sourceVersion;
-                bool sourceObjectExists;
-                uint64_t targetId;
-                uint64_t targetVersion;
-                bool targetObjectExists;
+            if (sendToBoth) {
+                if (targetReadRpc->isReady() && sourceReadRpc->isReady()) {
+                    bool migrating;
+                    uint64_t sourceId;
+                    uint64_t sourceVersion;
+                    bool sourceObjectExists;
+                    uint64_t targetId;
+                    uint64_t targetVersion;
+                    bool targetObjectExists;
 
-                bool success = true;
-                success = success && sourceReadRpc->wait(
-                    &sourceVersion, &sourceObjectExists, &migrating,
-                    &sourceId, &targetId);
-                success = success && targetReadRpc->wait(
-                    &targetVersion, &targetObjectExists, &migrating,
-                    &sourceId, &targetId);
+                    bool success = true;
+                    success = success && sourceReadRpc->wait(
+                        &sourceVersion, &sourceObjectExists, &migrating,
+                        &sourceId, &targetId);
+                    success = success && targetReadRpc->wait(
+                        &targetVersion, &targetObjectExists, &migrating,
+                        &sourceId, &targetId);
 
-                if (!migrating) {
-                    ramcloud->migrationClient->removeTablet(tableId, key,
-                                                            keyLength);
-                }
+                    if (!migrating) {
+                        ramcloud->migrationClient->removeTablet(tableId, key,
+                                                                keyLength);
+                    }
 
-                if (!success) {
-                    state = INIT;
-                    return;
-                }
+                    if (!success) {
+                        state = INIT;
+                        return;
+                    }
 
-                targetReadRpc->updateProgress();
+                    targetReadRpc->updateProgress();
 
-                value->reset();
+                    value->reset();
 
-                uint64_t versionConclusion;
-                bool existsConclusion;
-                if (sourceVersion > targetVersion) {
-                    versionConclusion = sourceVersion;
-                    value->append(&sourceBuffer, 0u, sourceBuffer.size());
-                    existsConclusion = sourceObjectExists;
+                    uint64_t versionConclusion;
+                    bool existsConclusion;
+                    if (sourceVersion > targetVersion) {
+                        versionConclusion = sourceVersion;
+                        value->append(&sourceBuffer, 0u, sourceBuffer.size());
+                        existsConclusion = sourceObjectExists;
+                    } else {
+                        versionConclusion = targetVersion;
+                        value->append(&targetBuffer, 0u, targetBuffer.size());
+                        existsConclusion = targetObjectExists;
+                    }
+                    version = versionConclusion;
+                    objectExists = existsConclusion;
+                    state = MIGRATING_WAIT;
+                    finishTime = Cycles::rdtsc();
                 } else {
+                    ramcloud->clientContext->dispatch->poll();
+                }                
+            } else {
+                if (targetReadRpc->isReady()) {
+                    bool migrating;
+                    uint64_t sourceId;
+                    uint64_t targetId;
+                    uint64_t targetVersion;
+                    bool targetObjectExists;
+
+                    bool success = true;
+                    success = success && targetReadRpc->wait(
+                        &targetVersion, &targetObjectExists, &migrating,
+                        &sourceId, &targetId);
+
+                    if (!migrating) {
+                        ramcloud->migrationClient->removeTablet(tableId, key,
+                                                                keyLength);
+                    }
+
+                    if (!success) {
+                        state = INIT;
+                        return;
+                    }
+
+                    targetReadRpc->updateProgress();
+
+                    value->reset();
+
+                    uint64_t versionConclusion;
+                    bool existsConclusion;
+
                     versionConclusion = targetVersion;
                     value->append(&targetBuffer, 0u, targetBuffer.size());
                     existsConclusion = targetObjectExists;
+                    
+                    version = versionConclusion;
+                    objectExists = existsConclusion;
+                    state = MIGRATING_WAIT;
+                    finishTime = Cycles::rdtsc();
+                } else {
+                    ramcloud->clientContext->dispatch->poll();
                 }
-                version = versionConclusion;
-                objectExists = existsConclusion;
-                state = MIGRATING_WAIT;
-                finishTime = Cycles::rdtsc();
-            } else {
-                ramcloud->clientContext->dispatch->poll();
             }
+
         }
 
         if (state == MIGRATING_WAIT &&
