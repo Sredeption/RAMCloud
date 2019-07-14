@@ -31,4 +31,23 @@
     # Clients send multiple requests but there is only single thread managing this (calling isReady()/wait())
     # So it is thread safe to maintain a hash map in performTask()
 
+    # In performTask(), sourceVersion and targetVersion are used to handle the deleted object case
+    # If an object is deleted on the target, target will also return STATUS_OBJECT_DOESNT_EXIST
+
+    # The state of a MigrationReadTask is initially set to be INIT.
+    # We first check if the requested key value falls into the migrating tablet
+    # If yes, we construct two RPCs and change the state of the MigrationReadTask to be MIGRATING
+    # If not, the state of the ReadTask is set to NORMAL.
+    # Notice that both isReady() and wait() will repeatedly invoke the ReadTask and use that state
+
+    # Initially, all the requests will go to the source.
+    # If the source tells me it is migrating via the respHdr (RamCloud.cc MigrationReadRpc::wait)
+    # Then we put the tablet
+    # (1. clean the table info on the client; 2. ask the coordinator about the tablet info of the key/value I'm requesting for)
+    # Here we get the migrating tablet and add it to the tableMap.
+    # Before sending a request, we check if the requested key falls into tableMap.
+    # When finished, there are two cases: source replies the client STATUS_UNKNOWN_TABLET
+    # or target tells the client migrating=false via the respHdr.
+    # Then we remove the migrating tablet from tableMap.
+
 python ./scripts/backupMigration.py -r 0 --servers=4 --clients=1 --dpdkPort=0 -T basic+dpdk --superuser
