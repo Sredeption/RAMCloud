@@ -315,8 +315,7 @@ class MigrationReadTask {
 
         }
 
-        if (state == MIGRATING_WAIT &&
-            Cycles::toMicroseconds(Cycles::rdtsc() - finishTime) > 5) {
+        if (state == MIGRATING_WAIT) {
             state = DONE;
         }
 
