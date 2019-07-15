@@ -64,7 +64,7 @@ class WorkloadGenerator {
   private:
     class ZipfianGenerator {
       public:
-        explicit ZipfianGenerator(uint64_t n, double theta = 0.01)
+        explicit ZipfianGenerator(uint64_t n, double theta = 0.99)
             : n(n), theta(theta), alpha(1 / (1 - theta)), zetan(zeta(n, theta)),
               eta((1 - std::pow(2.0 / static_cast<double>(n), 1 - theta)) /
                   (1 - zeta(2, theta) / zetan))
