@@ -518,7 +518,7 @@ GeminiMigration::pullAndReplay_priorityHashes()
         if (priorityReplayRpc->isReady()) {
             for (auto it = inProgressPriorityHashes.begin();
                  it != inProgressPriorityHashes.end(); it++) {
-                finishedPriorityHashes.insert(*it)
+                finishedPriorityHashes.insert(*it);
             }
 
             // If the replay completed, clear out inProgressPriorityHashes.
