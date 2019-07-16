@@ -164,7 +164,7 @@ GeminiMigration::GeminiMigration(Context *context,
       sourceAuxLocator(), sourceSession(), prepareSourceRpc(),
       getHeadOfLogRpc(), takeOwnershipRpc(),
       priorityLock("priorityLock"), waitingPriorityHashes(),
-      inProgressPriorityHashes(), priorityHashesRequestBuffer(),
+      inProgressPriorityHashes(), finishedPriorityHashes(), priorityHashesRequestBuffer(),
       priorityHashesResponseBuffer(), priorityPullRpc(),
       priorityHashesSideLogCommitted(false), priorityHashesSideLog(),
       partitions(), numCompletedPartitions(0), pullRpcs(), freePullRpcs(),
@@ -516,6 +516,11 @@ GeminiMigration::pullAndReplay_priorityHashes()
     // If a replay request is in progress, check if it has completed.
     if (priorityReplayRpc) {
         if (priorityReplayRpc->isReady()) {
+            for (auto it = inProgressPriorityHashes.begin();
+                 it != inProgressPriorityHashes.end(); it++) {
+                finishedPriorityHashes.insert(*it)
+            }
+
             // If the replay completed, clear out inProgressPriorityHashes.
             inProgressPriorityHashes.clear();
 

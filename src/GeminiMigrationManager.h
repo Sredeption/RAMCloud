@@ -6,6 +6,8 @@
 #include "ServerId.h"
 #include "ObjectManager.h"
 
+#include <unordered_set>
+
 #define SPLIT_COPY
 
 namespace RAMCloud {
@@ -193,6 +195,8 @@ class GeminiMigration {
     std::vector<uint64_t> waitingPriorityHashes;
 
     std::vector<uint64_t> inProgressPriorityHashes;
+
+    std::unordered_set<uint64_t> finishedPriorityHashes;
 
     Tub<Buffer> priorityHashesRequestBuffer;
 
