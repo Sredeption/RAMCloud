@@ -55,4 +55,10 @@
 
     # Our rocksteady excel measures with 30 million records (30000000)
 
+
+    # We use Ubuntu 18.04 to build the paper.
+    # After we install 18.04 in VirtualBox, insert guest additions
+    # 1. go to Display. Move the "Video memory" slider all the way to the right. Then also tick Acceleration: Enable 3D Acceleration.
+    # 2. give the VM more memory.
+
 python ./scripts/backupMigration.py -r 0 --servers=4 --clients=1 --dpdkPort=0 -T basic+dpdk --superuser
