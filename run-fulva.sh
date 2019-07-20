@@ -61,4 +61,9 @@
     # 1. go to Display. Move the "Video memory" slider all the way to the right. Then also tick Acceleration: Enable 3D Acceleration.
     # 2. give the VM more memory.
 
+    # Assume the migration speed is 758 MB/s, then to finish a single regular pull (8 * 20KB), it would take 160/(758*1024) seconds
+    # =0.00020613456 seconds = 0.2ms
+    # In 100ms, the server piggybacks (100/0.2)*64=32000bytes to each client.
+    # Recall that in 100ms, each client finishes around 10000 requests in fulva, then every request would cost extra 32000/10000=3.2 bytes/request
+
 python ./scripts/backupMigration.py -r 0 --servers=4 --clients=1 --dpdkPort=0 -T basic+dpdk --superuser
