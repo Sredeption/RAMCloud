@@ -2537,6 +2537,14 @@ RamCloud::getPriorityPullFound(RamCloud *ramcloud)
 uint64_t
 RamCloud::getPriorityHashSize(RamCloud *ramcloud)
 {
+    for (auto it = ramcloud->migrationClient->finishedPriorityHashes.begin(); it != ramcloud->migrationClient->finishedPriorityHashes.end();) {
+        if (ramcloud->migrationClient->lookupRegularPullProgress(ramcloud->migrationClient->findBucketIdx(ramcloud->migrationClient->sourceNumHTBuckets, *it))) {
+            it = ramcloud->migrationClient->finishedPriorityHashes.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
     return ramcloud->migrationClient->finishedPriorityHashes.size();
 }
 
